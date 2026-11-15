@@ -79,6 +79,11 @@ import {
   PLANNER_PHASE_LABEL_FR,
   PLANNER_PHASE_HINT_FR,
   PLANNER_PHASE_ACTION_FR,
+  PLANNER_RELAUNCH_ACTION_FR,
+  PLANNER_RELAUNCH_CARD_FR,
+  PLANNER_RELAUNCH_CONFIRM_FR,
+  PLANNER_RELAUNCH_LEAD_FR,
+  PLANNER_RELAUNCH_TITLE_FR,
   PLANNER_SHARE_ACTION_FR,
   PLANNER_SHARE_EYEBROW_FR,
   PLANNER_SHARE_HINT_FR,
@@ -925,7 +930,9 @@ function TripListCard({
             </div>
             <div className="mt-8 pt-5 border-t border-orange-50 flex items-center justify-between">
               <span className="text-base font-bold text-[#FF6B35]">
-                {PHASE_ACTION[workspace.phase]}
+                {workspace.capabilities?.can_relaunch
+                  ? PLANNER_RELAUNCH_ACTION_FR
+                  : PHASE_ACTION[workspace.phase]}
               </span>
               <span className="w-11 h-11 rounded-2xl bg-[#FFF3EC] text-[#FF6B35] font-black text-xl flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
                 ›
@@ -1012,7 +1019,9 @@ function TripListCard({
         <div className="mt-3 flex-1">{meta}</div>
         <div className="mt-4 pt-3 border-t border-orange-50 flex items-center justify-between">
           <span className="text-sm font-semibold text-[#FF6B35]">
-            {PHASE_ACTION[workspace.phase]}
+            {workspace.capabilities?.can_relaunch
+              ? PLANNER_RELAUNCH_ACTION_FR
+              : PHASE_ACTION[workspace.phase]}
           </span>
           <span className="text-[#FF6B35] text-xl leading-none group-hover:translate-x-0.5 transition-transform">
             ›
@@ -1074,7 +1083,10 @@ export function PlannerTab() {
   useEffect(() => {
     const tripQ = searchParams.get('trip')
     if (!tripQ) return
-    navigate(`/planner/${encodeURIComponent(tripQ)}`, { replace: true })
+    const relaunchQ = searchParams.get('relaunch') === '1' ? '?relaunch=1' : ''
+    navigate(`/planner/${encodeURIComponent(tripQ)}${relaunchQ}`, {
+      replace: true,
+    })
   }, [searchParams, navigate])
 
   // Parcours « En faire mon voyage » → auto-scan on open
@@ -1373,6 +1385,7 @@ function TripDetailView({
   onToast: (msg: string) => void
 }) {
   const { t, language } = useI18n()
+  const [detailSearchParams, setDetailSearchParams] = useSearchParams()
   const [trip, setTrip] = useState<PlannedTripDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
@@ -1397,6 +1410,17 @@ function TripDetailView({
   const [editDatesRetour, setEditDatesRetour] = useState<DateAvecHoraire[]>([])
   const [editPreset, setEditPreset] = useState<DatePreset>('next-weekend')
   const [showEditFlexible, setShowEditFlexible] = useState(false)
+  const [showRelaunch, setShowRelaunch] = useState(false)
+  const [relaunching, setRelaunching] = useState(false)
+  const [relaunchPreset, setRelaunchPreset] = useState<DatePreset>('next-weekend')
+  const [relaunchDatesDepart, setRelaunchDatesDepart] = useState<
+    DateAvecHoraire[]
+  >([])
+  const [relaunchDatesRetour, setRelaunchDatesRetour] = useState<
+    DateAvecHoraire[]
+  >([])
+  const [showRelaunchFlexible, setShowRelaunchFlexible] = useState(false)
+  const relaunchAutoOpened = useRef(false)
   const [showModalities, setShowModalities] = useState(false)
   const [savingCriteria, setSavingCriteria] = useState(false)
   const [reopeningFlight, setReopeningFlight] = useState(false)
@@ -2719,6 +2743,106 @@ function TripDetailView({
     }
   }
 
+  const withFullDayHours = (dates: DateAvecHoraire[]) =>
+    dates.map((x) => ({
+      ...x,
+      heure_min: x.heure_min || '00:00',
+      heure_max: x.heure_max || '23:59',
+    }))
+
+  const openRelaunch = () => {
+    const d = generateDatesFromPreset('next-weekend')
+    setRelaunchPreset('next-weekend')
+    setRelaunchDatesDepart(withFullDayHours(d.dates_depart))
+    setRelaunchDatesRetour(withFullDayHours(d.dates_retour))
+    setShowRelaunchFlexible(false)
+    setShowRelaunch(true)
+  }
+
+  const onRelaunchPreset = (p: DatePreset) => {
+    setRelaunchPreset(p)
+    if (p === 'flexible') {
+      setShowRelaunchFlexible(true)
+      return
+    }
+    setShowRelaunchFlexible(false)
+    const d = generateDatesFromPreset(p)
+    setRelaunchDatesDepart(withFullDayHours(d.dates_depart))
+    setRelaunchDatesRetour(withFullDayHours(d.dates_retour))
+  }
+
+  const doRelaunch = async () => {
+    if (!trip) return
+    if (!relaunchDatesDepart.length || !relaunchDatesRetour.length) return
+    setShowRelaunch(false)
+    setRelaunching(true)
+    setScanning(true)
+    setScanEmpty(null)
+    setError(null)
+    setTrip((prev) =>
+      prev
+        ? {
+            ...prev,
+            proposals: (prev.proposals || []).filter((p) => p.status !== 'pending'),
+            proposals_count: 0,
+          }
+        : prev,
+    )
+    try {
+      const res = await getApiClient().relaunchPlannedTrip(tripId, {
+        dates_depart: relaunchDatesDepart,
+        dates_retour: relaunchDatesRetour,
+      })
+      const proposals = (res.scan?.proposals || []) as TripProposal[]
+      setTrip((prev) =>
+        prev
+          ? {
+              ...prev,
+              ...res.trip,
+              status: 'planning',
+              proposals,
+              proposals_count: proposals.length,
+            }
+          : prev,
+      )
+      setWorkspace((prev) =>
+        prev
+          ? {
+              ...prev,
+              phase: 'planning',
+              out_date: relaunchDatesDepart[0]?.date || prev.out_date,
+              ret_date:
+                relaunchDatesRetour[relaunchDatesRetour.length - 1]?.date ||
+                prev.ret_date,
+              capabilities: {
+                ...prev.capabilities,
+                can_relaunch: false,
+                can_scan: true,
+                can_choose_flight: true,
+              },
+            }
+          : prev,
+      )
+      invalidateTravelWorkspacesCache()
+      await load()
+      if (proposals.length === 0) {
+        setScanEmpty({
+          reason: res.scan?.empty_reason === 'budget' ? 'budget' : 'no_flights',
+          budget: res.scan?.budget_max ?? trip.budget_max ?? 150,
+          cheapest: res.scan?.cheapest_found ?? null,
+        })
+      } else {
+        setScanEmpty(null)
+        onToast('Recherche relancée')
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setRelaunching(false)
+      setScanning(false)
+    }
+  }
+
   const doDelete = async () => {
     if (!trip) return
     if (
@@ -2752,6 +2876,30 @@ function TripDetailView({
       setError(e instanceof Error ? e.message : t('app.error'))
     }
   }
+
+  useEffect(() => {
+    if (relaunchAutoOpened.current || loading || !trip) return
+    const phase =
+      workspace?.phase ||
+      (trip.status === 'locked' ? 'flight_selected' : 'planning')
+    const ok =
+      isOrganizer && phase === 'past' && !flightBooked && !hotelBooked
+    if (!ok || detailSearchParams.get('relaunch') !== '1') return
+    relaunchAutoOpened.current = true
+    openRelaunch()
+    const next = new URLSearchParams(detailSearchParams)
+    next.delete('relaunch')
+    setDetailSearchParams(next, { replace: true })
+  }, [
+    loading,
+    trip,
+    workspace?.phase,
+    isOrganizer,
+    flightBooked,
+    hotelBooked,
+    detailSearchParams,
+    setDetailSearchParams,
+  ])
 
   if (loading && !trip) {
     if (scanning || autoScan) {
@@ -2905,6 +3053,18 @@ function TripDetailView({
   const detailPhase =
     workspace?.phase ||
     (trip.status === 'locked' ? 'flight_selected' : 'planning')
+  const canRelaunch = Boolean(
+    isOrganizer &&
+      detailPhase === 'past' &&
+      !flightBooked &&
+      !hotelBooked,
+  )
+  const relaunchRangeLabel = (() => {
+    const out = relaunchDatesDepart[0]?.date
+    const ret = relaunchDatesRetour[relaunchDatesRetour.length - 1]?.date
+    if (!out || !ret) return null
+    return formatTripDateRangeFr(out, ret)
+  })()
   const flightStepStatus = resolveFlightStepStatus({
     hasFlightPayload: Boolean(accepted || flightDraft),
     flightBooked,
@@ -2925,6 +3085,7 @@ function TripDetailView({
     flightBooked,
     hotelBooked,
     hotelComposing: detailPhase === 'composing',
+    canRelaunch,
     activitiesEnabled: plannerActivitiesEnabled,
     restaurantsEnabled: false,
     airlineLabel: airlineForCta,
@@ -3328,7 +3489,18 @@ function TripDetailView({
               <p className="mt-2 text-sm text-white/55">{PHASE_HINT[workspace.phase]}</p>
             ) : null}
             <div className="mt-5 flex flex-wrap items-center gap-2">
-              {isOrganizer && trip.status !== 'locked' ? (
+              {canRelaunch ? (
+                <button
+                  type="button"
+                  disabled={relaunching || scanning}
+                  onClick={openRelaunch}
+                  className="inline-flex items-center rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] disabled:opacity-60 min-h-[48px]"
+                >
+                  {relaunching
+                    ? t('planner.scanning')
+                    : PLANNER_RELAUNCH_ACTION_FR}
+                </button>
+              ) : isOrganizer && trip.status !== 'locked' ? (
                 <button
                   type="button"
                   disabled={scanning}
@@ -3351,6 +3523,30 @@ function TripDetailView({
           </div>
         </div>
       </section>
+
+      {canRelaunch ? (
+        <section className="rounded-[28px] border border-line bg-white p-5 sm:p-6 shadow-soft space-y-4">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-muted">
+              Terminé
+            </p>
+            <h3 className="mt-1 text-xl sm:text-2xl font-extrabold tracking-tight text-ink">
+              {PLANNER_RELAUNCH_TITLE_FR}
+            </h3>
+            <p className="mt-1.5 text-sm text-ink-soft leading-relaxed">
+              {PLANNER_RELAUNCH_CARD_FR}
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={relaunching || scanning}
+            onClick={openRelaunch}
+            className="inline-flex w-full sm:w-auto items-center justify-center rounded-2xl bg-primary-500 px-5 py-3 text-sm font-extrabold text-white hover:bg-primary-600 disabled:opacity-60 min-h-[48px]"
+          >
+            {PLANNER_RELAUNCH_ACTION_FR}
+          </button>
+        </section>
+      ) : null}
 
       <section className="relative isolate overflow-hidden rounded-[28px] border border-orange-200/70 bg-gradient-to-br from-[#FFE8D6] via-[#FFDFC8] to-[#F5D5C0] px-3.5 sm:px-5 py-4 sm:py-5 shadow-soft">
         <div
@@ -4105,6 +4301,139 @@ function TripDetailView({
           </div>
         ) : null}
       </section>
+
+      {showRelaunch ? (
+        <div className="app-dialog-root z-[60]">
+          <button
+            type="button"
+            aria-label="Fermer"
+            className="app-dialog-backdrop"
+            disabled={relaunching}
+            onClick={() => !relaunching && setShowRelaunch(false)}
+          />
+          <div className="app-dialog-panel app-dialog-md p-5 sm:p-7 space-y-5">
+            <div>
+              <h4 className="font-extrabold text-xl text-ink tracking-tight">
+                {PLANNER_RELAUNCH_TITLE_FR}
+              </h4>
+              <p className="mt-1.5 text-sm text-ink-soft leading-relaxed">
+                {PLANNER_RELAUNCH_LEAD_FR}
+              </p>
+            </div>
+
+            <div className="space-y-2.5">
+              {(
+                [
+                  {
+                    id: 'weekend' as DatePreset,
+                    label: 'Ce week-end',
+                    hint: 'Sam → Dim',
+                  },
+                  {
+                    id: 'next-weekend' as DatePreset,
+                    label: 'Week-end prochain',
+                    hint: 'Dans ~7 jours',
+                  },
+                  {
+                    id: 'next-week' as DatePreset,
+                    label: 'Semaine prochaine',
+                    hint: 'Lun → Sam',
+                  },
+                ] as const
+              ).map((p) => {
+                const active =
+                  !showRelaunchFlexible && relaunchPreset === p.id
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={relaunching}
+                    onClick={() => onRelaunchPreset(p.id)}
+                    className={`w-full text-left rounded-2xl border-2 px-4 py-3.5 transition-colors ${
+                      active
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-line bg-canvas hover:border-primary-200'
+                    }`}
+                  >
+                    <span
+                      className={`block text-sm font-bold ${
+                        active ? 'text-primary-800' : 'text-ink'
+                      }`}
+                    >
+                      {p.label}
+                    </span>
+                    <span
+                      className={`block text-xs mt-0.5 ${
+                        active ? 'text-primary-700' : 'text-muted'
+                      }`}
+                    >
+                      {p.hint}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <button
+              type="button"
+              disabled={relaunching}
+              onClick={() => {
+                setRelaunchPreset('flexible')
+                setShowRelaunchFlexible(true)
+              }}
+              className="text-sm font-semibold text-primary-700 hover:text-primary-800"
+            >
+              {showRelaunchFlexible
+                ? 'Modifier les dates choisies'
+                : 'Choisir d’autres dates'}
+            </button>
+
+            {showRelaunchFlexible ? (
+              <div className="rounded-2xl border border-line bg-canvas p-3 sm:p-4">
+                <FlexibleDatesSelector
+                  flexibleDates={{
+                    dates_depart: relaunchDatesDepart,
+                    dates_retour: relaunchDatesRetour,
+                  }}
+                  onFlexibleDatesChange={(d) => {
+                    setRelaunchDatesDepart(withFullDayHours(d.dates_depart))
+                    setRelaunchDatesRetour(withFullDayHours(d.dates_retour))
+                    setRelaunchPreset('flexible')
+                  }}
+                  formatDateFr={formatDateFr}
+                />
+              </div>
+            ) : null}
+
+            {relaunchRangeLabel ? (
+              <p className="text-sm font-medium text-ink-soft">
+                Recherche : {relaunchRangeLabel}
+              </p>
+            ) : null}
+
+            <button
+              type="button"
+              disabled={
+                relaunching ||
+                !relaunchDatesDepart.length ||
+                !relaunchDatesRetour.length
+              }
+              onClick={() => void doRelaunch()}
+              className="w-full rounded-2xl bg-primary-500 text-white font-extrabold py-3.5 min-h-[52px] hover:bg-primary-600 disabled:opacity-55"
+            >
+              {relaunching ? '…' : PLANNER_RELAUNCH_CONFIRM_FR}
+            </button>
+            <button
+              type="button"
+              disabled={relaunching}
+              onClick={() => setShowRelaunch(false)}
+              className="w-full text-center text-sm font-medium text-muted py-2"
+            >
+              Annuler
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {showEditFlexible ? (
         <div className="app-dialog-root z-[60]">

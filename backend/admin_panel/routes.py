@@ -13,6 +13,7 @@ from admin_panel import inscrits as inscrits_mod
 from admin_panel import ops as ops_mod
 from admin_panel import overview as overview_mod
 from admin_panel import production as production_mod
+from admin_panel import planners as planners_mod
 from admin_panel import travel_ops as travel_mod
 from admin_panel.audit import list_audit, write_audit
 from admin_panel.security import (
@@ -327,6 +328,18 @@ async def admin_content_calendar(request: Request):
 
 
 # ----- Travel ops -----
+
+
+@router.get("/planners")
+@require_admin
+async def admin_planners_list(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=20),
+    status: Optional[str] = Query(None, description="Filter status or all"),
+):
+    """Liste légère planned_trips — max 20 / page, enrichissement batch."""
+    return planners_mod.list_planners(page=page, page_size=page_size, status=status)
 
 
 @router.get("/sejours/inventory")

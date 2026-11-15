@@ -190,6 +190,38 @@ export const adminApi = {
       `/api/admin/inscrits/${encodeURIComponent(userId)}/delete`,
       { method: 'POST', body: { confirm } },
     ),
+  planners: (opts: { page?: number; page_size?: number; status?: string } = {}) =>
+    adminFetch<{
+      ok: boolean
+      error?: string
+      items: Array<{
+        id: string
+        name?: string
+        user_id?: string | null
+        user: string
+        status: string
+        destination: string
+        departure_airport?: string | null
+        out_date?: string | null
+        ret_date?: string | null
+        flight: 'none' | 'selected' | 'booked'
+        hotel: 'none' | 'selected' | 'booked'
+        activities: number
+        updated_at?: string | null
+        created_at?: string | null
+      }>
+      total: number
+      page: number
+      page_size: number
+      has_more: boolean
+    }>('/api/admin/planners', {
+      query: {
+        page: opts.page ?? 1,
+        page_size: opts.page_size ?? 20,
+        status: opts.status,
+      },
+    }),
+
   productFunnel: (days = 14) =>
     adminFetch('/api/admin/product-funnel', { query: { days } }),
   parcoursQuality: () => adminFetch('/api/admin/parcours-quality'),

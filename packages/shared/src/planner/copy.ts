@@ -45,7 +45,7 @@ export const PLANNER_PHASE_HINT_FR: Record<TravelWorkspacePhase, string> = {
   flight_selected: 'Vol choisi. Compose ton hôtel.',
   composing: 'Finalise la réservation de ton séjour.',
   booked: 'Réservation rattachée à ce séjour.',
-  past: 'Séjour terminé. Tu peux encore y ajouter des activités.',
+  past: 'Séjour terminé. Relance-le avec de nouvelles dates si tu n’as pas réservé.',
 }
 
 export const PLANNER_PHASE_ACTION_FR: Record<TravelWorkspacePhase, string> = {
@@ -55,6 +55,15 @@ export const PLANNER_PHASE_ACTION_FR: Record<TravelWorkspacePhase, string> = {
   booked: 'Ouvrir le séjour',
   past: 'Revoir le séjour',
 }
+
+/** Hub / detail — completed without booking */
+export const PLANNER_RELAUNCH_ACTION_FR = 'Relancer le séjour'
+export const PLANNER_RELAUNCH_TITLE_FR = 'Relancer avec de nouvelles dates'
+export const PLANNER_RELAUNCH_LEAD_FR =
+  'Choisis des dates à venir. On relance toute la recherche de vols.'
+export const PLANNER_RELAUNCH_CONFIRM_FR = 'Relancer la recherche'
+export const PLANNER_RELAUNCH_CARD_FR =
+  'Pas de réservation sur ce séjour. Mets à jour les dates pour repartir.'
 
 export const HOTEL_CTA_FR = {
   choose: 'Choisir mon hôtel',

@@ -30,6 +30,7 @@ export type TripPrimaryActionId =
   | 'finalize_hotel'
   | 'finalize_my_hotel'
   | 'view_programme'
+  | 'relaunch_dates'
   | 'waiting_flight'
 
 export type TripPrimaryAction = {
@@ -55,6 +56,8 @@ export type TripDetailViewInput = {
   flightBooked?: boolean
   hotelBooked?: boolean
   hotelComposing?: boolean
+  /** Past + organizer + no booking → relaunch CTA */
+  canRelaunch?: boolean
   activitiesEnabled?: boolean
   restaurantsEnabled?: boolean
   /** Airline label for « Réserver sur {compagnie} » */
@@ -169,7 +172,14 @@ export function resolveTripPrimaryAction(
     return { id: 'finalize_my_hotel', label: 'Finaliser mon hôtel' }
   }
 
-  if (phase === 'booked' || phase === 'past') {
+  if (phase === 'past') {
+    if (isOrga && input.canRelaunch && !flightBooked && !input.hotelBooked) {
+      return { id: 'relaunch_dates', label: 'Relancer avec de nouvelles dates' }
+    }
+    return { id: 'view_programme', label: 'Voir le programme' }
+  }
+
+  if (phase === 'booked') {
     return { id: 'view_programme', label: 'Voir le programme' }
   }
 

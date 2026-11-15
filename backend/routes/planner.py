@@ -17,9 +17,10 @@ from api_models import (
     CreatePlannedTripFromMyTripRequest,
     CreatePlannedTripRequest,
     DateAvecHoraire,
+    RelaunchPlannedTripRequest,
     UpdatePlannedTripRequest,
 )
-from email_notify import notify_trip_under_budget
+from email_notify import notify_trip_relaunch, notify_trip_under_budget
 from flight_scanner import enrich_trip_results, scanner_vols_api
 from ryanair_routes import invalid_arrival_codes
 from supabase_deps import (
@@ -1798,6 +1799,21 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
                     "can_choose_flight": is_organizer and phase == "planning",
                     "can_compose_hotel": accepted is not None or draft is not None,
                     "can_view_confirmation": booking is not None,
+                    "can_relaunch": bool(
+                        is_organizer
+                        and phase == "past"
+                        and not (
+                            (draft or {}).get("flight_booked_at")
+                            or payload.get("flight_booked")
+                            or payload.get("flight_booked_at")
+                        )
+                        and not (
+                            (draft or {}).get("hotel_booked_at")
+                            or payload.get("hotel_booked")
+                            or payload.get("hotel_booked_at")
+                            or booking
+                        )
+                    ),
                 },
                 "pipeline": {
                     "flight": _flight_pipeline_state(accepted=accepted, draft=draft),
@@ -2904,6 +2920,151 @@ async def complete_trip(trip_id: str, request: Request):
     if not result.data:
         raise HTTPException(status_code=404, detail="Voyage introuvable")
     return _row_to_trip(result.data[0])
+
+
+@router.post("/api/planner/trips/{trip_id}/relaunch")
+@optional_auth
+async def relaunch_trip(trip_id: str, body: RelaunchPlannedTripRequest, request: Request):
+    """
+    Séjour terminé sans réservation → nouvelles dates futures + scan complet.
+    Remet status=planning, drop les propositions acceptées, notifie email + push.
+    """
+    user_id = _require_user(request)
+    supabase = _svc()
+    trip = _require_organizer(supabase, trip_id, user_id)
+
+    blocked = _trip_has_active_reservation(supabase, trip_id)
+    if blocked:
+        raise HTTPException(status_code=409, detail=blocked)
+
+    status = str(trip.get("status") or "")
+    if status not in ("completed", "planning", "scanning", "locked", "draft"):
+        raise HTTPException(status_code=400, detail="Ce voyage ne peut pas être relancé")
+    # Prefer completed / past; still allow if dates expired on a planning trip.
+    if status == "archived":
+        raise HTTPException(status_code=400, detail="Voyage archivé")
+
+    if not body.dates_depart or not body.dates_retour:
+        raise HTTPException(status_code=400, detail="Dates aller et retour requises")
+
+    today = date.today().isoformat()
+    if not any((d.date or "")[:10] >= today for d in body.dates_depart):
+        raise HTTPException(
+            status_code=400,
+            detail="Choisis au moins une date d’aller aujourd’hui ou dans le futur",
+        )
+    if not any((d.date or "")[:10] >= today for d in body.dates_retour):
+        raise HTTPException(
+            status_code=400,
+            detail="Choisis au moins une date de retour aujourd’hui ou dans le futur",
+        )
+
+    now = datetime.utcnow().isoformat()
+    dates_depart = [d.model_dump() for d in body.dates_depart]
+    dates_retour = [d.model_dump() for d in body.dates_retour]
+
+    _reopen_flight_selection(supabase, trip_id)
+    updated = (
+        supabase.table("planned_trips")
+        .update(
+            {
+                "dates_depart": dates_depart,
+                "dates_retour": dates_retour,
+                "status": "scanning",
+                "auto_scan_enabled": False,
+                "updated_at": now,
+            }
+        )
+        .eq("id", trip_id)
+        .execute()
+    )
+    if not updated.data:
+        raise HTTPException(status_code=500, detail="Relance impossible")
+    trip = updated.data[0]
+
+    try:
+        loop = asyncio.get_running_loop()
+        scan_result = await loop.run_in_executor(
+            _PLANNER_SCAN_POOL, lambda: _run_trip_scan(supabase, trip)
+        )
+    except HTTPException:
+        supabase.table("planned_trips").update(
+            {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
+        ).eq("id", trip_id).execute()
+        raise
+    except Exception as e:
+        supabase.table("planned_trips").update(
+            {"status": "planning", "updated_at": datetime.utcnow().isoformat()}
+        ).eq("id", trip_id).execute()
+        print(f"❌ Planner relaunch scan échoué {trip_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    out_label = (dates_depart[0].get("date") or "")[:10]
+    ret_label = (dates_retour[-1].get("date") or "")[:10]
+    emails = [e for e in _collect_trip_notify_emails(supabase, trip) if e]
+    if emails:
+        try:
+            notify_trip_relaunch(
+                trip_id=trip_id,
+                trip_name=str(trip.get("name") or "Voyage"),
+                out_date=out_label,
+                ret_date=ret_label,
+                recipients=emails,
+            )
+        except Exception as e:
+            print(f"⚠️ relaunch email: {e}")
+
+    try:
+        from deals.push_notify import list_active_push_tokens, send_expo_push
+
+        notify_user_ids = {str(user_id)}
+        if trip.get("organizer_id"):
+            notify_user_ids.add(str(trip.get("organizer_id")))
+        try:
+            mem_rows = (
+                supabase.table("trip_members")
+                .select("user_id")
+                .eq("trip_id", trip_id)
+                .execute()
+            )
+            for m in mem_rows.data or []:
+                if m.get("user_id"):
+                    notify_user_ids.add(str(m.get("user_id")))
+        except Exception:
+            pass
+        tokens = [
+            str(r.get("token") or "")
+            for r in list_active_push_tokens(supabase, limit=200)
+            if r.get("token") and str(r.get("user_id") or "") in notify_user_ids
+        ]
+        tokens = list(dict.fromkeys(t for t in tokens if t))
+        if tokens:
+            send_expo_push(
+                tokens,
+                title="Recherche relancée",
+                body=f"{trip.get('name') or 'Voyage'} · nouvelles dates",
+                data={
+                    "type": "planner_relaunch",
+                    "trip_id": trip_id,
+                    "screen": "TripDetail",
+                },
+            )
+    except Exception as e:
+        print(f"⚠️ relaunch push: {e}")
+
+    refreshed = (
+        supabase.table("planned_trips")
+        .select(_TRIPS_LIST_SELECT)
+        .eq("id", trip_id)
+        .limit(1)
+        .execute()
+    )
+    trip_out = _row_to_trip((refreshed.data or [trip])[0])
+    return {
+        "trip": trip_out,
+        "scan": scan_result,
+        "ok": True,
+    }
 
 
 @router.delete("/api/planner/trips/{trip_id}")

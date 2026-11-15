@@ -50,10 +50,14 @@ import {
   partyPriceCaptionFr,
   partyPriceSuffixFr,
   trackTripDetailViewed,
+  PLANNER_RELAUNCH_CARD_FR,
+  PLANNER_RELAUNCH_TITLE_FR,
   type AddTripMemberRequest,
   type EnrichedTripResponse,
+  type FlexibleDates,
   type StayStepId,
 } from '@waypop/shared'
+import { RelaunchDatesSheet } from '../components/RelaunchDatesSheet'
 import { TripDetailPathChrome } from '../components/tripDetail/TripDetailPathChrome'
 import { PathStepsTiles } from '../components/tripDetail/PathStepsTiles'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
@@ -193,6 +197,8 @@ export function TripDetailScreen() {
     return !peekPlannedTrip(tripId)
   })
   const [scanning, setScanning] = useState(false)
+  const [relaunchOpen, setRelaunchOpen] = useState(false)
+  const [relaunching, setRelaunching] = useState(false)
   const [acting, setActing] = useState<string | null>(null)
   const [membersBusy, setMembersBusy] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -641,6 +647,51 @@ export function TripDetailScreen() {
   const isOrganizer =
     isLocalDevTrip ||
     (!!viewUser && trip?.organizer_id === viewUser.id)
+
+  const relaunchWithDates = useCallback(
+    async (dates: FlexibleDates) => {
+      if (!dates.dates_depart.length || !dates.dates_retour.length) return
+      setRelaunching(true)
+      setError(null)
+      try {
+        const res = await getApi().relaunchPlannedTrip(tripId, {
+          dates_depart: dates.dates_depart,
+          dates_retour: dates.dates_retour,
+        })
+        setRelaunchOpen(false)
+        const proposals = res.scan?.proposals || []
+        setTrip((prev) =>
+          prev
+            ? {
+                ...prev,
+                ...res.trip,
+                status: 'planning',
+                proposals,
+                proposals_count: proposals.length,
+              }
+            : prev,
+        )
+        invalidateTravelWorkspacesCache()
+        await load({ silent: true })
+        if (proposals.length === 0) {
+          setScanEmpty({
+            reason: res.scan?.empty_reason === 'budget' ? 'budget' : 'no_flights',
+            budget: res.scan?.budget_max ?? trip?.budget_max ?? 150,
+            cheapest: res.scan?.cheapest_found ?? null,
+          })
+        } else {
+          setScanEmpty(null)
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Relance échouée'
+        setError(msg)
+        Alert.alert('Relancer', msg)
+      } finally {
+        setRelaunching(false)
+      }
+    },
+    [tripId, load, trip?.budget_max],
+  )
 
   const scan = useCallback(async () => {
     setScanning(true)
@@ -1985,6 +2036,13 @@ export function TripDetailScreen() {
       viewUser?.email?.split('@')[0] ||
       null
     : null
+  const canRelaunch = Boolean(
+    isOrganizer &&
+      detailPhase === 'past' &&
+      !reservationFlags.flightBooked &&
+      !reservationFlags.hotelBooked,
+  )
+
   const pathView = buildTripDetailView({
     phase: detailPhase,
     role: isOrganizer ? 'organizer' : 'member',
@@ -1992,6 +2050,7 @@ export function TripDetailScreen() {
     flightBooked: reservationFlags.flightBooked,
     hotelBooked: reservationFlags.hotelBooked,
     hotelComposing: detailPhase === 'composing',
+    canRelaunch,
     activitiesEnabled: plannerActivitiesEnabled,
     restaurantsEnabled: false,
     airlineLabel: airlineMobile,
@@ -2115,6 +2174,29 @@ export function TripDetailScreen() {
                 steps={pathView.steps}
                 onStepPress={(id) => onPipelineStep(id)}
               />
+              {canRelaunch ? (
+                <View style={[styles.relaunchCard, shadow.soft]}>
+                  <Text style={styles.relaunchKicker}>TERMINÉ</Text>
+                  <Text style={styles.relaunchTitle}>
+                    {PLANNER_RELAUNCH_TITLE_FR}
+                  </Text>
+                  <Text style={styles.relaunchBody}>
+                    {PLANNER_RELAUNCH_CARD_FR}
+                  </Text>
+                  <Pressable
+                    onPress={() => setRelaunchOpen(true)}
+                    disabled={relaunching || scanning}
+                    style={({ pressed }) => [
+                      styles.relaunchCta,
+                      (pressed || relaunching) && { opacity: 0.9 },
+                    ]}
+                  >
+                    <Text style={styles.relaunchCtaText}>
+                      {pathView.primary.label}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
               {accepted?.trip_data && !reservationFlags.externalFlight ? (
                 <MobileBoardingPass
                   trip={sanitizeTripAirports(
@@ -2508,6 +2590,12 @@ export function TripDetailScreen() {
               ))}
             </View>
           }
+        />
+        <RelaunchDatesSheet
+          visible={relaunchOpen}
+          busy={relaunching}
+          onClose={() => !relaunching && setRelaunchOpen(false)}
+          onConfirm={(dates) => void relaunchWithDates(dates)}
         />
       </View>
     )
@@ -3682,6 +3770,46 @@ function ProposalBlock({
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
+  relaunchCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.primaryMuted,
+  },
+  relaunchKicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    color: colors.primary,
+    marginBottom: 6,
+  },
+  relaunchTitle: {
+    fontFamily: fonts.extrabold,
+    fontSize: 18,
+    letterSpacing: -0.4,
+    color: colors.ink,
+    marginBottom: 6,
+  },
+  relaunchBody: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.inkSoft,
+    marginBottom: 14,
+  },
+  relaunchCta: {
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  relaunchCtaText: {
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    color: '#fff',
+  },
   fixedBackHeader: {
     position: 'absolute',
     top: 0,

@@ -251,10 +251,11 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontFamily: fonts.extrabold,
-    fontSize: 13,
+    fontSize: 20,
+    lineHeight: 24,
     color: 'rgba(255,176,136,0.95)',
-    letterSpacing: 0.4,
-    marginBottom: 6,
+    letterSpacing: -0.6,
+    marginBottom: 8,
   },
   title: {
     fontFamily: fonts.serif,

@@ -60,17 +60,29 @@ export default function Login() {
 
         <div className="lg:grid lg:grid-cols-2 lg:gap-14 lg:items-center">
           <div className="hidden lg:block">
-            <p className="app-kicker mb-3">
-              {inviteMode ? t('planner.invite.signupKicker') : 'WayPop'}
-            </p>
-            <h1 className="text-4xl xl:text-5xl font-extrabold text-ink tracking-tight leading-[1.1]">
-              {inviteMode ? t('planner.invite.signupTitle') : t('app.title')}
-            </h1>
-            <p className="mt-4 text-muted text-base leading-relaxed max-w-md">
-              {inviteMode
-                ? t('planner.invite.signupLead')
-                : t('profile.guest.lead')}
-            </p>
+            {inviteMode ? (
+              <>
+                <p className="app-kicker mb-3">{t('planner.invite.signupKicker')}</p>
+                <h1 className="text-4xl xl:text-5xl font-extrabold text-ink tracking-tight leading-[1.1]">
+                  {t('planner.invite.signupTitle')}
+                </h1>
+                <p className="mt-4 text-muted text-base leading-relaxed max-w-md">
+                  {t('planner.invite.signupLead')}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mb-4 text-[3.25rem] xl:text-6xl font-extrabold leading-none tracking-tightest text-ink">
+                  WayPop
+                </p>
+                <h1 className="text-2xl xl:text-3xl font-extrabold text-ink tracking-tight leading-snug">
+                  {t('profile.guest.title')}
+                </h1>
+                <p className="mt-4 text-muted text-base leading-relaxed max-w-md">
+                  {t('profile.guest.lead')}
+                </p>
+              </>
+            )}
           </div>
           <div className="app-card p-6 sm:p-8">
             <AccountGuestLanding inviteMode={inviteMode} />

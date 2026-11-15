@@ -45,22 +45,23 @@ const LAN_IP_IN_URL = /exp:\/\/\d{1,3}(?:\.\d{1,3}){3}/
 /**
  * OAuth redirectTo
  *
- * Production / dev client (`npx expo run:ios`, EAS): waypop://auth/callback
- *   — already in Supabase Redirect URLs. This is the path that works.
+ * Production / dev client (`npx expo run:ios`, EAS): flightwatcher://auth/callback
+ *   — still the Supabase allowlisted scheme (WayPop branding; add waypop:// later).
  *
  * Expo Go: custom schemes are not delivered; exp:// with LAN IP is rejected by
  *   Supabase (auth#2039). Optional EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN (HTTPS bridge)
  *   is best-effort only — expect to validate Google login on a real build.
  */
 function resolveRedirectTo(): { redirectTo: string; warning: string | null } {
-  const nativeDeepLink = 'waypop://auth/callback'
+  // Keep flightwatcher:// until Supabase Redirect URLs include waypop://
+  const nativeDeepLink = 'flightwatcher://auth/callback'
 
   // Standalone / dev client — production path
   if (Constants.appOwnership !== 'expo') {
     return { redirectTo: nativeDeepLink, warning: null }
   }
 
-  // Expo Go — optional HTTPS bridge (Cloudflare). Not reliable for sign-off.
+  // Expo Go — optional HTTPS bridge (Cloudflare / ngrok). Not reliable for sign-off.
   // Recompute every call: Expo LAN / tunnel host can change without Metro restart.
   const publicOrigin = env('EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN')?.replace(/\/$/, '')
   const expoLink = Linking.createURL('auth/callback')
@@ -68,14 +69,14 @@ function resolveRedirectTo(): { redirectTo: string; warning: string | null } {
     return {
       redirectTo: `${publicOrigin}/auth/mobile-callback?app_redirect=${encodeURIComponent(expoLink)}`,
       warning:
-        'Expo Go + OAuth is unreliable. Prefer a dev/production build with waypop://',
+        'Expo Go + OAuth is unreliable. Prefer a dev/production build with flightwatcher://',
     }
   }
 
   return {
     redirectTo: expoLink,
     warning:
-      'Google login needs a native build (waypop://). Expo Go cannot complete Supabase OAuth reliably.',
+      'Google login needs a native build (flightwatcher://). Expo Go cannot complete Supabase OAuth reliably.',
   }
 }
 
@@ -85,7 +86,7 @@ export function getRedirectTo(): string {
 }
 
 export function getAppDeepLink(): string {
-  if (Constants.appOwnership !== 'expo') return 'waypop://auth/callback'
+  if (Constants.appOwnership !== 'expo') return 'flightwatcher://auth/callback'
   return Linking.createURL('auth/callback')
 }
 

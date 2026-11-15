@@ -42,6 +42,7 @@ import type {
   TripResponse,
   TravelWorkspace,
   UpdatePlannedTripRequest,
+  RelaunchPlannedTripRequest,
 } from '../types'
 
 export interface ApiClientOptions {
@@ -1106,6 +1107,22 @@ export function createApiClient(options: ApiClientOptions = {}) {
         `/api/planner/trips/${encodeURIComponent(id)}/complete`,
         { method: 'POST' },
       ),
+    relaunchPlannedTrip: (id: string, body: RelaunchPlannedTripRequest) =>
+      request<{
+        ok: boolean
+        trip: PlannedTrip
+        scan: {
+          proposals: TripProposal[]
+          nombre_requetes: number
+          saved?: number
+          budget_max?: number
+          empty_reason?: 'budget' | 'no_flights' | null
+          cheapest_found?: number | null
+        }
+      }>(`/api/planner/trips/${encodeURIComponent(id)}/relaunch`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
     deletePlannedTrip: (id: string) =>
       request<{ ok: boolean; archived?: boolean; reservations_preserved?: boolean }>(
         `/api/planner/trips/${encodeURIComponent(id)}`,

@@ -19,7 +19,7 @@ import { useAuth } from '../context/AuthContext'
 import { AppleLogoIcon } from '../components/AppleLogoIcon'
 import { GoogleGIcon, prefetchGoogleG } from '../components/GoogleGIcon'
 import { getWebOrigin } from '../lib/client'
-import { colors } from '../theme'
+import { colors, fonts } from '../theme'
 import * as WebBrowser from 'expo-web-browser'
 
 WebBrowser.maybeCompleteAuthSession()
@@ -293,15 +293,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 26,
   },
   brand: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '800',
-    letterSpacing: -0.9,
+    fontFamily: fonts.extrabold,
+    fontSize: 38,
+    lineHeight: 42,
+    letterSpacing: -1.1,
     color: '#FFFFFF',
   },
   brandRule: {
-    marginTop: 11,
-    width: 34,
+    marginTop: 10,
+    width: 28,
     height: 3,
     borderRadius: 2,
     backgroundColor: colors.primary,

@@ -8,6 +8,7 @@ import {
   partyModeKickerFr,
   PLANNER_PHASE_LABEL_FR,
   PLANNER_PHASE_ACTION_FR,
+  PLANNER_RELAUNCH_ACTION_FR,
   type TravelWorkspace,
 } from '@waypop/shared'
 import { colors, fonts, shadow } from '../theme'
@@ -133,6 +134,10 @@ export function JourneyCard({
   onPress: () => void
 }) {
   const meta = PHASE_META[workspace.phase] || PHASE_META.planning
+  const actionLabel =
+    workspace.capabilities?.can_relaunch
+      ? PLANNER_RELAUNCH_ACTION_FR
+      : meta.action
   const destCode = (workspace.dest_iata || '').split(/[,;]/)[0]?.trim() || ''
   const cityRaw = String(workspace.city || '')
     .split(',')[0]
@@ -227,7 +232,7 @@ export function JourneyCard({
                 ]}
               />
             </View>
-            <Text style={styles.action}>{meta.action}  ›</Text>
+            <Text style={styles.action}>{actionLabel}  ›</Text>
           </View>
         </View>
       </Pressable>
@@ -323,7 +328,7 @@ export function JourneyCard({
             />
           </View>
           <Text style={styles.action} numberOfLines={1}>
-            {meta.action}  ›
+            {actionLabel}  ›
           </Text>
         </View>
       </View>

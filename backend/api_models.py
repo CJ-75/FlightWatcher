@@ -184,6 +184,13 @@ class UpdatePlannedTripRequest(BaseModel):
     auto_scan_interval_seconds: Optional[int] = None
 
 
+class RelaunchPlannedTripRequest(BaseModel):
+    """Completed trip without booking → new future dates + full rescan."""
+
+    dates_depart: List[DateAvecHoraire]
+    dates_retour: List[DateAvecHoraire]
+
+
 class AddTripMemberRequest(BaseModel):
     display_name: Optional[str] = None  # legacy; prefer first_name + last_name
     first_name: Optional[str] = None

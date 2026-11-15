@@ -30,6 +30,7 @@ const GROUPS: Array<{
   {
     label: 'Ops',
     items: [
+      { to: '/admin/planner', label: 'Planner', ico: 'T' },
       { to: '/admin/digests', label: 'Digests', ico: 'D' },
       { to: '/admin/status', label: 'Santé', ico: 'H' },
       { to: '/admin/audit', label: 'Journal', ico: 'J' },

@@ -473,6 +473,8 @@ export interface TravelWorkspace {
     can_choose_flight: boolean
     can_compose_hotel: boolean
     can_view_confirmation: boolean
+    /** Completed without booking — organizer can pick new dates + rescan */
+    can_relaunch?: boolean
   }
   pipeline: {
     flight: 'none' | 'selected' | 'booked'
@@ -518,6 +520,11 @@ export interface UpdatePlannedTripRequest {
   direct?: boolean
   auto_scan_enabled?: boolean
   auto_scan_interval_seconds?: number
+}
+
+export interface RelaunchPlannedTripRequest {
+  dates_depart: DateAvecHoraire[]
+  dates_retour: DateAvecHoraire[]
 }
 
 export type InvitePreviewState =

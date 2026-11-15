@@ -93,6 +93,30 @@ def send_password_changed_email(*, email: str) -> bool:
     return send_email([email], subject, html)
 
 
+def notify_trip_relaunch(
+    *,
+    trip_id: str,
+    trip_name: str,
+    out_date: str,
+    ret_date: str,
+    recipients: List[str],
+) -> bool:
+    link = f"{WEB_APP_URL}/planner?trip={trip_id}"
+    subject = f"Recherche relancée — {trip_name}"
+    html = f"""
+    <div style="font-family:system-ui,sans-serif;line-height:1.5;color:#1e293b">
+      <h2 style="margin:0 0 12px;color:#E85A28">Nouvelles dates</h2>
+      <p>La recherche de vols pour <strong>{trip_name}</strong> a été relancée
+         du <strong>{out_date}</strong> au <strong>{ret_date}</strong>.</p>
+      <p><a href="{link}" style="display:inline-block;background:#FF6B35;color:#fff;
+         text-decoration:none;padding:12px 20px;border-radius:12px;font-weight:700">
+         Voir les résultats</a></p>
+      <p style="font-size:12px;color:#64748b">WayPop — planner</p>
+    </div>
+    """
+    return send_email(recipients, subject, html)
+
+
 def notify_trip_under_budget(
     *,
     trip_id: str,

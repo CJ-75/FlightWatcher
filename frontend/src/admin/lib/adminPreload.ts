@@ -11,6 +11,7 @@ export function prefetchAdminRoute(path: string) {
     '/admin/parcours': () => import('../pages/ParcoursAdminPage'),
     '/admin/activities': () => import('../pages/ActivitiesAdminPage'),
     '/admin/occasions': () => import('../pages/OccasionsPage'),
+    '/admin/planner': () => import('../pages/PlannerAdminPage'),
     '/admin/digests': () => import('../pages/DigestsPage'),
     '/admin/status': () => import('../pages/StatusPage'),
     '/admin/audit': () => import('../pages/AuditPage'),

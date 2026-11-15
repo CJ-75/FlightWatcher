@@ -4,7 +4,7 @@
     "slug": "waypop",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "waypop",
+    "scheme": ["waypop", "flightwatcher"],
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
@@ -21,6 +21,11 @@
           "autoVerify": true,
           "data": [
             {
+              "scheme": "flightwatcher",
+              "host": "auth",
+              "pathPrefix": "/callback"
+            },
+            {
               "scheme": "waypop",
               "host": "auth",
               "pathPrefix": "/callback"
@@ -34,6 +39,11 @@
         {
           "action": "VIEW",
           "data": [
+            {
+              "scheme": "flightwatcher",
+              "host": "planner",
+              "pathPrefix": "/invite"
+            },
             {
               "scheme": "waypop",
               "host": "planner",
