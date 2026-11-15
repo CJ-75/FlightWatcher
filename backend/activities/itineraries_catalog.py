@@ -381,3 +381,183 @@ def featured_row_label(itineraries: List[Dict[str, Any]]) -> Optional[str]:
         except Exception:
             return "Pour le férié"
     return "À la une"
+
+
+def resolve_slug_redirect(
+    supabase, *, city_slug: str, old_slug: str
+) -> Optional[Dict[str, Any]]:
+    """Return {city_slug, slug, itinerary_id} if old_slug redirects to a published Pop."""
+    if not supabase:
+        return None
+    city = str(city_slug or "").strip().lower()
+    old = str(old_slug or "").strip().lower()
+    if not city or not old:
+        return None
+    try:
+        res = (
+            supabase.table("itinerary_slug_redirects")
+            .select("city_slug,old_slug,itinerary_id")
+            .eq("city_slug", city)
+            .eq("old_slug", old)
+            .limit(1)
+            .execute()
+        )
+        if not res.data:
+            # Fallback: slug_history contains old slug on a published row
+            res2 = (
+                supabase.table("itineraries")
+                .select("id,slug,city_slug,status,is_demo")
+                .eq("city_slug", city)
+                .contains("slug_history", [old])
+                .eq("status", "published")
+                .limit(1)
+                .execute()
+            )
+            if not res2.data:
+                return None
+            row = res2.data[0]
+            if row.get("is_demo"):
+                return None
+            return {
+                "city_slug": str(row.get("city_slug") or city),
+                "slug": str(row.get("slug") or ""),
+                "itinerary_id": str(row.get("id") or ""),
+            }
+        row = res.data[0]
+        iid = str(row.get("itinerary_id") or "")
+        if not iid:
+            return None
+        itin = (
+            supabase.table("itineraries")
+            .select("id,slug,city_slug,status,is_demo")
+            .eq("id", iid)
+            .limit(1)
+            .execute()
+        )
+        if not itin.data:
+            return None
+        live = itin.data[0]
+        if live.get("status") != "published" or live.get("is_demo"):
+            return None
+        return {
+            "city_slug": str(live.get("city_slug") or city),
+            "slug": str(live.get("slug") or ""),
+            "itinerary_id": iid,
+        }
+    except Exception as e:
+        logger.warning("resolve_slug_redirect: %s", e)
+        return None
+
+
+def get_itinerary_status_by_slug(
+    supabase, *, slug: str
+) -> Optional[Dict[str, Any]]:
+    """Any status (published/retired/draft) — for 410 vs 404."""
+    if not supabase or not slug:
+        return None
+    try:
+        res = (
+            supabase.table("itineraries")
+            .select("id,slug,city_slug,status,is_demo")
+            .eq("slug", str(slug).strip().lower())
+            .limit(1)
+            .execute()
+        )
+        if not res.data:
+            return None
+        return _serialize(res.data[0])
+    except Exception as e:
+        logger.warning("get_itinerary_status_by_slug: %s", e)
+        return None
+
+
+def list_pop_index_cities(supabase) -> List[Dict[str, Any]]:
+    if not supabase:
+        return []
+    try:
+        res = (
+            supabase.table("pop_index_cities")
+            .select("city_slug,indexable,opened_at,notes,updated_at")
+            .order("city_slug")
+            .execute()
+        )
+        return list(res.data or [])
+    except Exception as e:
+        logger.warning("list_pop_index_cities: %s", e)
+        return []
+
+
+def is_city_indexable(supabase, city_slug: str) -> bool:
+    city = str(city_slug or "").strip().lower()
+    if not city:
+        return False
+    try:
+        res = (
+            supabase.table("pop_index_cities")
+            .select("indexable")
+            .eq("city_slug", city)
+            .limit(1)
+            .execute()
+        )
+        if not res.data:
+            return False
+        return bool(res.data[0].get("indexable"))
+    except Exception as e:
+        logger.warning("is_city_indexable: %s", e)
+        return False
+
+
+def list_sitemap_pops(supabase) -> Dict[str, Any]:
+    """Published non-demo pops for sitemap — light fields only."""
+    if not supabase:
+        return {"ok": False, "cities": {}, "error": "no_supabase"}
+    try:
+        res = (
+            supabase.table("itineraries")
+            .select(
+                "id,slug,city_slug,updated_at,published_at,"
+                "indexable_override,canonical_itinerary_id,is_demo,status,"
+                "intro,cover_image,photo_license,verified_at"
+            )
+            .eq("status", "published")
+            .eq("author_kind", "admin")
+            .eq("is_demo", False)
+            .order("city_slug")
+            .limit(2000)
+            .execute()
+        )
+        open_cities = {
+            str(c.get("city_slug") or "").lower()
+            for c in list_pop_index_cities(supabase)
+            if c.get("indexable")
+        }
+        by_city: Dict[str, List[Dict[str, Any]]] = {}
+        for raw in res.data or []:
+            row = _serialize(raw)
+            city = str(row.get("city_slug") or "").strip().lower()
+            slug = str(row.get("slug") or "").strip().lower()
+            if not city or not slug:
+                continue
+            if row.get("canonical_itinerary_id"):
+                continue
+            if row.get("indexable_override") is False:
+                continue
+            # Sitemap only cities opened for indexation
+            if city not in open_cities and row.get("indexable_override") is not True:
+                continue
+            # Minimal content gate (full threshold on page)
+            intro_len = len(str(row.get("intro") or "").strip())
+            if intro_len < 80:
+                continue
+            if not str(row.get("cover_image") or "").strip():
+                continue
+            if not str(row.get("photo_license") or "").strip():
+                continue
+            lastmod = str(row.get("updated_at") or row.get("published_at") or "")[:10]
+            by_city.setdefault(city, []).append(
+                {"slug": slug, "lastmod": lastmod or None}
+            )
+        return {"ok": True, "cities": by_city, "open_cities": sorted(open_cities)}
+    except Exception as e:
+        logger.warning("list_sitemap_pops: %s", e)
+        return {"ok": False, "cities": {}, "error": str(e)}

@@ -18,10 +18,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { ville } = await params
   const city = decodeURIComponent(ville).toLowerCase()
   const label = citySlugDisplayNameFr(city) || city
+  const title = `Que faire à ${label} le week-end | Waypop`
+  const description = `Itinéraires à ${label} : programme jour par jour, adresses et idée de prix week-end. Pops Waypop par intention.`
   return {
-    title: `Que faire à ${label} le week-end`,
-    description: `Pops Waypop à ${label} : itinéraires prêts, prix week-end et idées par intention.`,
+    title: { absolute: title.length > 60 ? `Que faire à ${label} | Waypop` : title },
+    description: description.slice(0, 160),
     alternates: { canonical: `https://waypop.co/pop/${city}` },
+    // Hub indexable only when city opened (page can refine later)
     robots: { index: false, follow: true },
   }
 }

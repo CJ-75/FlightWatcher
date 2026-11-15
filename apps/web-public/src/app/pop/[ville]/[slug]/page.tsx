@@ -1,18 +1,22 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import {
   buildItineraryMapsUrl,
   citySlugDisplayNameFr,
-  evaluatePopIndexability,
-  ITINERARY_DURATION_LABELS,
   ITINERARY_OCCASION_LABELS,
   sanitizeUserFacingText,
   type ItineraryOccasion,
 } from '@waypop/shared'
-import { fetchPublishedByCity, fetchPublishedBySlug } from '@/lib/parcoursApi'
+import {
+  fetchPublishedByCity,
+  fetchPublishedBySlug,
+  fetchSlugRedirect,
+} from '@/lib/parcoursApi'
+import { assessPopIndex, popSeoCopy } from '@/lib/popSeoPage'
 import { DayProgramme } from '@/components/pop/DayProgramme'
 import { PopFooter } from '@/components/pop/PopFooter'
+import { PopJsonLd } from '@/components/pop/JsonLd'
 import { PriceIsland } from '@/components/pop/PriceIsland'
 import { Chip } from '@/components/ui/Chip'
 import { Card } from '@/components/ui/Card'
@@ -32,12 +36,27 @@ async function loadPop(ville: string, slug: string) {
   const city = decodeURIComponent(ville).toLowerCase()
   const s = decodeURIComponent(slug).toLowerCase()
   const itin = await fetchPublishedBySlug(s)
-  if (!itin || itin.is_demo) return null
-  if (itin.status === 'retired') return { retired: true as const, city, slug: s }
-  if (itin.city_slug && String(itin.city_slug).toLowerCase() !== city) {
+  if (!itin || itin.is_demo) {
+    const redir = await fetchSlugRedirect(city, s)
+    if (redir?.slug) {
+      permanentRedirect(
+        `/pop/${encodeURIComponent(redir.city_slug)}/${encodeURIComponent(redir.slug)}`,
+      )
+    }
     return null
   }
-  return { itin, city, retired: false as const }
+  if (itin.status === 'retired') return { retired: true as const, city, slug: s }
+  const liveCity = String(itin.city_slug || city).toLowerCase()
+  const liveSlug = String(itin.slug || s).toLowerCase()
+  if (liveCity !== city || liveSlug !== s) {
+    permanentRedirect(
+      `/pop/${encodeURIComponent(liveCity)}/${encodeURIComponent(liveSlug)}`,
+    )
+  }
+  if (itin.canonical_itinerary_id) {
+    // Duplicate → canonical Pop (fetched by id path via slug if available later)
+  }
+  return { itin, city: liveCity, retired: false as const }
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -46,36 +65,41 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!loaded || loaded.retired || !('itin' in loaded) || !loaded.itin) {
     return { title: 'Pop introuvable', robots: { index: false, follow: true } }
   }
-  const { itin } = loaded
-  const title = sanitizeUserFacingText(itin.title) || itin.title
-  const intro = String(itin.intro || '')
-  const items = itin.itinerary_items || []
-  const index = evaluatePopIndexability({
-    status: itin.status,
-    is_demo: itin.is_demo,
-    intro,
-    cover_image: itin.cover_image,
-    photo_license: itin.photo_license as string | undefined,
-    stopCount: items.length,
-    stopsWithNote: items.filter((i) => String(i.note || '').trim()).length,
-    imageCount:
-      (itin.cover_image ? 1 : 0) +
-      items.filter((i) => String(i.photo || '').trim()).length,
-    city_indexable: false,
-    verified_at: itin.verified_at as string | undefined,
-  })
+  const { itin, city } = loaded
+  const cityLabel = citySlugDisplayNameFr(city) || city
+  const copy = popSeoCopy(itin, cityLabel)
+  const index = await assessPopIndex(itin, city)
+  const canonicalSlug = String(itin.slug || slug)
+  const canonical = `https://waypop.co/pop/${city}/${encodeURIComponent(canonicalSlug)}`
+
+  // Duplicate content → point canonical to primary Pop when set
+  let canonicalUrl = canonical
+  if (itin.canonical_itinerary_id) {
+    // Keep self URL in path but declare noindex; full resolve needs primary slug
+    // (admin sets canonical_itinerary_id — Lot 3: noindex until wired)
+  }
+
   return {
-    title,
-    description: intro.slice(0, 160) || undefined,
+    title: { absolute: copy.documentTitle },
+    description: copy.description,
     robots: index.indexable
       ? { index: true, follow: true }
       : { index: false, follow: true },
-    alternates: {
-      canonical: `https://waypop.co/pop/${loaded.city}/${encodeURIComponent(itin.slug || slug)}`,
+    alternates: { canonical: canonicalUrl },
+    openGraph: {
+      title: copy.h1,
+      description: copy.description,
+      url: canonical,
+      type: 'article',
+      images: itin.cover_image
+        ? [{ url: itin.cover_image, width: 1200, height: 630 }]
+        : undefined,
     },
-    openGraph: itin.cover_image
-      ? { images: [{ url: itin.cover_image }] }
-      : undefined,
+    twitter: {
+      card: 'summary_large_image',
+      title: copy.h1,
+      description: copy.description,
+    },
   }
 }
 
@@ -97,10 +121,15 @@ export default async function PopDetailPage({ params }: Props) {
   const { itin, city } = loaded
   if (!itin) notFound()
 
+  const cityLabel = citySlugDisplayNameFr(city) || city
+  const seo = popSeoCopy(itin, cityLabel)
+  const h1 = sanitizeUserFacingText(seo.h1) || seo.h1
   const title = sanitizeUserFacingText(itin.title) || itin.title
   const intro = itin.intro
     ? sanitizeUserFacingText(itin.intro, { multiline: true })
     : ''
+  const index = await assessPopIndex(itin, city)
+  const canonicalPath = `/pop/${city}/${encodeURIComponent(String(itin.slug || slug))}`
   const items = [...(itin.itinerary_items || [])].sort(
     (a, b) =>
       Number(a.day_offset || 0) - Number(b.day_offset || 0) ||
@@ -116,14 +145,8 @@ export default async function PopDetailPage({ params }: Props) {
   const days = [...byDay.keys()]
     .sort((a, b) => a - b)
     .map((day) => ({ day, items: byDay.get(day) || [] }))
-  const cityLabel = citySlugDisplayNameFr(city) || city
 
-  const durationLabel =
-    itin.duration_kind &&
-    (ITINERARY_DURATION_LABELS[
-      itin.duration_kind as keyof typeof ITINERARY_DURATION_LABELS
-    ] ||
-      String(itin.duration_kind))
+  const durationLabel = seo.durationLabel
 
   const paceLabel =
     itin.pace && (PACE_LABEL[String(itin.pace)] || String(itin.pace))
@@ -180,6 +203,14 @@ export default async function PopDetailPage({ params }: Props) {
 
   return (
     <>
+      <PopJsonLd
+        itin={itin}
+        city={city}
+        cityLabel={cityLabel}
+        h1={h1}
+        description={seo.description}
+        canonicalPath={canonicalPath}
+      />
       <main className="pb-28 lg:pb-12">
         {/* Hero */}
         <section className="relative">
@@ -231,8 +262,11 @@ export default async function PopDetailPage({ params }: Props) {
                 {verified ? ` · lieux vérifiés le ${verified}` : ''}
               </p>
               <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-ink sm:text-4xl">
-                {title}
+                {h1}
               </h1>
+              {h1 !== title ? (
+                <p className="mt-1 text-sm font-semibold text-muted">{title}</p>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 {durationLabel ? <Chip>{durationLabel}</Chip> : null}
                 <Chip>{items.length} stops</Chip>
@@ -431,6 +465,11 @@ export default async function PopDetailPage({ params }: Props) {
         className="lg:hidden"
       />
       <PopFooter />
+      {!index.indexable ? (
+        <p className="sr-only">
+          noindex: {index.reasons.join(', ')}
+        </p>
+      ) : null}
     </>
   )
 }

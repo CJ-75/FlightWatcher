@@ -106,7 +106,74 @@ export async function middleware(req: NextRequest) {
       }
       return NextResponse.redirect(url, 302)
     }
+    // 301 old slug / 410 retired (only detail URLs)
+    const parts = pathname.split('/').filter(Boolean) // pop, ville, slug?
+    if (parts.length >= 3) {
+      const city = parts[1]!
+      const slug = parts[2]!
+      try {
+        const stRes = await fetch(
+          `${API.replace(/\/$/, '')}/api/pop/status/${encodeURIComponent(slug)}`,
+          { next: { revalidate: 300 } },
+        )
+        if (stRes.status === 404) {
+          const q = new URLSearchParams({ city, slug })
+          const redirRes = await fetch(
+            `${API.replace(/\/$/, '')}/api/pop/slug-redirect?${q}`,
+            { next: { revalidate: 300 } },
+          )
+          if (redirRes.ok) {
+            const hit = (await redirRes.json()) as {
+              city_slug?: string
+              slug?: string
+            }
+            if (hit.slug) {
+              const url = req.nextUrl.clone()
+              url.pathname = `/pop/${encodeURIComponent(hit.city_slug || city)}/${encodeURIComponent(hit.slug)}`
+              url.search = ''
+              return NextResponse.redirect(url, 301)
+            }
+          }
+        } else if (stRes.ok) {
+          const st = (await stRes.json()) as {
+            status?: string
+            city_slug?: string
+            slug?: string
+          }
+          if (st.status === 'retired') {
+            return new NextResponse(
+              `<!doctype html><html lang="fr"><head><meta charset="utf-8"/><title>Pop retiré</title><meta name="robots" content="noindex"/></head><body style="font-family:system-ui;padding:3rem;text-align:center"><h1>Pop retiré</h1><p><a href="/pop/${encodeURIComponent(st.city_slug || city)}">Autres Pops</a></p></body></html>`,
+              {
+                status: 410,
+                headers: {
+                  'content-type': 'text/html; charset=utf-8',
+                  'x-robots-tag': 'noindex, follow',
+                },
+              },
+            )
+          }
+          if (
+            st.status === 'published' &&
+            st.city_slug &&
+            st.slug &&
+            (st.city_slug !== city || st.slug !== slug)
+          ) {
+            const url = req.nextUrl.clone()
+            url.pathname = `/pop/${encodeURIComponent(st.city_slug)}/${encodeURIComponent(st.slug)}`
+            url.search = ''
+            return NextResponse.redirect(url, 301)
+          }
+        }
+      } catch {
+        /* page handles 404 */
+      }
+    }
+
     const res = NextResponse.next()
+    // Query params (?origin=…) never indexable as alternate URLs
+    if (req.nextUrl.searchParams.size > 0) {
+      res.headers.set('X-Robots-Tag', 'noindex, follow')
+    }
     if (prev.version) {
       res.headers.set('X-Robots-Tag', 'noindex, follow')
       res.headers.set('x-waypop-preview', `pop_v${prev.version}`)

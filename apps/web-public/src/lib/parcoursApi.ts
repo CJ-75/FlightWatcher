@@ -30,6 +30,9 @@ export type PublicItinerary = {
   tips?: unknown
   stay?: unknown
   color_key?: string | null
+  target_query?: string | null
+  indexable_override?: boolean | null
+  canonical_itinerary_id?: string | null
   itinerary_items?: Array<{
     id?: string
     title?: string | null
@@ -79,4 +82,94 @@ export async function fetchPublishedByCity(
     itineraries?: PublicItinerary[]
   }
   return data.itineraries || []
+}
+
+export async function fetchCityIndexable(city: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `${apiBase()}/api/pop/city-indexable/${encodeURIComponent(city)}`,
+      { next: { tags: [`pop-city-index:${city}`], revalidate: 3600 } },
+    )
+    if (!res.ok) return false
+    const data = (await res.json()) as { indexable?: boolean }
+    return data.indexable === true
+  } catch {
+    return false
+  }
+}
+
+export async function fetchSlugRedirect(
+  city: string,
+  slug: string,
+): Promise<{ city_slug: string; slug: string } | null> {
+  try {
+    const q = new URLSearchParams({ city, slug })
+    const res = await fetch(`${apiBase()}/api/pop/slug-redirect?${q}`, {
+      next: { revalidate: 86400 },
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as {
+      ok?: boolean
+      city_slug?: string
+      slug?: string
+    }
+    if (!data.ok || !data.slug) return null
+    return {
+      city_slug: String(data.city_slug || city),
+      slug: String(data.slug),
+    }
+  } catch {
+    return null
+  }
+}
+
+export type PopStatus =
+  | { status: 'published'; city_slug?: string; slug?: string; id?: string }
+  | { status: 'retired'; city_slug?: string; slug?: string; id?: string }
+  | { status: 'missing' }
+
+export async function fetchPopStatus(slug: string): Promise<PopStatus> {
+  try {
+    const res = await fetch(
+      `${apiBase()}/api/pop/status/${encodeURIComponent(slug)}`,
+      { next: { revalidate: 3600 } },
+    )
+    if (res.status === 404) return { status: 'missing' }
+    if (!res.ok) return { status: 'missing' }
+    const data = (await res.json()) as {
+      status?: string
+      city_slug?: string
+      slug?: string
+      id?: string
+    }
+    if (data.status === 'published' || data.status === 'retired') {
+      return {
+        status: data.status,
+        city_slug: data.city_slug,
+        slug: data.slug,
+        id: data.id,
+      }
+    }
+    return { status: 'missing' }
+  } catch {
+    return { status: 'missing' }
+  }
+}
+
+export type SitemapPayload = {
+  ok?: boolean
+  cities?: Record<string, Array<{ slug: string; lastmod?: string | null }>>
+  open_cities?: string[]
+}
+
+export async function fetchSitemapPayload(): Promise<SitemapPayload> {
+  try {
+    const res = await fetch(`${apiBase()}/api/pop/sitemap`, {
+      next: { tags: ['pop-sitemap'], revalidate: 3600 },
+    })
+    if (!res.ok) return { ok: false, cities: {} }
+    return (await res.json()) as SitemapPayload
+  } catch {
+    return { ok: false, cities: {} }
+  }
 }

@@ -139,6 +139,15 @@ def _publish_blockers(itin: Dict[str, Any], items: List[Dict[str, Any]]) -> List
         blockers.append({"code": "city", "message": "Ville requise."})
     if not str(itin.get("slug") or "").strip():
         blockers.append({"code": "slug", "message": "Slug requis."})
+    # target_query unique per city when set (DB unique index + soft check)
+    tq = str(itin.get("target_query") or "").strip()
+    if tq and len(tq) < 12:
+        blockers.append(
+            {
+                "code": "target_query_short",
+                "message": "Mot-clé SEO (target_query) trop court (≥ 12 car.).",
+            }
+        )
     occasions = itin.get("occasions")
     if not isinstance(occasions, list) or len(occasions) == 0:
         blockers.append({"code": "tag", "message": "Tag requis (badge du parcours)."})
@@ -655,6 +664,8 @@ def update_admin_itinerary(
             v = str(v).strip().lower() or None
         if k == "slug" and v is not None:
             v = _slugify(str(v))
+        if k == "target_query" and v is not None:
+            v = str(v).strip() or None
         if k == "occasions":
             v = [str(x).strip().lower() for x in (v or []) if str(x).strip()]
         if k in ("ideal_for", "transport_modes"):
@@ -683,6 +694,37 @@ def update_admin_itinerary(
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     try:
+        prev = get_admin_itinerary(supabase, itinerary_id, light=True)
+        prev_itin = prev.get("itinerary") if prev.get("ok") else None
+
+        # Slug change → history + redirect row (301)
+        if (
+            prev_itin
+            and "slug" in data
+            and data["slug"]
+            and str(prev_itin.get("slug") or "") != str(data["slug"])
+        ):
+            old_slug = str(prev_itin.get("slug") or "").strip().lower()
+            city = str(
+                data.get("city_slug") or prev_itin.get("city_slug") or ""
+            ).strip().lower()
+            hist = list(prev_itin.get("slug_history") or [])
+            if old_slug and old_slug not in hist:
+                hist.append(old_slug)
+            data["slug_history"] = hist
+            if old_slug and city:
+                try:
+                    supabase.table("itinerary_slug_redirects").upsert(
+                        {
+                            "city_slug": city,
+                            "old_slug": old_slug,
+                            "itinerary_id": itinerary_id,
+                        },
+                        on_conflict="city_slug,old_slug",
+                    ).execute()
+                except Exception as re:
+                    logger.warning("slug redirect upsert: %s", re)
+
         itin_row: Optional[Dict[str, Any]] = None
         if data:
             res = (

@@ -197,3 +197,75 @@ def pop_revalidate(
     if expected and (secret or "") != expected:
         raise HTTPException(status_code=401, detail="unauthorized")
     return ping_next_revalidate(city_slug=city_slug, slug=slug)
+
+
+def _svc():
+    from supabase_deps import get_supabase_client, get_supabase_service_client
+
+    return get_supabase_service_client() or get_supabase_client()
+
+
+@router.get("/api/pop/slug-redirect")
+def pop_slug_redirect(
+    city: str = Query(..., min_length=2),
+    slug: str = Query(..., min_length=1),
+):
+    from activities.itineraries_catalog import resolve_slug_redirect
+
+    hit = resolve_slug_redirect(_svc(), city_slug=city, old_slug=slug)
+    if not hit:
+        raise HTTPException(status_code=404, detail="no_redirect")
+    return {"ok": True, **hit}
+
+
+@router.get("/api/pop/status/{slug}")
+def pop_status(slug: str):
+    """published | retired | missing — for Next 301/410/404."""
+    from activities.itineraries_catalog import (
+        get_itinerary_status_by_slug,
+        get_published_itinerary,
+    )
+
+    pub = get_published_itinerary(_svc(), slug=slug)
+    if pub.get("ok"):
+        itin = pub["itinerary"]
+        return {
+            "ok": True,
+            "status": "published",
+            "city_slug": itin.get("city_slug"),
+            "slug": itin.get("slug"),
+            "id": itin.get("id"),
+        }
+    row = get_itinerary_status_by_slug(_svc(), slug=slug)
+    if row and row.get("status") == "retired":
+        return {
+            "ok": True,
+            "status": "retired",
+            "city_slug": row.get("city_slug"),
+            "slug": row.get("slug"),
+            "id": row.get("id"),
+        }
+    raise HTTPException(status_code=404, detail="not_found")
+
+
+@router.get("/api/pop/index-cities")
+def pop_index_cities():
+    from activities.itineraries_catalog import list_pop_index_cities
+
+    rows = list_pop_index_cities(_svc())
+    return {"ok": True, "cities": rows}
+
+
+@router.get("/api/pop/city-indexable/{city}")
+def pop_city_indexable(city: str):
+    from activities.itineraries_catalog import is_city_indexable
+
+    c = _norm_city(city)
+    return {"ok": True, "city": c, "indexable": is_city_indexable(_svc(), c)}
+
+
+@router.get("/api/pop/sitemap")
+def pop_sitemap():
+    from activities.itineraries_catalog import list_sitemap_pops
+
+    return list_sitemap_pops(_svc())

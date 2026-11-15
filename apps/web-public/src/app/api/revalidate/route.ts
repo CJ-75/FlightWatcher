@@ -30,7 +30,11 @@ export async function POST(req: Request) {
   if (city) {
     tags.push(`pop-city:${city}`)
     revalidateTag(`pop-city:${city}`)
+    tags.push(`pop-city-index:${city}`)
+    revalidateTag(`pop-city-index:${city}`)
   }
+  revalidateTag('pop-sitemap')
+  tags.push('pop-sitemap')
   if (!tags.length) {
     revalidateTag('pop-all')
     tags.push('pop-all')
