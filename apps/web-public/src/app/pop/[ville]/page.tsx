@@ -10,7 +10,7 @@ import {
 } from '@waypop/shared'
 import { fetchPublishedByCity } from '@/lib/parcoursApi'
 import { PopFooter } from '@/components/pop/PopFooter'
-import { PopImage } from '@/components/pop/PopImage'
+import { WpPopCard } from '@/components/ui/WpPopCard'
 import { WpRule } from '@/components/ui/WpRule'
 
 const PriceIsland = dynamic(
@@ -135,33 +135,17 @@ export default async function PopCityPage({ params }: Props) {
                 <ul className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
                   {rows.map((it) => (
                     <li key={it.id}>
-                      <Link
+                      <WpPopCard
                         href={`/pop/${city}/${encodeURIComponent(it.slug || it.id)}`}
-                        className="group block no-underline"
-                      >
-                        {it.cover_image ? (
-                          <div className="overflow-hidden rounded-2xl">
-                            <PopImage
-                              src={it.cover_image}
-                              alt=""
-                              variant="card"
-                              className="transition-transform duration-500 group-hover:scale-[1.03]"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex h-36 items-center justify-center rounded-2xl bg-night font-bold text-night-fg">
-                            {label}
-                          </div>
-                        )}
-                        <p className="mt-3 text-base font-extrabold tracking-tight text-ink group-hover:underline">
-                          {sanitizeUserFacingText(it.title) || it.title}
-                        </p>
-                        {it.subtitle ? (
-                          <p className="mt-1 line-clamp-2 text-sm text-muted">
-                            {sanitizeUserFacingText(it.subtitle)}
-                          </p>
-                        ) : null}
-                      </Link>
+                        title={sanitizeUserFacingText(it.title) || it.title}
+                        subtitle={
+                          it.subtitle
+                            ? sanitizeUserFacingText(it.subtitle)
+                            : null
+                        }
+                        image={it.cover_image}
+                        fallbackLabel={label}
+                      />
                     </li>
                   ))}
                 </ul>

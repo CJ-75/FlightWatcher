@@ -9,6 +9,7 @@ import {
 } from '@/lib/parcoursApi'
 import { assessPopIndex, popSeoCopy } from '@/lib/popSeoPage'
 import { PopPageView } from '@/components/pop/PopPageView'
+import { isPublicImageSrc } from '@/components/pop/PopImage'
 
 type Props = {
   params: Promise<{ ville: string; slug: string }>

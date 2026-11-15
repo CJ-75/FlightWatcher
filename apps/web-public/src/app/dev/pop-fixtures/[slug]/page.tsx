@@ -56,6 +56,11 @@ export default async function FixturePopPage({ params }: Props) {
     hasLivePrice: false,
   })
 
+  const related = FIXTURE_SLUGS.filter((s) => s !== slug)
+    .map((s) => getFixture(s))
+    .filter((x): x is NonNullable<typeof x> => Boolean(x))
+    .slice(0, 4)
+
   return (
     <div>
       <div className="border-b border-white/10 bg-night px-4 py-2.5 text-center text-[11px] font-semibold text-night-fg/80">
@@ -75,6 +80,7 @@ export default async function FixturePopPage({ params }: Props) {
         city={city}
         slug={slug}
         index={index}
+        related={related}
         showPrice={slug !== 'fixture-pauvre'}
       />
     </div>

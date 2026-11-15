@@ -16,6 +16,9 @@ const FORBIDDEN = [
   /\{title\}/,
 ]
 
+/** Never on production Pop pages — allowed on /dev/ fixtures only */
+const FORBIDDEN_PROD = [/\bseuil\b/i, /\bfixture\b/i, /\bvolontairement\b/i]
+
 function fail(msg) {
   console.error(`FAIL: ${msg}`)
   process.exitCode = 1
@@ -37,8 +40,17 @@ async function main() {
   if (!/<h1[\s>]/i.test(html)) fail('missing <h1>')
   else ok('h1 present')
 
-  if (!/Le programme/i.test(html)) fail('missing programme section')
+  if (!/Programme/i.test(html)) fail('missing programme section')
   else ok('programme section')
+
+  // Unique page images (cover + stops) — Unsplash photo- ids
+  const photoIds = [...html.matchAll(/photo-[\w-]+/g)].map((m) => m[0])
+  const uniq = new Set(photoIds)
+  if (photoIds.length > 0 && uniq.size < photoIds.length) {
+    fail(`duplicate photos on page (${photoIds.length} vs ${uniq.size} unique)`)
+  } else if (photoIds.length > 0) {
+    ok(`unique photos: ${uniq.size}`)
+  }
 
   // All days/stops should be in HTML even if tabs hide some
   const stopMarkers = (html.match(/Stop \d+|Matin|Après-midi|Soir|Arrêt/gi) || [])
@@ -54,6 +66,11 @@ async function main() {
 
   for (const re of FORBIDDEN) {
     if (re.test(html)) fail(`forbidden pattern ${re}`)
+  }
+  if (!url.includes('/dev/')) {
+    for (const re of FORBIDDEN_PROD) {
+      if (re.test(html)) fail(`prod-forbidden pattern ${re}`)
+    }
   }
   if (process.exitCode !== 1) ok('no placeholder leaks')
 

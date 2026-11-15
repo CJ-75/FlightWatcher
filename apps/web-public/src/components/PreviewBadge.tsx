@@ -2,11 +2,27 @@
 
 import { useEffect, useState } from 'react'
 
-/** Visible when preview cookie pop_v / landing_v is set (middleware). */
+/**
+ * Preview only — never in production builds without an explicit preview cookie.
+ * Next.js Dev Tools are already omitted from `next start` / Vercel prod.
+ */
 export function PreviewBadge() {
   const [label, setLabel] = useState<string | null>(null)
 
   useEffect(() => {
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const raw = document.cookie || ''
+        const pop = raw.match(/(?:^|;\s*)pop_v=([12])/)?.[1]
+        const landing = raw.match(/(?:^|;\s*)landing_v=([12])/)?.[1]
+        if (pop) setLabel(`Preview Pop v${pop}`)
+        else if (landing) setLabel(`Preview Landing v${landing}`)
+      } catch {
+        /* ignore */
+      }
+      return
+    }
+    // Dev: show only when preview cookie is set (same as prod preview)
     try {
       const raw = document.cookie || ''
       const pop = raw.match(/(?:^|;\s*)pop_v=([12])/)?.[1]

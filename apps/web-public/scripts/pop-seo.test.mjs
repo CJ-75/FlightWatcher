@@ -30,6 +30,36 @@ test('forbidden placeholders', () => {
   assert.equal(/\bTODO\b/.test(html), false)
   assert.equal(/\bundefined\b/.test(html), false)
   assert.equal(/\bLorem\b/i.test(html), false)
+  assert.equal(/\bseuil\b/i.test(html), false)
+  assert.equal(/\bfixture\b/i.test(html), false)
+  assert.equal(/\bvolontairement\b/i.test(html), false)
+})
+
+test('fixture-riche photos are unique identities', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(
+    join(__dirname, '../src/fixtures/popFixtures.ts'),
+    'utf8',
+  )
+  // Consts used by fixture-riche (cover + 6 stops)
+  const names = [
+    'COVER',
+    'MONTORGUEIL',
+    'POMPIDOU',
+    'PONT_NEUF',
+    'ODEON',
+    'LUXEMBOURG',
+    'MOUFFETARD',
+  ]
+  const ids = []
+  for (const n of names) {
+    const m = src.match(
+      new RegExp(`const ${n} =\\s*'https://images\\.unsplash\\.com/(photo-[\\w-]+)`),
+    )
+    assert.ok(m, `missing const ${n}`)
+    ids.push(m[1])
+  }
+  assert.equal(new Set(ids).size, ids.length, `dupes: ${ids}`)
 })
 
 test('fixture slug list expected', async () => {

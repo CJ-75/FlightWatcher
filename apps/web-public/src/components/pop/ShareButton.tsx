@@ -30,11 +30,7 @@ export function ShareButton({ title, url }: { title: string; url?: string }) {
   }, [title, url])
 
   return (
-    <button
-      type="button"
-      onClick={() => void share()}
-      className="inline-flex items-center rounded-xl border border-white/35 bg-white/10 px-4 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition-colors hover:bg-white/20"
-    >
+    <button type="button" onClick={() => void share()} className="wp-cta-glass">
       {copied ? 'Lien copié' : 'Partager'}
     </button>
   )

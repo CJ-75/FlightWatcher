@@ -1,5 +1,6 @@
 import { parseFaq } from '@/lib/popHelpers'
 import type { PublicItinerary } from '@/lib/parcoursApi'
+import { isPublicImageSrc } from '@/components/pop/PopImage'
 
 type Props = {
   itin: PublicItinerary
@@ -26,7 +27,7 @@ function placeNode(step: NonNullable<PublicItinerary['itinerary_items']>[number]
       longitude: lng,
     }
   }
-  if (step.photo) node.image = step.photo
+  if (isPublicImageSrc(step.photo)) node.image = step.photo
   return node
 }
 
@@ -74,7 +75,7 @@ export function PopJsonLd({
       name: h1,
       description,
       url,
-      image: itin.cover_image || undefined,
+      image: isPublicImageSrc(itin.cover_image) ? itin.cover_image : undefined,
       touristType: (itin.ideal_for as string[] | undefined)?.length
         ? (itin.ideal_for as string[])
         : itin.occasions,

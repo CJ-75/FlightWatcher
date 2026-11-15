@@ -12,6 +12,39 @@ export const ITINERARY_OCCASION_LABELS: Record<ItineraryOccasion, string> = {
   saison: 'De saison',
 }
 
+/** Ideal / intent labels beyond occasions (UI never shows raw enums). */
+export const ITINERARY_IDEAL_LABELS: Record<string, string> = {
+  ...ITINERARY_OCCASION_LABELS,
+  premiere_fois: 'Première visite',
+  first_time: 'Première visite',
+}
+
+export function idealLabelFr(raw: string | null | undefined): string {
+  const k = String(raw || '').trim()
+  if (!k) return ''
+  return ITINERARY_IDEAL_LABELS[k] || ITINERARY_OCCASION_LABELS[k as ItineraryOccasion] || k
+}
+
+/** Transport mode display — capitalize FR labels, never raw english. */
+export function transportLabelFr(raw: string | null | undefined): string {
+  const k = String(raw || '').trim().toLowerCase()
+  if (!k) return ''
+  const map: Record<string, string> = {
+    metro: 'Métro',
+    métro: 'Métro',
+    marche: 'Marche',
+    walk: 'Marche',
+    bus: 'Bus',
+    tram: 'Tram',
+    train: 'Train',
+    velo: 'Vélo',
+    vélo: 'Vélo',
+    taxi: 'Taxi',
+  }
+  if (map[k]) return map[k]!
+  return k.charAt(0).toUpperCase() + k.slice(1)
+}
+
 /** Tags courts pour badge carte parcours. */
 export const ITINERARY_OCCASION_BADGE_LABELS: Record<ItineraryOccasion, string> =
   {

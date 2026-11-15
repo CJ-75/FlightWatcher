@@ -1,15 +1,20 @@
 'use client'
 
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
-import { sanitizeUserFacingText } from '@waypop/shared'
-import { PopImage } from '@/components/pop/PopImage'
+import { formatDurationMinutes, sanitizeUserFacingText } from '@waypop/shared'
+import { StopVisual } from '@/components/pop/StopVisual'
+import { WpEyebrow } from '@/components/ui/WpEyebrow'
 import { WpRule } from '@/components/ui/WpRule'
+import { pickExclusivePhoto } from '@/lib/popPhotos'
 
 export type PopStop = {
   id?: string
   title?: string | null
   note?: string | null
   photo?: string | null
+  place_id?: string | null
+  photo_source?: string | null
+  photo_license?: string | null
   day_offset?: number | null
   moment?: string | null
   kind?: string | null
@@ -17,6 +22,7 @@ export type PopStop = {
     maps_url?: string
     lat?: number
     lng?: number
+    travel_minutes?: number
     [key: string]: unknown
   } | null
   places?: {
@@ -31,6 +37,11 @@ type Props = {
   days: DayGroup[]
   mapsUrl?: string | null
   launchHref?: string
+  cityLabel: string
+  colorKey?: string | null
+  city?: string
+  coverImage?: string | null
+  h2?: string
 }
 
 const MOMENT_FR: Record<string, string> = {
@@ -53,7 +64,16 @@ function stopMapsUrl(step: PopStop): string | null {
   return null
 }
 
-export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
+export function DayProgramme({
+  days,
+  mapsUrl,
+  launchHref,
+  cityLabel,
+  colorKey,
+  city,
+  coverImage,
+  h2,
+}: Props) {
   const baseId = useId()
   const [active, setActive] = useState(days[0]?.day ?? 0)
 
@@ -62,6 +82,19 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
       setActive(days[0].day)
     }
   }, [days, active])
+
+  const exclusiveByStop = (() => {
+    const used = new Set<string>()
+    pickExclusivePhoto(coverImage, used)
+    const map = new Map<string, string | null>()
+    for (const d of days) {
+      d.items.forEach((step, idx) => {
+        const key = String(step.id || `${d.day}-${idx}`)
+        map.set(key, pickExclusivePhoto(step.photo, used))
+      })
+    }
+    return map
+  })()
 
   const onKeyNav = (e: KeyboardEvent, index: number) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
@@ -78,19 +111,17 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
     <section className="space-y-8" aria-labelledby={`${baseId}-heading`}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600">
-            Programme
-          </p>
+          <WpEyebrow>Programme</WpEyebrow>
           <h2
             id={`${baseId}-heading`}
             className="mt-2 text-2xl font-extrabold tracking-tight text-ink sm:text-[1.75rem]"
           >
-            Jour par jour
+            {h2 || `Programme à ${cityLabel}`}
           </h2>
         </div>
         <div className="flex flex-wrap gap-2">
           {launchHref ? (
-            <a href={launchHref} className="wp-cta text-sm py-2.5">
+            <a href={launchHref} className="wp-cta-ghost text-sm py-2.5">
               Lancer le Pop
             </a>
           ) : null}
@@ -111,7 +142,7 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
         <div
           role="tablist"
           aria-label="Jours du programme"
-          className="flex gap-6 overflow-x-auto border-b border-line"
+          className="flex flex-wrap gap-x-6 gap-y-2 border-b border-line"
         >
           {days.map((d, i) => {
             const selected = d.day === active
@@ -161,6 +192,14 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
                   `Stop ${i + 1}`
                 const stopTitle = step.title || step.places?.name || 'Étape'
                 const isLast = i === d.items.length - 1
+                const travel = formatDurationMinutes(
+                  typeof step.meta?.travel_minutes === 'number'
+                    ? step.meta.travel_minutes
+                    : null,
+                )
+                const exclusive =
+                  exclusiveByStop.get(String(step.id || `${d.day}-${i}`)) ??
+                  null
                 return (
                   <li key={step.id || `${d.day}-${i}`} className="relative">
                     <div className="grid gap-5 sm:grid-cols-[3rem_minmax(0,1fr)] sm:gap-6">
@@ -177,6 +216,11 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
                       </div>
 
                       <article className="pb-10">
+                        {travel && i > 0 ? (
+                          <p className="mb-3 text-xs font-semibold text-muted">
+                            ≈ {travel} depuis le stop précédent
+                          </p>
+                        ) : null}
                         <div className="flex items-baseline justify-between gap-3">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary-600">
                             <span className="sm:hidden">{i + 1} · </span>
@@ -193,26 +237,47 @@ export function DayProgramme({ days, mapsUrl, launchHref }: Props) {
                             </a>
                           ) : null}
                         </div>
-                        <h4 className="mt-2 text-xl font-extrabold tracking-tight text-ink">
-                          {stopTitle}
-                        </h4>
-                        {step.photo ? (
-                          <div className="mt-4 overflow-hidden rounded-2xl">
-                            <PopImage
-                              src={step.photo}
-                              alt=""
-                              variant="stop"
-                              className="h-48 sm:h-56"
-                            />
+
+                        {/* Mobile: title then photo. Desktop: photo 176×128 + text */}
+                        <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
+                          <div className="order-2 w-full sm:order-1 sm:w-auto">
+                            <div className="sm:hidden">
+                              <StopVisual
+                                photo={exclusive}
+                                title={stopTitle}
+                                colorKey={colorKey}
+                                city={city}
+                                layout="stack"
+                                photoSource={step.photo_source}
+                                photoLicense={step.photo_license}
+                              />
+                            </div>
+                            <div className="hidden sm:block">
+                              <StopVisual
+                                photo={exclusive}
+                                title={stopTitle}
+                                colorKey={colorKey}
+                                city={city}
+                                layout="row"
+                                photoSource={step.photo_source}
+                                photoLicense={step.photo_license}
+                              />
+                            </div>
                           </div>
-                        ) : null}
-                        {step.note ? (
-                          <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-ink-soft whitespace-pre-line">
-                            {sanitizeUserFacingText(step.note, {
-                              multiline: true,
-                            })}
-                          </p>
-                        ) : null}
+                          <div className="order-1 min-w-0 flex-1 sm:order-2">
+                            <h4 className="text-xl font-extrabold tracking-tight text-ink">
+                              {stopTitle}
+                            </h4>
+                            {step.note ? (
+                              <p className="mt-2 text-[15px] leading-relaxed text-ink-soft whitespace-pre-line">
+                                {sanitizeUserFacingText(step.note, {
+                                  multiline: true,
+                                })}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+
                         {!isLast ? <WpRule className="mt-8 sm:hidden" /> : null}
                       </article>
                     </div>

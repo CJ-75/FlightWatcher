@@ -4,19 +4,22 @@ import dynamic from 'next/dynamic'
 import {
   buildItineraryMapsUrl,
   citySlugDisplayNameFr,
-  ITINERARY_OCCASION_LABELS,
+  idealLabelFr,
   sanitizeUserFacingText,
-  type ItineraryOccasion,
+  transportLabelFr,
   type PopIndexResult,
 } from '@waypop/shared'
 import type { PublicItinerary } from '@/lib/parcoursApi'
 import { popSeoCopy } from '@/lib/popSeoPage'
 import { PopFooter } from '@/components/pop/PopFooter'
 import { PopJsonLd } from '@/components/pop/JsonLd'
-import { PopImage } from '@/components/pop/PopImage'
+import { isPublicImageSrc, PopImage } from '@/components/pop/PopImage'
 import { ShareButton } from '@/components/pop/ShareButton'
-import { WpTag } from '@/components/ui/WpTag'
+import { KeepButton } from '@/components/pop/KeepButton'
+import { WpEyebrow } from '@/components/ui/WpEyebrow'
+import { WpPopCard } from '@/components/ui/WpPopCard'
 import { WpRule } from '@/components/ui/WpRule'
+import { WpTag } from '@/components/ui/WpTag'
 import {
   cityFallbackStyle,
   PACE_LABEL,
@@ -24,6 +27,7 @@ import {
   parseStay,
   parseTips,
 } from '@/lib/popHelpers'
+import { assertUniquePagePhotos } from '@/lib/popPhotos'
 
 const DayProgramme = dynamic(
   () =>
@@ -62,8 +66,16 @@ export function PopPageView({
 }: Props) {
   const cityLabel = citySlugDisplayNameFr(city) || city
   const seo = popSeoCopy(itin, cityLabel)
-  const h1 = sanitizeUserFacingText(seo.h1) || seo.h1
-  const title = sanitizeUserFacingText(itin.title) || itin.title
+  const h1 =
+    sanitizeUserFacingText(seo.h1) ||
+    sanitizeUserFacingText(itin.title) ||
+    seo.h1
+  const promise =
+    itin.subtitle &&
+    sanitizeUserFacingText(itin.subtitle) &&
+    sanitizeUserFacingText(itin.subtitle) !== h1
+      ? sanitizeUserFacingText(itin.subtitle)
+      : null
   const intro = itin.intro
     ? sanitizeUserFacingText(itin.intro, { multiline: true })
     : ''
@@ -86,31 +98,23 @@ export function PopPageView({
   const durationLabel = seo.durationLabel
   const paceLabel =
     itin.pace && (PACE_LABEL[String(itin.pace)] || String(itin.pace))
-  const ideal =
+  const idealRaw =
     (itin.ideal_for as string[] | undefined)?.length
       ? (itin.ideal_for as string[])
       : (itin.occasions as string[] | undefined) || []
+  /** One intention only */
+  const idealOne = idealRaw[0] ? idealLabelFr(idealRaw[0]) : null
 
   const facts: { label: string; value: string }[] = []
   if (durationLabel) facts.push({ label: 'Durée', value: durationLabel })
   if (itin.budget_estimate_eur && Number(itin.budget_estimate_eur) > 0) {
     facts.push({
-      label: 'Sur place',
-      value: `≈ ${Math.round(Number(itin.budget_estimate_eur))} €`,
+      label: 'Budget éditorial',
+      value: `≈ ${Math.round(Number(itin.budget_estimate_eur))} € / jour (estimé)`,
     })
   }
   if (paceLabel) facts.push({ label: 'Rythme', value: paceLabel })
-  if (ideal.length) {
-    facts.push({
-      label: 'Idéal',
-      value: ideal
-        .slice(0, 2)
-        .map(
-          (o) => ITINERARY_OCCASION_LABELS[o as ItineraryOccasion] || String(o),
-        )
-        .join(', '),
-    })
-  }
+  if (idealOne) facts.push({ label: 'Idéal', value: idealOne })
 
   const stay = parseStay(itin.stay)
   const tips = parseTips(itin.tips)
@@ -135,11 +139,37 @@ export function PopPageView({
   const metaBits = [
     durationLabel,
     `${items.length} stops`,
-    ...transport.slice(0, 1),
-    ...ideal
-      .slice(0, 1)
-      .map((o) => ITINERARY_OCCASION_LABELS[o as ItineraryOccasion] || o),
+    ...transport.slice(0, 1).map((t) => transportLabelFr(t)),
+    idealOne,
   ].filter(Boolean)
+
+  const dayCount = days.length || 1
+  const h2Programme =
+    dayCount === 1
+      ? `Programme d’une journée à ${cityLabel}`
+      : `Programme de ${dayCount} jours à ${cityLabel}`
+  const h2Stay = idealOne
+    ? `Où dormir à ${cityLabel} pour une ${idealOne.toLowerCase()}`
+    : `Où dormir à ${cityLabel}`
+  const h2Faq = `Questions fréquentes sur un week-end à ${cityLabel}`
+
+  const photoCheck = assertUniquePagePhotos([
+    itin.cover_image,
+    ...items.map((it) => it.photo),
+  ])
+
+  const shareUrl =
+    typeof process.env.NEXT_PUBLIC_SITE_URL === 'string'
+      ? `${process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, '')}${canonicalPath}`
+      : `https://waypop.co${canonicalPath}`
+
+  const stopPins = items.map((it) => ({
+    title: String(it.title || it.places?.name || 'Stop'),
+    lat:
+      typeof it.meta?.lat === 'number' ? (it.meta.lat as number) : undefined,
+    lng:
+      typeof it.meta?.lng === 'number' ? (it.meta.lng as number) : undefined,
+  }))
 
   return (
     <>
@@ -152,11 +182,11 @@ export function PopPageView({
         canonicalPath={canonicalPath}
       />
 
-      {/* Full-bleed hero */}
-      <header className="relative isolate min-h-[min(72vh,560px)] overflow-hidden bg-night">
-        {itin.cover_image ? (
+      {/* Mobile hero court — H1 + CTA + amorce contenu sans scroll long */}
+      <header className="relative isolate overflow-hidden bg-night">
+        {isPublicImageSrc(itin.cover_image) ? (
           <div className="absolute inset-0">
-            <PopImage src={itin.cover_image} alt="" variant="hero" fill />
+            <PopImage src={itin.cover_image!} alt="" variant="hero" fill />
           </div>
         ) : (
           <div
@@ -169,8 +199,8 @@ export function PopPageView({
         )}
         <div className="wp-mesh absolute inset-0" />
 
-        <div className="relative z-10 mx-auto flex min-h-[min(72vh,560px)] max-w-pop flex-col justify-end px-5 pb-10 pt-24 sm:pb-14 sm:pt-28">
-          <nav className="wp-reveal mb-6 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] font-medium text-white/70">
+        <div className="relative z-10 mx-auto flex max-w-pop flex-col justify-end px-5 pb-5 pt-14 sm:pb-12 sm:pt-24">
+          <nav className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-white/70 sm:mb-4 sm:text-[12px]">
             <Link
               href={`/pop/${city}`}
               className="text-white/80 no-underline hover:text-white hover:underline"
@@ -184,23 +214,25 @@ export function PopPageView({
             >
               {cityLabel}
             </Link>
+            <span aria-hidden>/</span>
+            <span className="text-white/90 line-clamp-1">{h1}</span>
           </nav>
 
-          <p className="wp-reveal text-[11px] font-semibold uppercase tracking-brand text-white/75">
+          <p className="hidden text-[11px] font-semibold uppercase tracking-brand text-white/75 sm:block">
             Waypop
             {verified ? ` · vérifié le ${verified}` : ''}
           </p>
-          <h1 className="wp-reveal-delay mt-3 max-w-3xl text-[1.85rem] font-extrabold leading-[1.12] tracking-tight text-white sm:text-4xl lg:text-[2.75rem]">
+          <h1 className="mt-1 max-w-3xl text-[1.35rem] font-extrabold leading-[1.18] tracking-tight text-white sm:mt-3 sm:text-4xl lg:text-[2.75rem]">
             {h1}
           </h1>
-          {h1 !== title ? (
-            <p className="wp-reveal-delay mt-2 max-w-2xl text-sm font-medium text-white/70">
-              {title}
+          {promise ? (
+            <p className="mt-1.5 line-clamp-2 max-w-2xl text-sm font-medium text-white/75 sm:mt-2 sm:line-clamp-none">
+              {promise}
             </p>
           ) : null}
 
           {metaBits.length > 0 ? (
-            <p className="wp-reveal-delay-2 mt-5 flex flex-wrap gap-x-3 gap-y-1 text-[13px] font-semibold text-white/80">
+            <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[12px] font-semibold text-white/80 sm:mt-4 sm:text-[13px]">
               {metaBits.map((b, i) => (
                 <span key={`${b}-${i}`} className="inline-flex items-center gap-3">
                   {i > 0 ? (
@@ -214,17 +246,35 @@ export function PopPageView({
             </p>
           ) : null}
 
-          <div className="wp-reveal-delay-2 mt-7">
+          <div className="mt-4 flex flex-wrap items-center gap-2 sm:mt-8 sm:gap-3">
+            <a
+              href={`/sejours?dest=${encodeURIComponent(city)}`}
+              className="wp-cta-ink px-4 py-2.5 text-sm sm:px-6 sm:py-3.5"
+            >
+              Ajouter au Planner
+            </a>
+            <KeepButton
+              city={city}
+              slug={String(itin.slug || slug)}
+              title={h1}
+              className="px-4 py-2.5 text-sm"
+            />
+            <a
+              href={launchHref}
+              className="wp-cta-ghost px-4 py-2.5 text-sm sm:px-6 sm:py-3.5"
+            >
+              Lancer le Pop
+            </a>
             <ShareButton title={h1} />
           </div>
         </div>
       </header>
 
       <main className="pb-28 lg:pb-16">
-        <div className="mx-auto grid max-w-pop gap-12 px-5 py-10 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-14 lg:py-14">
+        <div className="mx-auto grid max-w-pop gap-12 px-5 py-8 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-14 lg:py-14">
           <div className="min-w-0 space-y-12">
             {showPrice ? (
-              <div className="lg:hidden min-h-[21rem]">
+              <div className="lg:hidden">
                 <Suspense
                   fallback={
                     <div className="min-h-[21rem] animate-pulse rounded-2xl bg-night/90" />
@@ -234,13 +284,17 @@ export function PopPageView({
                     destCity={city}
                     cityLabel={cityLabel}
                     stopCount={items.length}
+                    mapsUrl={mapsUrl}
+                    shareUrl={shareUrl}
+                    shareTitle={h1}
+                    stops={stopPins}
                   />
                 </Suspense>
               </div>
             ) : null}
 
             {intro ? (
-              <section className="max-w-2xl">
+              <section>
                 <h2 className="sr-only">Introduction</h2>
                 <p className="text-[1.05rem] leading-[1.7] text-ink-soft whitespace-pre-line">
                   {intro}
@@ -269,17 +323,20 @@ export function PopPageView({
               days={days}
               mapsUrl={mapsUrl}
               launchHref={launchHref}
+              cityLabel={cityLabel}
+              colorKey={itin.color_key}
+              city={city}
+              coverImage={itin.cover_image}
+              h2={h2Programme}
             />
 
             {stay ? (
               <section className="space-y-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600">
-                  Hébergement
-                </p>
+                <WpEyebrow>Hébergement</WpEyebrow>
                 <h2 className="text-2xl font-extrabold tracking-tight text-ink">
-                  Où dormir
+                  {h2Stay}
                 </h2>
-                <div className="max-w-2xl border-l-2 border-primary-500/80 pl-5">
+                <div className="border-l-2 border-primary-500/80 pl-5">
                   {stay.area ? (
                     <p className="text-lg font-extrabold text-ink">{stay.area}</p>
                   ) : null}
@@ -299,13 +356,11 @@ export function PopPageView({
 
             {tips.length > 0 ? (
               <section className="space-y-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600">
-                  Conseils
-                </p>
+                <WpEyebrow>Conseils</WpEyebrow>
                 <h2 className="text-2xl font-extrabold tracking-tight text-ink">
                   Bon à savoir
                 </h2>
-                <ul className="max-w-2xl space-y-3">
+                <ul className="space-y-3">
                   {tips.map((t, i) => (
                     <li
                       key={i}
@@ -324,13 +379,11 @@ export function PopPageView({
 
             {faq.length > 0 ? (
               <section className="space-y-4">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600">
-                  Questions
-                </p>
+                <WpEyebrow>Questions</WpEyebrow>
                 <h2 className="text-2xl font-extrabold tracking-tight text-ink">
-                  FAQ
+                  {h2Faq}
                 </h2>
-                <div className="max-w-2xl divide-y divide-line border-y border-line">
+                <div className="divide-y divide-line border-y border-line">
                   {faq.map((item, i) => (
                     <details key={i} className="group py-4">
                       <summary className="cursor-pointer list-none font-bold text-ink marker:content-none [&::-webkit-details-marker]:hidden">
@@ -353,49 +406,39 @@ export function PopPageView({
               </section>
             ) : null}
 
-            {related.length > 0 ? (
-              <section className="space-y-5">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary-600">
-                  Continuer
-                </p>
-                <h2 className="text-2xl font-extrabold tracking-tight text-ink">
-                  D’autres Pops à {cityLabel}
-                </h2>
+            <section className="space-y-5">
+              <WpEyebrow>Continuer</WpEyebrow>
+              <h2 className="text-2xl font-extrabold tracking-tight text-ink">
+                D’autres Pops à {cityLabel}
+              </h2>
+              {related.length > 0 ? (
                 <ul className="grid gap-6 sm:grid-cols-2">
                   {related.map((r) => (
                     <li key={r.id}>
-                      <Link
+                      <WpPopCard
                         href={`/pop/${city}/${encodeURIComponent(r.slug || r.id)}`}
-                        className="group block no-underline"
-                      >
-                        {r.cover_image ? (
-                          <div className="overflow-hidden rounded-2xl">
-                            <PopImage
-                              src={r.cover_image}
-                              alt=""
-                              variant="card"
-                              className="transition-transform duration-500 group-hover:scale-[1.03]"
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex h-36 items-center justify-center rounded-2xl bg-night text-sm font-bold text-night-fg">
-                            {cityLabel}
-                          </div>
-                        )}
-                        <p className="mt-3 text-base font-extrabold tracking-tight text-ink group-hover:underline">
-                          {sanitizeUserFacingText(r.title) || r.title}
-                        </p>
-                        {r.subtitle ? (
-                          <p className="mt-1 line-clamp-2 text-sm text-muted">
-                            {sanitizeUserFacingText(r.subtitle)}
-                          </p>
-                        ) : null}
-                      </Link>
+                        title={sanitizeUserFacingText(r.title) || r.title}
+                        subtitle={
+                          r.subtitle
+                            ? sanitizeUserFacingText(r.subtitle)
+                            : null
+                        }
+                        image={r.cover_image}
+                        fallbackLabel={cityLabel}
+                      />
                     </li>
                   ))}
                 </ul>
-              </section>
-            ) : null}
+              ) : (
+                <p className="text-sm text-muted">
+                  D’autres Pops arrivent bientôt — explore{' '}
+                  <Link href={`/pop/${city}`} className="font-bold">
+                    {cityLabel}
+                  </Link>
+                  .
+                </p>
+              )}
+            </section>
           </div>
 
           <aside className="hidden lg:block">
@@ -410,27 +453,13 @@ export function PopPageView({
                     destCity={city}
                     cityLabel={cityLabel}
                     stopCount={items.length}
+                    mapsUrl={mapsUrl}
+                    shareUrl={shareUrl}
+                    shareTitle={h1}
+                    stops={stopPins}
                   />
                 </Suspense>
               ) : null}
-              <div className="rounded-2xl border border-line bg-surface px-5 py-4">
-                <WpTag>Sur place</WpTag>
-                <p className="mt-2 text-sm font-bold text-ink">
-                  {items.length} stops · {days.length} jour
-                  {days.length > 1 ? 's' : ''}
-                </p>
-                {mapsUrl ? (
-                  <a
-                    href={mapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-block text-sm font-bold no-underline hover:underline"
-                  >
-                    Ouvrir Maps →
-                  </a>
-                ) : null}
-              </div>
-              <WhatsAppCard cityLabel={cityLabel} />
             </div>
           </aside>
         </div>
@@ -454,28 +483,11 @@ export function PopPageView({
       {!index.indexable ? (
         <p className="sr-only">noindex: {index.reasons.join(', ')}</p>
       ) : null}
+      {!photoCheck.ok ? (
+        <p className="sr-only">
+          photo-dupes: {photoCheck.duplicates.join(', ')}
+        </p>
+      ) : null}
     </>
-  )
-}
-
-function WhatsAppCard({ cityLabel }: { cityLabel: string }) {
-  const href =
-    process.env.NEXT_PUBLIC_WHATSAPP_URL ||
-    `https://wa.me/?text=${encodeURIComponent(`Pop ${cityLabel} — waypop.co`)}`
-  return (
-    <div className="rounded-2xl bg-sand/80 px-5 py-4">
-      <p className="text-sm font-extrabold text-ink">Une question ?</p>
-      <p className="mt-1 text-xs leading-relaxed text-muted">
-        Écris-nous sur WhatsApp — réponse rapide.
-      </p>
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-3 inline-block text-sm font-bold no-underline hover:underline"
-      >
-        WhatsApp →
-      </a>
-    </div>
   )
 }

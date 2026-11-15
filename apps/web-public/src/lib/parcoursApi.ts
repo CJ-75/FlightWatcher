@@ -39,6 +39,10 @@ export type PublicItinerary = {
     title?: string | null
     note?: string | null
     photo?: string | null
+    place_id?: string | null
+    photo_source?: string | null
+    photo_license?: string | null
+    photo_author?: string | null
     day_offset?: number | null
     moment?: string | null
     kind?: string | null
@@ -47,6 +51,7 @@ export type PublicItinerary = {
       maps_url?: string
       lat?: number
       lng?: number
+      travel_minutes?: number
       [key: string]: unknown
     } | null
     places?: {

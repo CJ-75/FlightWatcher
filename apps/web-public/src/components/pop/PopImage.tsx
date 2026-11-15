@@ -34,6 +34,19 @@ const VARIANTS = {
   },
 } as const
 
+/** Reject file://, blob:, and other non-web URLs (mobile picker leftovers). */
+export function isPublicImageSrc(src: string | null | undefined): boolean {
+  const s = String(src || '').trim()
+  if (!s) return false
+  if (s.startsWith('/')) return true
+  try {
+    const u = new URL(s)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 export function PopImage({
   src,
   alt,
@@ -42,6 +55,8 @@ export function PopImage({
   sizes,
   fill,
 }: Props) {
+  if (!isPublicImageSrc(src)) return null
+
   const v = VARIANTS[variant]
   const useFill = fill || variant === 'hero'
   if (useFill) {
