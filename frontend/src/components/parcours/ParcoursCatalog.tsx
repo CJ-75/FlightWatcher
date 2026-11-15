@@ -23,6 +23,7 @@ import { CountryFlag } from '../CountryFlag'
 import { FwKicker } from '../ui/FwKicker'
 import { ItineraryCard } from './ItineraryCard'
 import { CityBanner } from '../onboarding/CityBanner'
+import { AppPromoCard } from '../onboarding/AppPromoCard'
 
 const CITY_CHOICES = PARCOURS_CITY_OPTIONS_FR
 
@@ -170,6 +171,8 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
           </p>
         </div>
       ) : null}
+
+      <AppPromoCard variant="onboarding" surface="parcours_catalog" />
 
       <div
         className={`flex flex-wrap items-center gap-3 ${

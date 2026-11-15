@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useI18n } from '../contexts/I18nContext'
 import { useAuthSheet } from './onboarding/AuthSheetHost'
+import { AppPromoCard } from './onboarding/AppPromoCard'
 
 type Props = {
   onStartSignIn?: () => void
@@ -99,6 +100,10 @@ export function AccountGuestLanding({
             </li>
           ))}
         </ol>
+
+        <div className="mt-6 max-w-sm mx-auto text-left">
+          <AppPromoCard variant="onboarding" surface="account_guest" />
+        </div>
 
         <button
           type="button"

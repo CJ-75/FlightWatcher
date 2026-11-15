@@ -36,6 +36,7 @@ import { loadAirportsOnce } from '../hooks/useAirports'
 import { useShellReady } from '../hooks/useShellReady'
 import { getCurrentUser, getSupabaseClient, onAuthStateChange } from '../lib/supabase'
 import { useAuthSheet } from './onboarding/AuthSheetHost'
+import { AppPromoCard } from './onboarding/AppPromoCard'
 import { useI18n } from '../contexts/I18nContext'
 import { DestinationCard } from './DestinationCard'
 import { PlannerScanPanel } from './PlannerScanPanel'
@@ -320,6 +321,10 @@ function PlannerGuestLanding() {
               </motion.li>
             ))}
           </ol>
+
+          <div className="mb-5">
+            <AppPromoCard variant="onboarding" surface="planner_guest" />
+          </div>
 
           <motion.div
             initial={{ opacity: 0, y: 10 }}
