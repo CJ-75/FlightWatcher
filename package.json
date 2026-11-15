@@ -7,12 +7,14 @@
   "workspaces": [
     "packages/*",
     "frontend",
-    "mobile"
+    "mobile",
+    "apps/*"
   ],
   "scripts": {
     "typecheck": "npm run typecheck -w @waypop/shared && npm run typecheck -w waypop-frontend",
     "typecheck:all": "npm run typecheck && npm run typecheck -w waypop-mobile --if-present",
     "dev:web": "npm run dev -w waypop-frontend",
+    "dev:public": "npm run dev -w waypop-web-public",
     "dev:mobile": "npm run start -w waypop-mobile --if-present"
   },
   "overrides": {

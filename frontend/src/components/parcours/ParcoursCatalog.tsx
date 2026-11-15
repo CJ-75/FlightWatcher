@@ -135,7 +135,15 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
         meta: { id: it.id, slug: it.slug, city: it.city_slug },
       })
       .catch(() => {})
-    navigate(`/parcours/${encodeURIComponent(it.slug || it.id)}`)
+    void import('../../lib/popLinks').then(({ publicPopPath }) => {
+      navigate(
+        publicPopPath({
+          citySlug: it.city_slug,
+          slug: it.slug,
+          id: it.id,
+        }),
+      )
+    })
   }
 
   const pickOccasion = (o: ItineraryOccasion | null) => {

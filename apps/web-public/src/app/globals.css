@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --fw-accent: #ff6b35;
+  --fw-accent-soft: #ffe7dc;
+  --fw-bg-from: #fff9f5;
+  --fw-ink: #1d1b19;
+  --fw-ink-muted: #7a6f68;
+  --fw-line: #f0e0d4;
+  --fw-primary: #1d1b19;
+  --fw-primary-fg: #f5efea;
+}
+
+@layer base {
+  html {
+    @apply bg-canvas;
+  }
+  body {
+    @apply bg-canvas text-ink antialiased font-sans;
+  }
+  a {
+    @apply text-[#C2410C] underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600;
+  }
+}
+
+@layer components {
+  /* Mirrored from SPA frontend/src/index.css .app-btn-primary */
+  .app-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-gradient-to-br from-primary-500 to-primary-600
+      text-white font-bold px-5 py-3 rounded-2xl shadow-glow-orange
+      hover:scale-[1.02] active:scale-[0.98] transition-transform disabled:opacity-60;
+  }
+  /* Dark pill CTA (maquette — ink on cream text) */
+  .app-btn-ink {
+    @apply inline-flex items-center justify-center gap-2 bg-ink text-[color:var(--fw-primary-fg)]
+      font-bold px-5 py-3 rounded-pill
+      hover:opacity-90 active:scale-[0.98] transition-transform disabled:opacity-60;
+  }
+}

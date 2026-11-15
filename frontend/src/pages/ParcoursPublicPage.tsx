@@ -28,6 +28,7 @@ import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChr
 import { ItineraryMarkerTiles } from '../components/parcours/ItineraryMarkerTiles'
 import { ItineraryStepsTimeline } from '../components/parcours/ItineraryStepsTimeline'
 import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
+import { publicPopPath } from '../lib/popLinks'
 
 const CITY_LS = 'fw_parcours_city'
 
@@ -200,7 +201,11 @@ export default function ParcoursPublicPage() {
     itinerary: itin,
     userCitySlug: userCity,
   })
-  const shareUrl = `${window.location.origin}/parcours/${itin.slug || itin.id}`
+  const shareUrl = `${window.location.origin}${publicPopPath({
+    citySlug: itin.city_slug,
+    slug: itin.slug,
+    id: itin.id,
+  })}`
 
   const doLike = async () => {
     const next = !liked

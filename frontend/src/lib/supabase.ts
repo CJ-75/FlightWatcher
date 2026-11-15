@@ -248,6 +248,12 @@ export const signOut = async (): Promise<{ error: Error | null }> => {
   }
 
   const { error } = await client.auth.signOut({ scope: 'local' })
+  try {
+    const { setSignedInCookie } = await import('./signedInCookie')
+    setSignedInCookie(false)
+  } catch {
+    /* ignore */
+  }
   return { error }
 }
 
@@ -264,6 +270,11 @@ export const onAuthStateChange = (
   getSupabaseClient().then(client => {
     if (client) {
       const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+        void import('./signedInCookie')
+          .then(({ setSignedInCookie }) => {
+            setSignedInCookie(Boolean(session?.user))
+          })
+          .catch(() => {})
         callback(event, session)
       })
       unsubscribe = () => subscription.unsubscribe()

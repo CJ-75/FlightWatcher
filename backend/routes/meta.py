@@ -155,7 +155,23 @@ def read_root():
 
 @router.get("/api/health")
 def health_check():
-    return {"status": "ok", "service": "ryanair-scanner"}
+    """Liveness — no external deps (Render health check / CDN)."""
+    return {"status": "ok", "service": "waypop-api"}
+
+
+@router.get("/api/health/db")
+def health_db():
+    """Readiness — one cheap Supabase round-trip."""
+    try:
+        from supabase_client import get_supabase
+
+        sb = get_supabase()
+        if not sb:
+            return {"status": "degraded", "db": False, "error": "no_client"}
+        sb.table("itineraries").select("id").limit(1).execute()
+        return {"status": "ok", "db": True}
+    except Exception as e:
+        return {"status": "degraded", "db": False, "error": str(e)[:200]}
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -177,6 +193,10 @@ def get_config():
         "alerts_ui_enabled": _env_bool("ALERTS_UI_ENABLED", False),
         # Path skin for trip detail (Aperçu · Programme · Carnet)
         "trip_detail_v2_enabled": _env_bool("TRIP_DETAIL_V2", False),
+        # Public Pop SEO pages (Next apps/web-public) — off = SPA /parcours
+        "pop_page_v2_enabled": _env_bool("POP_PAGE_V2", False),
+        # Marketing landing on Next — off = / → /sejours (SPA)
+        "landing_v2_enabled": _env_bool("LANDING_V2", False),
     }
     try:
         from deals.liteapi_config import deals_config_public_dict

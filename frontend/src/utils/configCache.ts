@@ -11,6 +11,12 @@ export function getAppConfig(): Promise<Record<string, unknown> | null> {
         : null
     configPromise = fetch('/api/config', ctrl ? { signal: ctrl.signal } : undefined)
       .then((r) => (r.ok ? r.json() : null))
+      .then((cfg) => {
+        void import('../lib/configFlags').then(({ hydrateConfigFlags }) => {
+          hydrateConfigFlags(cfg)
+        })
+        return cfg
+      })
       .catch(() => null)
       .finally(() => {
         if (timer != null) window.clearTimeout(timer)
