@@ -34,7 +34,10 @@ function formatEuro(n: number): string {
   }).format(n)
 }
 
-function departureCities(): CityOpt[] {
+function departureCities(excludeCity?: string): CityOpt[] {
+  const exclude = String(excludeCity || '')
+    .trim()
+    .toLowerCase()
   const byCity = new Map<string, string[]>()
   for (const a of seedPopularAirports()) {
     const city = String(a.city || a.name || a.code).trim()
@@ -44,6 +47,14 @@ function departureCities(): CityOpt[] {
     byCity.set(city, list)
   }
   return [...byCity.entries()]
+    .filter(([label]) => {
+      if (!exclude) return true
+      const l = label.toLowerCase()
+      if (l === exclude) return false
+      // slug vs label (paris / Paris)
+      if (l.replace(/\s+/g, '-') === exclude) return false
+      return true
+    })
     .map(([label, codes]) => ({ label, codes: codes.join(',') }))
     .sort((a, b) => a.label.localeCompare(b.label, 'fr'))
 }
@@ -65,6 +76,8 @@ type Props = {
   className?: string
   shareUrl?: string
   shareTitle?: string
+  /** WhatsApp group row — false on desktop aside (rendered below map). */
+  showGroupShare?: boolean
 }
 
 export function PriceIsland({
@@ -75,8 +88,12 @@ export function PriceIsland({
   className = '',
   shareUrl,
   shareTitle,
+  showGroupShare = true,
 }: Props) {
-  const cities = useMemo(() => departureCities(), [])
+  const cities = useMemo(
+    () => departureCities(destCity || cityLabel),
+    [destCity, cityLabel],
+  )
   const [origin, setOrigin] = useState(DEFAULT_ORIGIN)
   const [data, setData] = useState<PricePayload | null>(null)
   const [loading, setLoading] = useState(true)
@@ -85,12 +102,21 @@ export function PriceIsland({
     try {
       const saved = localStorage.getItem(ORIGIN_LS)
       if (saved && /^[A-Z]{3}(,[A-Z]{3})*$/i.test(saved)) {
-        setOrigin(saved.toUpperCase())
+        const next = saved.toUpperCase()
+        const allowed = departureCities(destCity || cityLabel)
+        const ok = allowed.some(
+          (c) =>
+            c.codes === next ||
+            c.codes.split(',').includes(next.split(',')[0] || ''),
+        )
+        setOrigin(ok ? next : DEFAULT_ORIGIN)
+        return
       }
     } catch {
       /* ignore */
     }
-  }, [])
+    setOrigin(DEFAULT_ORIGIN)
+  }, [destCity, cityLabel])
 
   useEffect(() => {
     let cancelled = false
@@ -287,11 +313,6 @@ export function PriceIsland({
                 →
               </span>
             </a>
-            <p className="text-center text-[11px] font-semibold text-ink-muted">
-              {hasPrice
-                ? 'Vol + hôtel, tu valides ensuite'
-                : 'On te prévient quand le prix tombe'}
-            </p>
             <a
               href={alertHref}
               className="inline-flex w-full items-center justify-center rounded-2xl border border-ink/15 bg-white px-5 py-3 text-sm font-bold text-ink no-underline transition-colors hover:border-ink/30 hover:bg-accent-soft/50"
@@ -302,32 +323,40 @@ export function PriceIsland({
             </a>
           </div>
 
-          <div className="mt-5 border-t border-[#E8C4B4] pt-4">
-            <a
-              href={waHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex w-full items-center gap-3 rounded-2xl bg-[#E8F8EE] px-4 py-3.5 no-underline transition-colors hover:bg-[#DFF5E8]"
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#25D366] text-white">
-                <WhatsAppIcon />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-extrabold text-ink">
-                  Envoie au groupe
-                </span>
-                <span className="block text-xs leading-snug text-ink-muted">
-                  Le même programme pour tout le monde
-                </span>
-              </span>
-              <span className="shrink-0 text-sm font-bold text-ink" aria-hidden>
-                →
-              </span>
-            </a>
-          </div>
+          {showGroupShare ? (
+            <div className="mt-5 border-t border-[#E8C4B4] pt-4">
+              <GroupShareLink href={waHref} />
+            </div>
+          ) : null}
         </div>
       </aside>
     </div>
+  )
+}
+
+export function GroupShareLink({ href }: { href: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex w-full items-center gap-3 rounded-2xl bg-[#E8F8EE] px-4 py-3.5 no-underline transition-colors hover:bg-[#DFF5E8]"
+    >
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#25D366] text-white">
+        <WhatsAppIcon />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-extrabold text-ink">
+          Envoie au groupe
+        </span>
+        <span className="block text-xs leading-snug text-ink-muted">
+          Le même programme pour tout le monde
+        </span>
+      </span>
+      <span className="shrink-0 text-sm font-bold text-ink" aria-hidden>
+        →
+      </span>
+    </a>
   )
 }
 

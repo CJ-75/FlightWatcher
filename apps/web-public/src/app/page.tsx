@@ -59,8 +59,14 @@ export default async function LandingPage() {
 
   const displayCities = (
     sitemapCities.length
-      ? sitemapCities
-      : [...new Set(all.map((p) => String(p.city_slug || '').toLowerCase()).filter(Boolean))]
+      ? sitemapCities.filter((c) => (popCountByCity[c] || 0) > 0)
+      : [
+          ...new Set(
+            all
+              .map((p) => String(p.city_slug || '').toLowerCase())
+              .filter(Boolean),
+          ),
+        ]
   ).slice(0, 8)
 
   const jsonLd = {

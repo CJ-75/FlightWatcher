@@ -52,12 +52,27 @@ export function polishPopTitle(title: string): string {
   return t
 }
 
+/** Titles that must never appear on public landing / related rails. */
+export function isPlaceholderPopTitle(title: string): boolean {
+  const t = String(title || '')
+  if (/\bTODO\b/.test(t)) return true
+  if (/\bundefined\b/i.test(t)) return true
+  if (/\bLorem\b/i.test(t)) return true
+  if (/\bseuil\b/i.test(t)) return true
+  if (/\bfixture\b/i.test(t)) return true
+  if (/\bvolontairement\b/i.test(t)) return true
+  if (/\bstub\b/i.test(t)) return true
+  if (/\bSEO\b/.test(t)) return true
+  return false
+}
+
 export function filterLandingPops(list: PublicItinerary[]): PublicItinerary[] {
   return list.filter((p) => {
     if (p.status && p.status !== 'published') return false
     if (p.is_demo) return false
     const title = String(p.title || '')
     if (isPastDatedPopTitle(title)) return false
+    if (isPlaceholderPopTitle(title)) return false
     return true
   })
 }

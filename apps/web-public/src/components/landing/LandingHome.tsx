@@ -17,7 +17,11 @@ import { LandingStoreCtas } from '@/components/landing/LandingStoreCtas'
 import { LivePriceBadge } from '@/components/landing/LivePriceBadge'
 import { isPublicImageSrc, PopImage } from '@/components/pop/PopImage'
 import { polishPopTitle } from '@/lib/landingHelpers'
-import { photoIdentity } from '@/lib/popPhotos'
+import {
+  assertUniquePagePhotos,
+  pickExclusivePhoto,
+} from '@/lib/popPhotos'
+import { cityFallbackStyle } from '@/lib/popHelpers'
 
 const CITY_MOOD: Record<string, string> = {
   paris: 'Lumières & cafés',
@@ -63,6 +67,7 @@ const DEMO_POPS: PublicItinerary[] = [
     occasions: ['amis'],
     ideal_for: ['amis', 'premiere_fois'],
     budget_estimate_eur: 0,
+    color_key: 'paris',
     is_demo: true,
   },
   {
@@ -74,6 +79,7 @@ const DEMO_POPS: PublicItinerary[] = [
     occasions: ['romantique', 'soleil'],
     ideal_for: ['romantique', 'soleil'],
     budget_estimate_eur: 80,
+    color_key: 'barcelone',
     is_demo: true,
   },
   {
@@ -85,6 +91,7 @@ const DEMO_POPS: PublicItinerary[] = [
     occasions: ['amis'],
     ideal_for: ['premiere_fois', 'amis'],
     budget_estimate_eur: 60,
+    color_key: 'rome',
     is_demo: true,
   },
   {
@@ -96,6 +103,7 @@ const DEMO_POPS: PublicItinerary[] = [
     occasions: ['petit_budget'],
     ideal_for: ['petit_budget', 'premiere_fois'],
     budget_estimate_eur: 40,
+    color_key: 'lisbonne',
     is_demo: true,
   },
   {
@@ -107,6 +115,7 @@ const DEMO_POPS: PublicItinerary[] = [
     occasions: ['amis', 'soleil'],
     ideal_for: ['amis'],
     budget_estimate_eur: 70,
+    color_key: 'amsterdam',
     is_demo: true,
   },
   {
@@ -118,40 +127,15 @@ const DEMO_POPS: PublicItinerary[] = [
     occasions: ['nuit', 'amis'],
     ideal_for: ['nuit', 'amis'],
     budget_estimate_eur: 55,
+    color_key: 'berlin',
     is_demo: true,
   },
 ]
 
-function padCitySlugs(real: string[], min = 6): string[] {
-  const out = [...new Set(real.map((s) => s.toLowerCase()).filter(Boolean))]
-  for (const s of DEMO_CITY_SLUGS) {
-    if (out.length >= min) break
-    if (!out.includes(s)) out.push(s)
-  }
-  return out.slice(0, 6)
-}
-
-function padPops(
-  real: PublicItinerary[],
-  min = 6,
-  demos: PublicItinerary[] = DEMO_POPS,
-): PublicItinerary[] {
-  if (real.length >= min) return real.slice(0, min)
-  const out = [...real]
-  const seen = new Set(out.map((p) => p.id))
-  for (const demo of demos) {
-    if (out.length >= min) break
-    if (seen.has(demo.id)) continue
-    out.push(demo)
-    seen.add(demo.id)
-  }
-  return out
-}
-
 type CityCard = {
   slug: string
   label: string
-  photo: string
+  photo: string | null
   mood: string
   popCount: number
 }
@@ -167,46 +151,92 @@ export function LandingHome({
   openCities = [],
   popCountByCity = {},
 }: Props) {
-  const displayPops = padPops(pops)
+  /** Prod: only real published data. Demo fill only when API empty. */
+  const useDemo = openCities.length === 0 && pops.length === 0
+  /** Demo pops: no cover → color_key (never reuse city hero photos). */
+  const displayPops = useDemo ? DEMO_POPS : pops.slice(0, 6)
 
-  const cityCards: CityCard[] = padCitySlugs(openCities).map((slug) => ({
-    slug,
-    label: citySlugDisplayNameFr(slug) || slug,
-    photo: cityImageUrl(slug),
-    mood: CITY_MOOD[slug] || 'Week-ends déjà pensés',
-    popCount: popCountByCity[slug] || DEMO_POP_COUNT[slug] || 2,
-  }))
+  const citySlugs = (
+    useDemo
+      ? [...DEMO_CITY_SLUGS]
+      : openCities.filter((s) => (popCountByCity[s] || 0) > 0)
+  ).slice(0, 8)
 
   const usedPhotos = new Set<string>()
-  const takePhoto = (src: string | null | undefined, fallback: string) => {
-    const cand = src && isPublicImageSrc(src) ? src : fallback
-    const id = photoIdentity(cand)
-    if (id && usedPhotos.has(id)) return fallback
-    if (id) usedPhotos.add(id)
-    return cand
-  }
+  const claim = (src: string | null | undefined) =>
+    pickExclusivePhoto(
+      src && isPublicImageSrc(src) ? src : null,
+      usedPhotos,
+    )
 
-  const parisHero = cityImageUrl('paris')
-  const barcelonaHero = cityImageUrl('barcelone')
-  const romeHero = cityImageUrl('rome')
+  const cityCards: CityCard[] = citySlugs.map((slug) => {
+    const fromData = popCountByCity[slug] || 0
+    const fromList = displayPops.filter(
+      (p) => String(p.city_slug || '').toLowerCase() === slug,
+    ).length
+    const popCount = useDemo
+      ? fromList || DEMO_POP_COUNT[slug] || 0
+      : Math.max(fromData, fromList)
+    return {
+      slug,
+      label: citySlugDisplayNameFr(slug) || slug,
+      photo: claim(cityImageUrl(slug)),
+      mood: CITY_MOOD[slug] || 'Week-ends déjà pensés',
+      popCount,
+    }
+  })
+
+  const phonePhoto = claim(
+    'https://images.unsplash.com/photo-1523906834658-6e24ef2386f9?auto=format&fit=crop&w=800&q=80',
+  )
 
   const dreamScenes = [
     {
-      photo: takePhoto(parisHero, parisHero),
+      photo: claim(
+        'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?auto=format&fit=crop&w=1200&q=80',
+      ),
+      colorKey: 'paris',
       title: 'Vendredi 18h',
       line: 'Le séjour est booké. Le groupe est chaud. Toi, tu souris déjà.',
     },
     {
-      photo: takePhoto(barcelonaHero, barcelonaHero),
+      photo: claim(
+        'https://images.unsplash.com/photo-1539037116277-4db20889f2d4?auto=format&fit=crop&w=1200&q=80',
+      ),
+      colorKey: 'barcelone',
       title: 'Samedi soir',
       line: 'Une terrasse, une ville qui brille, zéro « on fait quoi ? ».',
     },
     {
-      photo: takePhoto(romeHero, romeHero),
+      photo: claim(
+        'https://images.unsplash.com/photo-1552832230-c0197dd311b5?auto=format&fit=crop&w=1200&q=80',
+      ),
+      colorKey: 'rome',
       title: 'Dimanche midi',
       line: 'Brunch lent, rues calmes. Le Pop a tout prévu.',
     },
   ]
+
+  const alertesPhoto = claim(
+    'https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=1200&q=80',
+  )
+
+  const popCovers = displayPops.map((p) => ({
+    id: p.id,
+    photo: claim(p.cover_image),
+  }))
+
+  const pagePhotoUrls = [
+    ...cityCards.map((c) => c.photo),
+    phonePhoto,
+    ...dreamScenes.map((s) => s.photo),
+    alertesPhoto,
+    ...popCovers.map((p) => p.photo),
+  ]
+  const landingPhotoCheck = assertUniquePagePhotos(pagePhotoUrls)
+  const popCoverById = Object.fromEntries(
+    popCovers.map((p) => [p.id, p.photo]),
+  ) as Record<string, string | null>
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-canvas text-ink">
@@ -257,7 +287,7 @@ export function LandingHome({
             <p className="mt-4 text-lg font-bold text-accent sm:text-xl">
               Ce week-end, tu es ailleurs
             </p>
-            <h1 className="mt-2 text-[2.2rem] font-extrabold leading-[1.1] tracking-tight text-ink sm:text-4xl lg:text-[2.85rem]">
+            <h1 className="mt-2 text-[2.2rem] font-extrabold leading-[1.15] tracking-tight text-ink sm:text-4xl sm:leading-[1.12] lg:text-[2.85rem] lg:leading-[1.12]">
               Week-ends pas chers entre amis, déjà organisés
             </h1>
             <p className="mt-4 max-w-md text-base leading-relaxed text-ink-muted">
@@ -278,7 +308,7 @@ export function LandingHome({
               aria-hidden
             />
             <div className="wp-float">
-              <PhoneMock photo={takePhoto(parisHero, parisHero)} />
+              <PhoneMock photo={phonePhoto} colorKey="paris" />
             </div>
             <p className="relative z-10 mt-3 text-center text-[11px] font-semibold text-ink-muted">
               Aperçu de l’app
@@ -334,7 +364,7 @@ export function LandingHome({
                   {step.n}
                 </span>
                 <p className="mt-4 text-lg font-extrabold text-ink">{step.t}</p>
-                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                <p className="mt-2 text-sm leading-relaxed text-[#5C534E]">
                   {step.d}
                 </p>
               </li>
@@ -376,13 +406,20 @@ export function LandingHome({
                     className="group relative block overflow-hidden rounded-[1.75rem] shadow-lift no-underline"
                   >
                     <div className="relative aspect-[5/4] overflow-hidden">
-                      <Image
-                        src={takePhoto(d.photo, d.photo)}
-                        alt={d.label}
-                        fill
-                        sizes="(max-width: 768px) 100vw, 33vw"
-                        className="object-cover transition-transform duration-700 group-hover:scale-[1.05]"
-                      />
+                      {d.photo ? (
+                        <Image
+                          src={d.photo}
+                          alt={d.label}
+                          fill
+                          sizes="(max-width: 768px) 100vw, 33vw"
+                          className="object-cover transition-transform duration-700 group-hover:scale-[1.05]"
+                        />
+                      ) : (
+                        <div
+                          className="absolute inset-0"
+                          style={cityFallbackStyle(d.slug)}
+                        />
+                      )}
                       <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/25 to-transparent" />
                       <LivePriceBadge
                         destCity={d.slug}
@@ -442,7 +479,11 @@ export function LandingHome({
             <ul className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {displayPops.map((it) => (
                 <li key={it.id} className="h-full">
-                  <PopCard it={it} takePhoto={takePhoto} dense />
+                  <PopCard
+                    it={it}
+                    cover={popCoverById[it.id] ?? null}
+                    dense
+                  />
                 </li>
               ))}
             </ul>
@@ -455,13 +496,20 @@ export function LandingHome({
         <div className="relative z-10 mx-auto max-w-pop px-5">
           <div className="grid items-center gap-10 overflow-hidden rounded-[2rem] bg-ink lg:grid-cols-2 lg:gap-0">
             <div className="relative aspect-[5/4] lg:aspect-auto lg:min-h-[22rem]">
-              <Image
-                src={takePhoto(barcelonaHero, barcelonaHero)}
-                alt=""
-                fill
-                sizes="(max-width: 1024px) 100vw, 50vw"
-                className="object-cover"
-              />
+              {alertesPhoto ? (
+                <Image
+                  src={alertesPhoto}
+                  alt=""
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  className="object-cover"
+                />
+              ) : (
+                <div
+                  className="absolute inset-0"
+                  style={cityFallbackStyle('barcelone')}
+                />
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/20 to-transparent lg:bg-gradient-to-r lg:from-transparent lg:via-ink/40 lg:to-ink" />
             </div>
             <div className="relative px-6 pb-10 pt-2 sm:px-10 sm:pb-12 lg:py-14 lg:pl-4 lg:pr-12">
@@ -536,7 +584,7 @@ export function LandingHome({
                   {s.icon}
                 </span>
                 <p className="mt-4 text-lg font-extrabold text-ink">{s.title}</p>
-                <p className="mt-2 text-sm leading-relaxed text-ink-muted">
+                <p className="mt-2 text-sm leading-relaxed text-[#5C534E]">
                   {s.d}
                 </p>
               </li>
@@ -561,13 +609,20 @@ export function LandingHome({
                 className="group relative overflow-hidden rounded-[1.75rem] shadow-lift"
               >
                 <div className="relative aspect-[3/4] sm:aspect-[4/5]">
-                  <Image
-                    src={scene.photo}
-                    alt=""
-                    fill
-                    sizes="(max-width: 1024px) 100vw, 33vw"
-                    className="object-cover transition-transform duration-700 group-hover:scale-[1.05]"
-                  />
+                  {scene.photo ? (
+                    <Image
+                      src={scene.photo}
+                      alt=""
+                      fill
+                      sizes="(max-width: 1024px) 100vw, 33vw"
+                      className="object-cover transition-transform duration-700 group-hover:scale-[1.05]"
+                    />
+                  ) : (
+                    <div
+                      className="absolute inset-0"
+                      style={cityFallbackStyle(scene.colorKey)}
+                    />
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-ink/80 via-ink/25 to-transparent" />
                   <div className="absolute inset-x-0 bottom-0 p-6">
                     <p className="text-xs font-bold uppercase tracking-wide text-accent-soft">
@@ -664,6 +719,11 @@ export function LandingHome({
           © {new Date().getFullYear()} Waypop
         </div>
       </footer>
+      {!landingPhotoCheck.ok ? (
+        <p className="sr-only">
+          landing-photo-dupes: {landingPhotoCheck.duplicates.join(', ')}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -697,15 +757,14 @@ function popCardTags(it: PublicItinerary): { key: string; label: string; emoji?:
 
 function PopCard({
   it,
-  takePhoto,
+  cover,
   dense = false,
 }: {
   it: PublicItinerary
-  takePhoto: (src: string | null | undefined, fallback: string) => string
+  cover: string | null
   dense?: boolean
 }) {
   const city = String(it.city_slug || 'paris')
-  const cover = takePhoto(it.cover_image, cityImageUrl(city))
   const title = polishPopTitle(sanitizeUserFacingText(it.title) || it.title)
   const tags = popCardTags(it)
   const href = it.is_demo
@@ -722,7 +781,7 @@ function PopCard({
           dense ? 'aspect-[4/3]' : 'aspect-[5/4]'
         }`}
       >
-        {isPublicImageSrc(cover) ? (
+        {cover && isPublicImageSrc(cover) ? (
           <PopImage
             src={cover}
             alt=""
@@ -731,12 +790,11 @@ function PopCard({
             className="transition-transform duration-500 group-hover:scale-[1.04]"
           />
         ) : (
-          <Image
-            src={cityImageUrl(city)}
-            alt=""
-            fill
-            className="object-cover"
-            sizes="33vw"
+          <div
+            className="absolute inset-0"
+            style={cityFallbackStyle(
+              (it.color_key as string | undefined) || city,
+            )}
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-ink/55 via-transparent to-transparent" />
@@ -769,7 +827,13 @@ function PopCard({
   )
 }
 
-function PhoneMock({ photo }: { photo: string }) {
+function PhoneMock({
+  photo,
+  colorKey,
+}: {
+  photo: string | null
+  colorKey?: string
+}) {
   return (
     <div className="relative z-10 mx-auto w-[15.5rem] sm:w-[17rem]">
       <div className="rounded-[2.4rem] border-[6px] border-ink bg-ink p-2 shadow-lift">
@@ -785,14 +849,21 @@ function PhoneMock({ photo }: { photo: string }) {
               Week-end à Paris
             </p>
             <div className="relative mt-3 aspect-[5/3] overflow-hidden rounded-2xl">
-              <Image
-                src={photo}
-                alt=""
-                fill
-                sizes="240px"
-                className="object-cover"
-                priority
-              />
+              {photo ? (
+                <Image
+                  src={photo}
+                  alt=""
+                  fill
+                  sizes="240px"
+                  className="object-cover"
+                  priority
+                />
+              ) : (
+                <div
+                  className="absolute inset-0"
+                  style={cityFallbackStyle(colorKey)}
+                />
+              )}
             </div>
             <div className="mt-3 space-y-2">
               {[

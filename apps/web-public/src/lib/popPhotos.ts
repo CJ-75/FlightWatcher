@@ -19,6 +19,14 @@ export function photoIdentity(src: string | null | undefined): string | null {
       const m = u.pathname.match(/photo-[\w-]+/)
       return m ? `unsplash:${m[0]}` : u.href.split('?')[0]!
     }
+    // Wikimedia: strip size prefix, keep filename
+    if (
+      u.hostname.includes('wikimedia.org') ||
+      u.hostname.includes('wikipedia.org')
+    ) {
+      const file = u.pathname.split('/').pop() || u.pathname
+      return `wm:${decodeURIComponent(file).replace(/^\d+px-/, '')}`
+    }
     return `${u.origin}${u.pathname}`
   } catch {
     return s.split('?')[0] || s
@@ -41,7 +49,10 @@ export function assertUniquePagePhotos(
   return { ok: duplicates.length === 0, duplicates }
 }
 
-/** Assign photos without colliding with already used identities (cover first). */
+/**
+ * Claim a photo for this page. If already used → null (caller uses color_key).
+ * Never substitutes a random/city fallback.
+ */
 export function pickExclusivePhoto(
   candidate: string | null | undefined,
   used: Set<string>,

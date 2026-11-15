@@ -33,6 +33,15 @@ test('forbidden placeholders', () => {
   assert.equal(/\bseuil\b/i.test(html), false)
   assert.equal(/\bfixture\b/i.test(html), false)
   assert.equal(/\bvolontairement\b/i.test(html), false)
+  assert.equal(/\bstub\b/i.test(html), false)
+  assert.equal(/\bSEO\b/.test(html), false)
+})
+
+test('anti-placeholder catches stub and SEO', () => {
+  const bad = [/stub/i, /\bSEO\b/]
+  assert.equal(bad.some((r) => r.test('Paris stub')), true)
+  assert.equal(bad.some((r) => r.test('Paris au bord SEO')), true)
+  assert.equal(bad.some((r) => r.test('Paris en 2 jours')), false)
 })
 
 test('fixture-riche photos are unique identities', async () => {
@@ -41,7 +50,6 @@ test('fixture-riche photos are unique identities', async () => {
     join(__dirname, '../src/fixtures/popFixtures.ts'),
     'utf8',
   )
-  // Consts used by fixture-riche (cover + 6 stops)
   const names = [
     'COVER',
     'MONTORGUEIL',
@@ -54,12 +62,59 @@ test('fixture-riche photos are unique identities', async () => {
   const ids = []
   for (const n of names) {
     const m = src.match(
-      new RegExp(`const ${n} =\\s*'https://images\\.unsplash\\.com/(photo-[\\w-]+)`),
+      new RegExp(
+        `const ${n} =\\s*'https://images\\.unsplash\\.com/(photo-[\\w-]+)`,
+      ),
     )
-    assert.ok(m, `missing const ${n}`)
+    assert.ok(m, `missing unsplash const ${n}`)
     ids.push(m[1])
   }
   assert.equal(new Set(ids).size, ids.length, `dupes: ${ids}`)
+})
+
+test('landing page photos must be unique identities', async () => {
+  // Mirrors assertUniquePagePhotos — no two identical photo ids on one page.
+  const photoIdentity = (s) => {
+    if (!s) return null
+    try {
+      const u = new URL(s, 'https://waypop.co')
+      if (u.hostname.includes('unsplash.com')) {
+        const m = u.pathname.match(/photo-[\w-]+/)
+        return m ? `unsplash:${m[0]}` : u.href.split('?')[0]
+      }
+      if (u.hostname.includes('wikimedia.org')) {
+        const file = u.pathname.split('/').pop() || u.pathname
+        return `wm:${decodeURIComponent(file).replace(/^\d+px-/, '')}`
+      }
+      return `${u.origin}${u.pathname}`
+    } catch {
+      return String(s).split('?')[0]
+    }
+  }
+  const assertUnique = (urls) => {
+    const seen = new Set()
+    const dupes = []
+    for (const u of urls) {
+      const id = photoIdentity(u)
+      if (!id) continue
+      if (seen.has(id)) dupes.push(id)
+      seen.add(id)
+    }
+    return dupes
+  }
+  const sample = [
+    'https://images.unsplash.com/photo-aaa?w=1',
+    'https://images.unsplash.com/photo-bbb?w=1',
+    'https://images.unsplash.com/photo-aaa?w=2',
+  ]
+  assert.deepEqual(assertUnique(sample), ['unsplash:photo-aaa'])
+  assert.deepEqual(
+    assertUnique([
+      'https://images.unsplash.com/photo-aaa?w=1',
+      'https://images.unsplash.com/photo-bbb?w=1',
+    ]),
+    [],
+  )
 })
 
 test('fixture slug list expected', async () => {
