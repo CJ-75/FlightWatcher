@@ -174,7 +174,7 @@ export function resolveTripPrimaryAction(
 
   if (phase === 'past') {
     if (isOrga && input.canRelaunch && !flightBooked && !input.hotelBooked) {
-      return { id: 'relaunch_dates', label: 'Relancer avec de nouvelles dates' }
+      return { id: 'relaunch_dates', label: 'Choisir de nouvelles dates' }
     }
     return { id: 'view_programme', label: 'Voir le programme' }
   }

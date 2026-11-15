@@ -82,8 +82,9 @@ import {
   PLANNER_RELAUNCH_ACTION_FR,
   PLANNER_RELAUNCH_CARD_FR,
   PLANNER_RELAUNCH_CONFIRM_FR,
+  PLANNER_RELAUNCH_KICKER_FR,
   PLANNER_RELAUNCH_LEAD_FR,
-  PLANNER_RELAUNCH_TITLE_FR,
+  plannerRelaunchTitleFr,
   PLANNER_SHARE_ACTION_FR,
   PLANNER_SHARE_EYEBROW_FR,
   PLANNER_SHARE_HINT_FR,
@@ -808,9 +809,15 @@ function TripListCard({
           </span>
         ) : null}
         <span
-          className={`text-xs font-semibold px-3 py-1.5 rounded-full ${PHASE_CHIP_CLASS[workspace.phase]}`}
+          className={`text-xs font-semibold px-3 py-1.5 rounded-full ${
+            workspace.capabilities?.can_relaunch
+              ? 'bg-[#FF6B35] text-white'
+              : PHASE_CHIP_CLASS[workspace.phase]
+          }`}
         >
-          {PHASE_LABEL[workspace.phase]}
+          {workspace.capabilities?.can_relaunch
+            ? PLANNER_RELAUNCH_KICKER_FR
+            : PHASE_LABEL[workspace.phase]}
         </span>
         {workspace.is_invitee ? (
           <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-violet-50 text-violet-800 ring-1 ring-violet-200">
@@ -879,9 +886,15 @@ function TripListCard({
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent lg:bg-gradient-to-r lg:from-transparent lg:via-black/10 lg:to-black/40" />
             <div className="absolute top-5 right-5 flex flex-col items-end gap-1.5">
               <span
-                className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${PHASE_CHIP_CLASS[workspace.phase]}`}
+                className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${
+                  workspace.capabilities?.can_relaunch
+                    ? 'bg-[#FF6B35] text-white'
+                    : PHASE_CHIP_CLASS[workspace.phase]
+                }`}
               >
-                {PHASE_LABEL[workspace.phase]}
+                {workspace.capabilities?.can_relaunch
+                  ? PLANNER_RELAUNCH_KICKER_FR
+                  : PHASE_LABEL[workspace.phase]}
               </span>
               {workspace.is_invitee ? (
                 <span className="text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm bg-violet-500/90 text-white">
@@ -971,9 +984,15 @@ function TripListCard({
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/20" />
         <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5">
           <span
-            className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${PHASE_CHIP_CLASS[workspace.phase]}`}
+            className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${
+              workspace.capabilities?.can_relaunch
+                ? 'bg-[#FF6B35] text-white'
+                : PHASE_CHIP_CLASS[workspace.phase]
+            }`}
           >
-            {PHASE_LABEL[workspace.phase]}
+            {workspace.capabilities?.can_relaunch
+              ? PLANNER_RELAUNCH_KICKER_FR
+              : PHASE_LABEL[workspace.phase]}
           </span>
           {workspace.is_invitee ? (
             <span className="text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm bg-violet-500/90 text-white">
@@ -3408,12 +3427,14 @@ function TripDetailView({
             </button>
             <span
               className={`rounded-full text-[11px] font-bold px-3 py-1.5 backdrop-blur-md ${
-                workspace?.phase === 'booked'
-                  ? 'bg-emerald-400/20 text-emerald-50 ring-1 ring-emerald-200/30'
-                  : 'bg-white/90 text-slate-800'
+                canRelaunch
+                  ? 'bg-[#FF6B35]/95 text-white ring-1 ring-white/25'
+                  : workspace?.phase === 'booked'
+                    ? 'bg-emerald-400/20 text-emerald-50 ring-1 ring-emerald-200/30'
+                    : 'bg-white/90 text-slate-800'
               }`}
             >
-              {statusLabel}
+              {canRelaunch ? PLANNER_RELAUNCH_KICKER_FR : statusLabel}
             </span>
           </div>
           <div className="max-w-2xl">
@@ -3525,27 +3546,34 @@ function TripDetailView({
       </section>
 
       {canRelaunch ? (
-        <section className="rounded-[28px] border border-line bg-white p-5 sm:p-6 shadow-soft space-y-4">
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-muted">
-              Terminé
+        <button
+          type="button"
+          disabled={relaunching || scanning}
+          onClick={openRelaunch}
+          className="group relative isolate w-full overflow-hidden rounded-[28px] min-h-[240px] text-left shadow-xl shadow-orange-950/15 border border-orange-100/50 disabled:opacity-70"
+        >
+          <img
+            src={destinationImage}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover scale-[1.02] transition-transform duration-500 group-hover:scale-105"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/94 via-[#1a100c]/55 to-black/20" />
+          <div className="relative flex min-h-[240px] flex-col justify-end p-5 sm:p-7">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-300">
+              {PLANNER_RELAUNCH_KICKER_FR}
             </p>
-            <h3 className="mt-1 text-xl sm:text-2xl font-extrabold tracking-tight text-ink">
-              {PLANNER_RELAUNCH_TITLE_FR}
+            <h3 className="mt-2 max-w-xl text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+              {plannerRelaunchTitleFr(destinationName)}
             </h3>
-            <p className="mt-1.5 text-sm text-ink-soft leading-relaxed">
+            <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
               {PLANNER_RELAUNCH_CARD_FR}
             </p>
+            <span className="mt-5 inline-flex w-full sm:w-auto items-center justify-center self-start rounded-2xl bg-[#FF6B35] px-5 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 group-hover:bg-[#E85A28] min-h-[52px]">
+              {PLANNER_RELAUNCH_ACTION_FR}
+            </span>
           </div>
-          <button
-            type="button"
-            disabled={relaunching || scanning}
-            onClick={openRelaunch}
-            className="inline-flex w-full sm:w-auto items-center justify-center rounded-2xl bg-primary-500 px-5 py-3 text-sm font-extrabold text-white hover:bg-primary-600 disabled:opacity-60 min-h-[48px]"
-          >
-            {PLANNER_RELAUNCH_ACTION_FR}
-          </button>
-        </section>
+        </button>
       ) : null}
 
       <section className="relative isolate overflow-hidden rounded-[28px] border border-orange-200/70 bg-gradient-to-br from-[#FFE8D6] via-[#FFDFC8] to-[#F5D5C0] px-3.5 sm:px-5 py-4 sm:py-5 shadow-soft">
@@ -4313,8 +4341,11 @@ function TripDetailView({
           />
           <div className="app-dialog-panel app-dialog-md p-5 sm:p-7 space-y-5">
             <div>
-              <h4 className="font-extrabold text-xl text-ink tracking-tight">
-                {PLANNER_RELAUNCH_TITLE_FR}
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-primary-600">
+                {PLANNER_RELAUNCH_KICKER_FR}
+              </p>
+              <h4 className="mt-1.5 font-extrabold text-xl sm:text-2xl text-ink tracking-tight">
+                {plannerRelaunchTitleFr(destinationName)}
               </h4>
               <p className="mt-1.5 text-sm text-ink-soft leading-relaxed">
                 {PLANNER_RELAUNCH_LEAD_FR}

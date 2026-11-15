@@ -9,6 +9,7 @@ import {
   PLANNER_PHASE_LABEL_FR,
   PLANNER_PHASE_ACTION_FR,
   PLANNER_RELAUNCH_ACTION_FR,
+  PLANNER_RELAUNCH_KICKER_FR,
   type TravelWorkspace,
 } from '@waypop/shared'
 import { colors, fonts, shadow } from '../theme'
@@ -133,11 +134,13 @@ export function JourneyCard({
   density?: JourneyDensity
   onPress: () => void
 }) {
+  const canRelaunch = Boolean(workspace.capabilities?.can_relaunch)
   const meta = PHASE_META[workspace.phase] || PHASE_META.planning
-  const actionLabel =
-    workspace.capabilities?.can_relaunch
-      ? PLANNER_RELAUNCH_ACTION_FR
-      : meta.action
+  const phaseTone = canRelaunch
+    ? { bg: colors.primary, text: colors.white }
+    : meta.tone
+  const phaseLabel = canRelaunch ? PLANNER_RELAUNCH_KICKER_FR : meta.label
+  const actionLabel = canRelaunch ? PLANNER_RELAUNCH_ACTION_FR : meta.action
   const destCode = (workspace.dest_iata || '').split(/[,;]/)[0]?.trim() || ''
   const cityRaw = String(workspace.city || '')
     .split(',')[0]
@@ -178,12 +181,12 @@ export function JourneyCard({
             <View
               style={[
                 styles.phase,
-                meta.tone.glass && styles.phaseGlass,
-                { backgroundColor: meta.tone.bg },
+                phaseTone.glass && styles.phaseGlass,
+                { backgroundColor: phaseTone.bg },
               ]}
             >
-              <Text style={[styles.phaseText, { color: meta.tone.text }]}>
-                {meta.label}
+              <Text style={[styles.phaseText, { color: phaseTone.text }]}>
+                {phaseLabel}
               </Text>
             </View>
             {workspace.is_invitee ? (
@@ -256,17 +259,17 @@ export function JourneyCard({
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.phaseStack}>
-          <View
-            style={[
-              styles.phase,
-              meta.tone.glass && styles.phaseGlass,
-              { backgroundColor: meta.tone.bg },
-            ]}
-          >
-            <Text style={[styles.phaseText, { color: meta.tone.text }]}>
-              {meta.label}
-            </Text>
-          </View>
+            <View
+              style={[
+                styles.phase,
+                phaseTone.glass && styles.phaseGlass,
+                { backgroundColor: phaseTone.bg },
+              ]}
+            >
+              <Text style={[styles.phaseText, { color: phaseTone.text }]}>
+                {phaseLabel}
+              </Text>
+            </View>
           {workspace.is_invitee ? (
             <View style={styles.inviteeTag}>
               <Text style={styles.inviteeTagText}>Invité</Text>

@@ -50,8 +50,10 @@ import {
   partyPriceCaptionFr,
   partyPriceSuffixFr,
   trackTripDetailViewed,
+  PLANNER_RELAUNCH_ACTION_FR,
   PLANNER_RELAUNCH_CARD_FR,
-  PLANNER_RELAUNCH_TITLE_FR,
+  PLANNER_RELAUNCH_KICKER_FR,
+  plannerRelaunchTitleFr,
   type AddTripMemberRequest,
   type EnrichedTripResponse,
   type FlexibleDates,
@@ -2175,27 +2177,45 @@ export function TripDetailScreen() {
                 onStepPress={(id) => onPipelineStep(id)}
               />
               {canRelaunch ? (
-                <View style={[styles.relaunchCard, shadow.soft]}>
-                  <Text style={styles.relaunchKicker}>TERMINÉ</Text>
-                  <Text style={styles.relaunchTitle}>
-                    {PLANNER_RELAUNCH_TITLE_FR}
-                  </Text>
-                  <Text style={styles.relaunchBody}>
-                    {PLANNER_RELAUNCH_CARD_FR}
-                  </Text>
-                  <Pressable
-                    onPress={() => setRelaunchOpen(true)}
-                    disabled={relaunching || scanning}
-                    style={({ pressed }) => [
-                      styles.relaunchCta,
-                      (pressed || relaunching) && { opacity: 0.9 },
-                    ]}
+                <Pressable
+                  onPress={() => setRelaunchOpen(true)}
+                  disabled={relaunching || scanning}
+                  style={({ pressed }) => [
+                    styles.relaunchCard,
+                    shadow.lift,
+                    (pressed || relaunching) && { opacity: 0.96 },
+                  ]}
+                >
+                  <ImageBackground
+                    source={{ uri: destinationImage }}
+                    style={styles.relaunchHero}
+                    imageStyle={styles.relaunchHeroImg}
                   >
-                    <Text style={styles.relaunchCtaText}>
-                      {pathView.primary.label}
+                    <LinearGradient
+                      colors={[
+                        'rgba(20,12,8,0.15)',
+                        'rgba(20,12,8,0.72)',
+                        'rgba(20,12,8,0.92)',
+                      ]}
+                      locations={[0, 0.45, 1]}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <Text style={styles.relaunchKicker}>
+                      {PLANNER_RELAUNCH_KICKER_FR}
                     </Text>
-                  </Pressable>
-                </View>
+                    <Text style={styles.relaunchTitle}>
+                      {plannerRelaunchTitleFr(cityLabel)}
+                    </Text>
+                    <Text style={styles.relaunchBody}>
+                      {PLANNER_RELAUNCH_CARD_FR}
+                    </Text>
+                    <View style={styles.relaunchCta}>
+                      <Text style={styles.relaunchCtaText}>
+                        {PLANNER_RELAUNCH_ACTION_FR}
+                      </Text>
+                    </View>
+                  </ImageBackground>
+                </Pressable>
               ) : null}
               {accepted?.trip_data && !reservationFlags.externalFlight ? (
                 <MobileBoardingPass
@@ -2594,6 +2614,7 @@ export function TripDetailScreen() {
         <RelaunchDatesSheet
           visible={relaunchOpen}
           busy={relaunching}
+          cityLabel={cityLabel}
           onClose={() => !relaunching && setRelaunchOpen(false)}
           onConfirm={(dates) => void relaunchWithDates(dates)}
         />
@@ -3771,43 +3792,55 @@ function ProposalBlock({
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.canvas },
   relaunchCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: colors.primaryMuted,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: colors.ink,
+  },
+  relaunchHero: {
+    minHeight: 220,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 20,
+    justifyContent: 'flex-end',
+  },
+  relaunchHeroImg: {
+    borderRadius: 24,
   },
   relaunchKicker: {
     fontFamily: fonts.bold,
     fontSize: 11,
-    letterSpacing: 1.2,
-    color: colors.primary,
-    marginBottom: 6,
+    letterSpacing: 1.6,
+    color: '#FFB089',
+    marginBottom: 8,
+    textTransform: 'uppercase',
   },
   relaunchTitle: {
     fontFamily: fonts.extrabold,
-    fontSize: 18,
-    letterSpacing: -0.4,
-    color: colors.ink,
-    marginBottom: 6,
+    fontSize: 26,
+    letterSpacing: -0.7,
+    color: '#fff',
+    marginBottom: 8,
+    lineHeight: 30,
   },
   relaunchBody: {
     fontFamily: fonts.regular,
     fontSize: 14,
-    lineHeight: 20,
-    color: colors.inkSoft,
-    marginBottom: 14,
+    lineHeight: 21,
+    color: 'rgba(255,255,255,0.78)',
+    marginBottom: 18,
+    maxWidth: 320,
   },
   relaunchCta: {
     backgroundColor: colors.primary,
-    borderRadius: 14,
-    minHeight: 48,
+    borderRadius: 16,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'stretch',
   },
   relaunchCtaText: {
     fontFamily: fonts.bold,
-    fontSize: 15,
+    fontSize: 16,
     color: '#fff',
   },
   fixedBackHeader: {

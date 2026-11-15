@@ -12,8 +12,9 @@ import {
   formatTripDateRangeFr,
   generateDatesFromPreset,
   PLANNER_RELAUNCH_CONFIRM_FR,
+  PLANNER_RELAUNCH_KICKER_FR,
   PLANNER_RELAUNCH_LEAD_FR,
-  PLANNER_RELAUNCH_TITLE_FR,
+  plannerRelaunchTitleFr,
   type DatePresetId,
   type FlexibleDates,
 } from '@waypop/shared'
@@ -23,6 +24,7 @@ import { colors, fonts, shadow } from '../theme'
 type Props = {
   visible: boolean
   busy?: boolean
+  cityLabel?: string | null
   onClose: () => void
   onConfirm: (dates: FlexibleDates) => void
 }
@@ -36,6 +38,7 @@ const PRESETS: { id: DatePresetId; label: string; hint: string }[] = [
 export function RelaunchDatesSheet({
   visible,
   busy,
+  cityLabel,
   onClose,
   onConfirm,
 }: Props) {
@@ -80,7 +83,8 @@ export function RelaunchDatesSheet({
           ]}
         >
           <View style={styles.handle} />
-          <Text style={styles.title}>{PLANNER_RELAUNCH_TITLE_FR}</Text>
+          <Text style={styles.kicker}>{PLANNER_RELAUNCH_KICKER_FR}</Text>
+          <Text style={styles.title}>{plannerRelaunchTitleFr(cityLabel)}</Text>
           <Text style={styles.lead}>{PLANNER_RELAUNCH_LEAD_FR}</Text>
 
           <View style={styles.presets}>
@@ -181,9 +185,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lineStrong,
     marginBottom: 16,
   },
+  kicker: {
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    letterSpacing: 1.4,
+    color: colors.primary,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
   title: {
     fontFamily: fonts.extrabold,
-    fontSize: 22,
+    fontSize: 24,
     letterSpacing: -0.6,
     color: colors.ink,
     marginBottom: 8,

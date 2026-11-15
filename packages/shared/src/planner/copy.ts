@@ -45,7 +45,7 @@ export const PLANNER_PHASE_HINT_FR: Record<TravelWorkspacePhase, string> = {
   flight_selected: 'Vol choisi. Compose ton hôtel.',
   composing: 'Finalise la réservation de ton séjour.',
   booked: 'Réservation rattachée à ce séjour.',
-  past: 'Séjour terminé. Relance-le avec de nouvelles dates si tu n’as pas réservé.',
+  past: 'Dates passées — un tap pour repartir avec de nouveaux prix.',
 }
 
 export const PLANNER_PHASE_ACTION_FR: Record<TravelWorkspacePhase, string> = {
@@ -53,17 +53,27 @@ export const PLANNER_PHASE_ACTION_FR: Record<TravelWorkspacePhase, string> = {
   flight_selected: 'Choisir mon hôtel',
   composing: 'Reprendre',
   booked: 'Ouvrir le séjour',
-  past: 'Revoir le séjour',
+  past: 'Repartir',
 }
 
-/** Hub / detail — completed without booking */
-export const PLANNER_RELAUNCH_ACTION_FR = 'Relancer le séjour'
-export const PLANNER_RELAUNCH_TITLE_FR = 'Relancer avec de nouvelles dates'
+/** Hub / detail — completed without booking (default path for most trips) */
+export const PLANNER_RELAUNCH_KICKER_FR = 'Prêt pour la suite'
+export const PLANNER_RELAUNCH_ACTION_FR = 'Choisir de nouvelles dates'
+export const PLANNER_RELAUNCH_TITLE_FR = 'Et si on repartait ?'
 export const PLANNER_RELAUNCH_LEAD_FR =
-  'Choisis des dates à venir. On relance toute la recherche de vols.'
-export const PLANNER_RELAUNCH_CONFIRM_FR = 'Relancer la recherche'
+  'Ce week-end, le prochain, la semaine suivante… on relance toute la recherche.'
+export const PLANNER_RELAUNCH_CONFIRM_FR = 'C’est parti — chercher des vols'
 export const PLANNER_RELAUNCH_CARD_FR =
-  'Pas de réservation sur ce séjour. Mets à jour les dates pour repartir.'
+  'Les dates sont derrière toi. Choisis-en de nouvelles et on te trouve les meilleurs prix.'
+
+/** Title with destination when available. */
+export function plannerRelaunchTitleFr(city?: string | null): string {
+  const c = String(city || '')
+    .trim()
+    .replace(/^ta ville$/i, '')
+  if (!c) return PLANNER_RELAUNCH_TITLE_FR
+  return `Et si on repartait à ${c} ?`
+}
 
 export const HOTEL_CTA_FR = {
   choose: 'Choisir mon hôtel',
