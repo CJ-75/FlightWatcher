@@ -5,6 +5,7 @@ import {
   filterRemoteHttpMediaUrls,
   formatDurationMinutes,
   groupItemsByDay,
+  sanitizeUserFacingText,
   stepKindLabel,
   type ItineraryItem,
 } from '@waypop/shared'
@@ -184,7 +185,11 @@ export function ItineraryStepsTimeline({ items, onBookActivity }: Props) {
           </div>
           <ol className="space-y-3">
             {day.items.map((it, i) => {
-              const title = it.title || it.places?.name || `Étape ${i + 1}`
+              const title =
+                sanitizeUserFacingText(
+                  it.title || it.places?.name || `Étape ${i + 1}`,
+                ) || `Étape ${i + 1}`
+              const note = sanitizeUserFacingText(it.note, { multiline: true })
               const dur = formatDurationMinutes(it.duration_minutes)
               const mapsUrl = buildItineraryStepMapsUrl(it)
               const photos = stepPhotos(it)
@@ -226,9 +231,9 @@ export function ItineraryStepsTimeline({ items, onBookActivity }: Props) {
                     <p className="mt-0.5 text-[15px] font-bold text-[#1A120E]">
                       {title}
                     </p>
-                    {it.note ? (
+                    {note ? (
                       <p className="mt-1 text-sm leading-relaxed text-[#6B5C50]">
-                        {it.note}
+                        {note}
                       </p>
                     ) : null}
                     {it.kind === 'activity' && it.viator_product_code ? (

@@ -10,6 +10,7 @@ import {
   itineraryInfoChips,
   itineraryOccasionPhaseLabel,
   resolveParcoursCoverUrl,
+  sanitizeUserFacingText,
   type Itinerary,
   type ItineraryItem,
 } from '@waypop/shared'
@@ -68,10 +69,27 @@ export default function ParcoursPublicPage() {
     setLoading(true)
 
     const applyRow = (row: Itinerary) => {
-      setItin(row)
+      const clean: Itinerary = {
+        ...row,
+        title: sanitizeUserFacingText(row.title) || row.title,
+        subtitle: row.subtitle
+          ? sanitizeUserFacingText(row.subtitle)
+          : row.subtitle,
+        intro: row.intro
+          ? sanitizeUserFacingText(row.intro, { multiline: true })
+          : row.intro,
+        itinerary_items: (row.itinerary_items || []).map((it) => ({
+          ...it,
+          title: it.title ? sanitizeUserFacingText(it.title) : it.title,
+          note: it.note
+            ? sanitizeUserFacingText(it.note, { multiline: true })
+            : it.note,
+        })),
+      }
+      setItin(clean)
       setError(null)
-      document.title = `${row.title} · WayPop`
-      const desc = row.subtitle || row.intro || ''
+      document.title = `${clean.title} · WayPop`
+      const desc = clean.subtitle || clean.intro || ''
       let meta = document.querySelector('meta[name="description"]')
       if (!meta) {
         meta = document.createElement('meta')
@@ -96,11 +114,11 @@ export default function ParcoursPublicPage() {
           width: 1200,
         }) ||
         (row.city_slug ? cityImageUrl(row.city_slug) : '')
-      setOg('og:title', row.title)
+      setOg('og:title', clean.title)
       setOg('og:description', desc.slice(0, 160))
       if (cover) setOg('og:image', cover)
       setOg('og:type', 'article')
-      void refreshLiked(row.id)
+      void refreshLiked(clean.id)
       void getApiClient()
         .trackActivityEvent({
           domain: 'itinerary',

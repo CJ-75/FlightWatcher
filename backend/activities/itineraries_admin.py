@@ -31,6 +31,27 @@ def _slugify(text: str) -> str:
     return ascii_[:80] or "parcours"
 
 
+_OBJ_REPL = re.compile(r"[\ufffc\ufffd\ufeff\u200b-\u200d]")
+_CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def _sanitize_text(value: Any, *, multiline: bool = False) -> Optional[str]:
+    """Strip iOS Notes object-replacement (￼) and other junk from copy."""
+    if value is None:
+        return None
+    s = str(value)
+    s = _OBJ_REPL.sub("", s)
+    s = _CTRL.sub("", s)
+    if multiline:
+        s = re.sub(r"[ \t]+\n", "\n", s)
+        s = re.sub(r"\n{3,}", "\n\n", s)
+        s = re.sub(r"[ \t]{2,}", " ", s)
+        s = s.strip()
+    else:
+        s = re.sub(r"\s+", " ", s).strip()
+    return s or None
+
+
 # Unsplash covers (mobile-friendly) — keep in sync with itineraries_catalog + cityUnsplash.ts
 _CITY_COVER_FALLBACK = {
     "paris": "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1600&q=90&fm=jpg",
@@ -388,10 +409,10 @@ def create_and_publish_admin_itinerary(
     if not supabase:
         return {"ok": False, "error": "no_supabase"}
 
-    title = str((body or {}).get("title") or "Nouveau parcours").strip()[:200]
+    title = (_sanitize_text((body or {}).get("title")) or "Nouveau parcours")[:200]
     city_slug = str((body or {}).get("city_slug") or "").strip().lower() or None
     cover_image = (body or {}).get("cover_image")
-    intro = str((body or {}).get("intro") or "").strip()
+    intro = _sanitize_text((body or {}).get("intro"), multiline=True) or ""
     if not intro and city_slug:
         intro = f"Parcours à {city_slug}."
     budget_raw = (body or {}).get("budget_estimate_eur")
@@ -542,12 +563,13 @@ def _normalize_item(raw: Dict[str, Any], position: int) -> Dict[str, Any]:
                 meta[coord_key] = float(meta[coord_key])
             except (TypeError, ValueError):
                 meta.pop(coord_key, None)
+    note = _sanitize_text(raw.get("note"), multiline=True)
     row = {
         "kind": kind,
         "item_type": item_type,
         "position": position,
-        "title": (raw.get("title") or None),
-        "note": (raw.get("note") or None),
+        "title": _sanitize_text(raw.get("title")),
+        "note": note,
         "duration_minutes": raw.get("duration_minutes"),
         "photo": photo,
         "place_id": raw.get("place_id"),
@@ -555,7 +577,7 @@ def _normalize_item(raw: Dict[str, Any], position: int) -> Dict[str, Any]:
         "day_offset": int(raw.get("day_offset") or 0),
         "moment": moment,
         "sort_key": sort_key,
-        "notes": raw.get("note"),
+        "notes": note,
         "meta": meta or {},
     }
     return row
@@ -613,6 +635,10 @@ def update_admin_itinerary(
                         v = 0
                 except (TypeError, ValueError):
                     v = 0
+        if k in ("title", "subtitle") and v is not None:
+            v = _sanitize_text(v) or ""
+        if k == "intro" and v is not None:
+            v = _sanitize_text(v, multiline=True) or ""
         data[k] = v
 
     data["updated_at"] = datetime.now(timezone.utc).isoformat()

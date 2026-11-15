@@ -11,6 +11,7 @@ import {
 import {
   buildItineraryStepMapsUrl,
   formatDurationMinutes,
+  sanitizeUserFacingText,
   stepKindLabel,
   type ItineraryItem,
 } from '@waypop/shared'
@@ -33,7 +34,10 @@ function stepPhotos(it: ItineraryItem): string[] {
 }
 
 export function ParcoursStepBlock({ item, index, momentLabel }: Props) {
-  const title = item.title || item.places?.name || `Étape ${index + 1}`
+  const title =
+    sanitizeUserFacingText(item.title || item.places?.name || `Étape ${index + 1}`) ||
+    `Étape ${index + 1}`
+  const note = sanitizeUserFacingText(item.note, { multiline: true })
   const dur = formatDurationMinutes(item.duration_minutes)
   const mapsUrl = buildItineraryStepMapsUrl(item)
   const photos = stepPhotos(item)
@@ -62,7 +66,7 @@ export function ParcoursStepBlock({ item, index, momentLabel }: Props) {
       <View style={{ flex: 1 }}>
         <Text style={styles.stepKind}>{kindLine}</Text>
         <Text style={styles.stepTitle}>{title}</Text>
-        {item.note ? <Text style={styles.stepNote}>{item.note}</Text> : null}
+        {note ? <Text style={styles.stepNote}>{note}</Text> : null}
       </View>
     </>
   )
