@@ -8,7 +8,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.waypop.app"
+      "bundleIdentifier": "com.waypop.app",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "WayPop utilise tes photos pour illustrer les étapes de parcours."
+      }
     },
     "android": {
       "adaptiveIcon": {

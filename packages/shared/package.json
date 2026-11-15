@@ -11,7 +11,8 @@
     "./api": "./src/api/client.ts",
     "./auth": "./src/auth/createSupabaseAuth.ts",
     "./i18n": "./src/i18n/translations.ts",
-    "./storage": "./src/storage/kv.ts"
+    "./storage": "./src/storage/kv.ts",
+    "./media": "./src/media/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

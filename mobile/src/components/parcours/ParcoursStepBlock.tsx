@@ -10,9 +10,11 @@ import {
 } from 'react-native'
 import {
   buildItineraryStepMapsUrl,
+  filterRemoteHttpMediaUrls,
   formatDurationMinutes,
   sanitizeUserFacingText,
   stepKindLabel,
+  supabaseTransformUrl,
   type ItineraryItem,
 } from '@waypop/shared'
 import { colors, fonts, radius, shadow } from '../../theme'
@@ -29,8 +31,23 @@ function stepPhotos(it: ItineraryItem): string[] {
   const fromMeta = Array.isArray(raw)
     ? raw.map(String).filter(Boolean)
     : []
-  if (fromMeta.length) return fromMeta.slice(0, 5)
-  return it.photo ? [it.photo] : []
+  const candidates = fromMeta.length
+    ? fromMeta
+    : it.photo
+      ? [String(it.photo)]
+      : []
+  const transformsOn =
+    String(
+      (globalThis as { process?: { env?: Record<string, string> } }).process?.env
+        ?.EXPO_PUBLIC_MEDIA_TRANSFORMS || '',
+    ).trim() === '1'
+  return filterRemoteHttpMediaUrls(candidates)
+    .map((u) =>
+      transformsOn && /\/storage\/v1\//i.test(u)
+        ? supabaseTransformUrl(u, { width: 1200, quality: 80, transform: true })
+        : u,
+    )
+    .slice(0, 5)
 }
 
 export function ParcoursStepBlock({ item, index, momentLabel }: Props) {

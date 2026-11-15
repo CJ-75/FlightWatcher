@@ -2,6 +2,7 @@ import {
   itineraryUnsplashUrl,
   parcoursCoverCandidates,
   shouldReplaceParcoursCover,
+  supabaseTransformUrl,
 } from '@waypop/shared'
 import { apiBase } from './client'
 
@@ -54,6 +55,18 @@ function toDeviceUri(raw: string, width: number): string {
   if (/images\.unsplash\.com/i.test(raw)) return upgradeUnsplash(raw, width)
   if (isWikimedia(raw)) {
     return `${apiBase}/api/media/proxy?url=${encodeURIComponent(withWikiWidth(raw, width))}`
+  }
+  // Opt-in: EXPO_PUBLIC_MEDIA_TRANSFORMS=1 (Supabase Image Transforms / often Pro)
+  const transformsOn =
+    String(
+      (globalThis as { process?: { env?: Record<string, string> } }).process?.env
+        ?.EXPO_PUBLIC_MEDIA_TRANSFORMS || '',
+    ).trim() === '1'
+  if (
+    transformsOn &&
+    /\/storage\/v1\/(?:object|render\/image)\/public\//i.test(raw)
+  ) {
+    return supabaseTransformUrl(raw, { width, quality: 80, transform: true })
   }
   return raw
 }

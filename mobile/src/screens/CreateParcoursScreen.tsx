@@ -24,6 +24,7 @@ import { ActivityCityPicker } from '../components/ActivityCityPicker'
 import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
+import { getMediaStorage } from '../lib/media'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import {
   clearParcoursCreateSession,
@@ -101,7 +102,18 @@ export function CreateParcoursScreen({ navigation }: Props) {
         quality: 0.88,
       })
       if (result.canceled || !result.assets?.[0]?.uri) return
-      setCustomCover(result.assets[0].uri)
+      const localUri = result.assets[0].uri
+      setCustomCover(localUri)
+      try {
+        const uploaded = await getMediaStorage().upload({
+          kind: 'parcours-cover',
+          source: { kind: 'uri', uri: localUri },
+        })
+        setCustomCover(uploaded.url)
+      } catch (uploadErr) {
+        setCustomCover(null)
+        throw uploadErr
+      }
     } catch (e) {
       Alert.alert(
         'Galerie',

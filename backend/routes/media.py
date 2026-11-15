@@ -1,4 +1,4 @@
-"""Media helpers: Wikimedia proxy + Unsplash city covers (mobile-friendly)."""
+"""Media helpers: Wikimedia proxy + Unsplash city covers + Storage upload."""
 from __future__ import annotations
 
 import logging
@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
 
 logger = logging.getLogger("routes.media")
@@ -257,4 +257,88 @@ async def city_cover(
         "url": _unsplash_url(_CITY_UNSPLASH["paris"], w),
         "source": "fallback_paris",
         "api": False,
+    }
+
+
+def _upload_actor(request: Request) -> Tuple[str, str]:
+    """
+    Who may upload: admin session cookie OR authenticated Supabase user.
+    Returns (owner_id, role).
+    """
+    from admin_auth import has_admin_session
+    from auth_middleware import get_user_id_from_token
+
+    if has_admin_session(request):
+        return "admin", "admin"
+
+    user_id = get_user_id_from_token(request)
+    if user_id:
+        return str(user_id), "user"
+
+    # Expo admin bypass (dev) — same as parcours publish
+    client = (request.headers.get("X-FW-Client") or "").strip().lower()
+    expo_bypass = os.getenv("ALLOW_EXPO_ADMIN_BYPASS", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if client == "expo" and expo_bypass:
+        return "expo-dev", "admin"
+
+    raise HTTPException(status_code=401, detail="Authentification requise pour upload")
+
+
+@router.post("/api/media/upload")
+async def media_upload(
+    request: Request,
+    file: UploadFile = File(...),
+    kind: str = Form("generic"),
+    owner_id: Optional[str] = Form(None),
+):
+    """
+    Upload an image to the configured media provider (default: Supabase Storage).
+    Auth: admin cookie OR Bearer user JWT.
+    Switch backend later via MEDIA_PROVIDER without changing clients.
+    """
+    from media_storage import upload_bytes
+
+    actor_id, role = _upload_actor(request)
+    # Prefer authenticated user id; admin may pass owner_id for organization
+    effective_owner = owner_id if (role == "admin" and owner_id) else actor_id
+
+    raw = await file.read()
+    filename = file.filename or "photo.jpg"
+    content_type = file.content_type or "image/jpeg"
+
+    try:
+        result = upload_bytes(
+            data=raw,
+            filename=filename,
+            content_type=content_type,
+            kind=kind,
+            owner_id=effective_owner,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        logger.warning("media_upload failed: %s", e)
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("media_upload unexpected")
+        raise HTTPException(status_code=500, detail="upload_failed") from e
+
+    return result
+
+
+@router.get("/api/media/config")
+async def media_config():
+    """Public-ish hint for clients (no secrets)."""
+    from media_storage import media_bucket, media_provider, max_upload_bytes
+
+    return {
+        "ok": True,
+        "provider": media_provider(),
+        "bucket": media_bucket(),
+        "max_bytes": max_upload_bytes(),
+        "upload_path": "/api/media/upload",
     }

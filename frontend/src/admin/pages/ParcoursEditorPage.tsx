@@ -20,6 +20,7 @@ import {
 } from '@waypop/shared'
 import { getApiClient } from '../../utils/apiClient'
 import { ParcoursCoverImg } from '../../components/parcours/ParcoursCoverImg'
+import { uploadImageFile } from '../../lib/media'
 
 type DraftItem = {
   localId: string
@@ -114,6 +115,8 @@ export function ParcoursEditorPage() {
   const [previewDark, setPreviewDark] = useState(false)
   const [mapsPaste, setMapsPaste] = useState('')
   const [resolving, setResolving] = useState(false)
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [uploadingStep, setUploadingStep] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     if (!itineraryId) return
@@ -696,9 +699,41 @@ export function ParcoursEditorPage() {
               className="fw-input"
               value={itin.cover_image || ''}
               onChange={(e) => patchField('cover_image', e.target.value)}
-              placeholder="URL photo (Unsplash recommandé — Wikimedia via proxy)"
+              placeholder="URL photo (ou upload Supabase ci-dessous)"
               style={{ width: '100%', boxSizing: 'border-box' }}
             />
+            <label
+              className="fw-btn"
+              style={{
+                display: 'inline-flex',
+                marginTop: 8,
+                cursor: uploadingCover ? 'wait' : 'pointer',
+                opacity: uploadingCover ? 0.7 : 1,
+              }}
+            >
+              {uploadingCover ? 'Upload…' : 'Uploader une image'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/gif"
+                hidden
+                disabled={uploadingCover}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!file) return
+                  setUploadingCover(true)
+                  setError(null)
+                  void uploadImageFile(file, 'parcours-cover')
+                    .then((url) => patchField('cover_image', url))
+                    .catch((err) =>
+                      setError(
+                        err instanceof Error ? err.message : 'Upload couverture échoué',
+                      ),
+                    )
+                    .finally(() => setUploadingCover(false))
+                }}
+              />
+            </label>
             <div
               style={{
                 marginTop: 10,
@@ -861,6 +896,40 @@ export function ParcoursEditorPage() {
                       placeholder="photo URL"
                     />
                   </div>
+                  <label
+                    className="fw-btn fw-btn-ghost"
+                    style={{
+                      display: 'inline-flex',
+                      marginTop: 6,
+                      cursor: uploadingStep === index ? 'wait' : 'pointer',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    {uploadingStep === index ? 'Upload…' : 'Upload photo étape'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/heic,image/gif"
+                      hidden
+                      disabled={uploadingStep !== null}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        e.target.value = ''
+                        if (!file) return
+                        setUploadingStep(index)
+                        setError(null)
+                        void uploadImageFile(file, 'parcours-step')
+                          .then((url) => updateItem(index, { photo: url }))
+                          .catch((err) =>
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : 'Upload photo étape échoué',
+                            ),
+                          )
+                          .finally(() => setUploadingStep(null))
+                      }}
+                    />
+                  </label>
 
                   {it.kind === 'place' ? (
                     <p className="fw-muted" style={{ margin: 0, fontSize: '0.75rem' }}>

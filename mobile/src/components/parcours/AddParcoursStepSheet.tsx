@@ -16,6 +16,7 @@ import {
 } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { getMediaStorage } from '../../lib/media'
 import { colors, fonts, radius, shadow, spacing } from '../../theme'
 
 export type DraftStep = {
@@ -145,9 +146,28 @@ export function AddParcoursStepSheet({
         quality: 0.85,
       })
       if (result.canceled || !result.assets?.length) return
-      const uris = result.assets.map((a) => a.uri).filter(Boolean)
-      const photos = [...step.photos, ...uris].slice(0, 5)
-      patch({ photos, photo: photos[0] || null })
+      const localUris = result.assets.map((a) => a.uri).filter(Boolean)
+      const previous = step.photos
+      // Optimistic local preview while uploading to Storage
+      const preview = [...previous, ...localUris].slice(0, 5)
+      patch({ photos: preview, photo: preview[0] || null })
+
+      try {
+        const storage = getMediaStorage()
+        const uploaded: string[] = []
+        for (const uri of localUris) {
+          const res = await storage.upload({
+            kind: 'parcours-step',
+            source: { kind: 'uri', uri },
+          })
+          uploaded.push(res.url)
+        }
+        const next = [...previous, ...uploaded].slice(0, 5)
+        patch({ photos: next, photo: next[0] || null })
+      } catch (uploadErr) {
+        patch({ photos: previous, photo: previous[0] || null })
+        throw uploadErr
+      }
     } catch (e) {
       setHint(e instanceof Error ? e.message : 'Galerie indisponible')
     } finally {

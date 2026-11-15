@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   canPublish,
   citySlugDisplayNameFr,
+  ensureRemoteMediaUrl,
+  ensureRemoteMediaUrls,
   groupItemsByDay,
   itineraryBadgeLabel,
   type Itinerary,
@@ -26,6 +28,7 @@ import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { coverUri } from '../lib/coverUri'
 import { getApi } from '../lib/client'
+import { getMediaStorage } from '../lib/media'
 import { invalidateParcoursCatalog } from '../lib/parcoursCache'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import {
@@ -154,26 +157,48 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
       Alert.alert('Ajoute au moins un lieu avant de publier.')
       return
     }
-    const itemsPayload = draftToPayload(session.steps)
-    const total = sumStepBudgets(session.steps)
-    const intro = `Parcours à ${citySlugDisplayNameFr(session.city_slug) || session.city_slug}.`
-    const probe = {
-      title: session.title,
-      city_slug: session.city_slug,
-      cover_image: session.cover_image,
-      intro,
-      slug: 'ok',
-    } as unknown as Itinerary
-    if (!canPublish(probe, itemsPayload as unknown as ItineraryItem[])) {
-      Alert.alert(
-        'Pas encore publiable',
-        'Il manque titre, couverture ou au moins une étape.',
-      )
-      return
-    }
 
     setSaving(true)
     try {
+      // Safety net: any leftover file:// → Supabase Storage before API
+      const storage = getMediaStorage()
+      const cover_image = await ensureRemoteMediaUrl(
+        storage,
+        session.cover_image,
+        'parcours-cover',
+      )
+      const stepsRemote: DraftStep[] = []
+      for (const s of session.steps) {
+        const photos = await ensureRemoteMediaUrls(
+          storage,
+          s.photos.length ? s.photos : s.photo ? [s.photo] : [],
+          'parcours-step',
+        )
+        stepsRemote.push({
+          ...s,
+          photos,
+          photo: photos[0] || null,
+        })
+      }
+
+      const itemsPayload = draftToPayload(stepsRemote)
+      const total = sumStepBudgets(stepsRemote)
+      const intro = `Parcours à ${citySlugDisplayNameFr(session.city_slug) || session.city_slug}.`
+      const probe = {
+        title: session.title,
+        city_slug: session.city_slug,
+        cover_image,
+        intro,
+        slug: 'ok',
+      } as unknown as Itinerary
+      if (!canPublish(probe, itemsPayload as unknown as ItineraryItem[])) {
+        Alert.alert(
+          'Pas encore publiable',
+          'Il manque titre, couverture ou au moins une étape.',
+        )
+        return
+      }
+
       if (session.editing_id) {
         const editId = session.editing_id
         const needPublish = session.editing_status !== 'published'
@@ -181,14 +206,13 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
           id: editId,
           title: session.title,
           city_slug: session.city_slug,
-          cover_image: session.cover_image,
+          cover_image,
           occasions: session.occasions,
         } as Itinerary
-        // Navigue dès que l’update part — sensation instantanée
         const patchPromise = getApi().adminUpdateParcours(editId, {
           title: session.title,
           city_slug: session.city_slug,
-          cover_image: session.cover_image,
+          cover_image,
           intro,
           budget_estimate_eur: total,
           budget_basis: 'per_person',
@@ -226,7 +250,7 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
       const res = await getApi().adminPublishNewParcours({
         title: session.title,
         city_slug: session.city_slug,
-        cover_image: session.cover_image,
+        cover_image,
         intro,
         budget_estimate_eur: total,
         budget_basis: 'per_person',
