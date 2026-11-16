@@ -3,7 +3,10 @@ import {
   ITINERARY_DURATION_LABELS,
   ITINERARY_OCCASION_LABELS,
   formatDurationMinutes,
+  idealLabelFr,
+  transportLabelFr,
 } from './labels'
+import { paceLabelFr } from './popContent'
 import {
   arrivalCodesForParcoursCitySlug,
   isParcoursCityWithoutFlightHub,
@@ -180,6 +183,75 @@ export function itineraryInfoChips(it: Itinerary): string[] {
   return chips
 }
 
+/**
+ * Hero meta légère (Next-like) — pas de budget (réservé aux facts body).
+ * durée · N stops · transport · idéal
+ */
+export function itineraryHeroMetaChips(it: Itinerary): string[] {
+  const chips: string[] = []
+  if (it.duration_kind) {
+    chips.push(
+      ITINERARY_DURATION_LABELS[
+        it.duration_kind as keyof typeof ITINERARY_DURATION_LABELS
+      ] || String(it.duration_kind),
+    )
+  }
+  const items = it.itinerary_items || []
+  if (items.length > 0) {
+    chips.push(`${items.length} stop${items.length > 1 ? 's' : ''}`)
+  }
+  const transport = (it.transport_modes || [])[0]
+  const transportLabel = transportLabelFr(transport)
+  if (transportLabel) chips.push(transportLabel)
+  const idealRaw =
+    (it.ideal_for || []).length > 0
+      ? it.ideal_for![0]
+      : (it.occasions || [])[0]
+  const ideal = idealLabelFr(idealRaw)
+  if (ideal) chips.push(ideal)
+  return chips
+}
+
+export type ItineraryPopFact = { label: string; value: string }
+
+/**
+ * Facts body Next-shaped (une seule fois) : Durée · Budget · Rythme · Idéal.
+ */
+export function buildItineraryPopFacts(it: Itinerary): ItineraryPopFact[] {
+  const facts: ItineraryPopFact[] = []
+  if (it.duration_kind) {
+    facts.push({
+      label: 'Durée',
+      value:
+        ITINERARY_DURATION_LABELS[
+          it.duration_kind as keyof typeof ITINERARY_DURATION_LABELS
+        ] || String(it.duration_kind),
+    })
+  }
+  const n = normalizeItineraryBudgetEur(it.budget_estimate_eur)
+  if (n > 0) {
+    facts.push({
+      label: 'Budget',
+      value: `≈ ${Math.round(n)} € / jour (estimé)`,
+    })
+  } else if (it.budget_estimate_eur != null || it.budget_basis) {
+    facts.push({ label: 'Budget', value: 'Gratuit' })
+  }
+  const pace = paceLabelFr(it.pace)
+  if (pace) {
+    facts.push({ label: 'Rythme', value: pace })
+  }
+  const idealRaw =
+    (it.ideal_for || []).length > 0
+      ? it.ideal_for![0]
+      : (it.occasions || [])[0]
+  const ideal = idealLabelFr(idealRaw)
+  if (ideal) {
+    facts.push({ label: 'Idéal', value: ideal })
+  }
+  return facts.slice(0, 4)
+}
+
 /** Budget parcours : vide / null → 0 (obligatoire côté front) = Gratuit. */
 export function normalizeItineraryBudgetEur(
   value: unknown,
@@ -225,11 +297,24 @@ export function buildItineraryMarkerTiles(it: Itinerary): ItineraryMarkerTile[] 
   if (budget) {
     tiles.push({ id: 'budget', label: 'Budget', detail: budget.replace(' sur place', '').trim() })
   }
-  if ((it.occasions || []).includes('soleil')) {
-    tiles.push({ id: 'weather', label: 'Idéal', detail: 'Beau temps' })
-  } else if ((it.occasions || []).includes('pluie')) {
-    tiles.push({ id: 'weather', label: 'Idéal', detail: 'Jour de pluie' })
+  // Fill remaining slots with editorial ideal / pace (prefer over bare weather).
+  const idealRaw =
+    (it.ideal_for || []).length > 0
+      ? it.ideal_for![0]
+      : (it.occasions || []).includes('soleil')
+        ? 'soleil'
+        : (it.occasions || []).includes('pluie')
+          ? 'pluie'
+          : (it.occasions || [])[0]
+  const ideal = idealLabelFr(idealRaw)
+  if (ideal && tiles.length < 4) {
+    tiles.push({ id: 'ideal', label: 'Idéal', detail: ideal })
   }
+  const pace = paceLabelFr(it.pace)
+  if (pace && tiles.length < 4) {
+    tiles.push({ id: 'pace', label: 'Rythme', detail: pace })
+  }
+
   return tiles.slice(0, 4)
 }
 

@@ -227,7 +227,9 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
     'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1920&q=90&fm=jpg'
   const cityLabel =
     citySlugDisplayNameFr(itin.city_slug) || itin.city_slug || ''
-  const chips = [cityLabel, ...itineraryInfoChips(itin)].filter(Boolean) as string[]
+  const chips = [cityLabel, ...itineraryInfoChips(itin)].filter(
+    Boolean,
+  ) as string[]
   const phaseLabel = itineraryOccasionPhaseLabel(itin)
   const dateLabel = itineraryDatedLabelFr(itin)
   const markers = buildItineraryMarkerTiles(itin)
@@ -344,11 +346,6 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
             </View>
           ) : null}
 
-          <ItineraryEditorialSections
-            itinerary={itin}
-            cityLabel={cityLabel}
-          />
-
           <Text style={styles.sectionTitle}>Les étapes</Text>
           {loadingSteps && !items.length ? (
             <View style={{ gap: 12 }}>
@@ -380,6 +377,12 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
               ))}
             </View>
           ))}
+
+          <ItineraryEditorialSections
+            itinerary={itin}
+            cityLabel={cityLabel}
+            sections="blocks"
+          />
         </View>
       </ItineraryDetailChrome>
 

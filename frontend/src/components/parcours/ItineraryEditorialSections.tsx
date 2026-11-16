@@ -1,61 +1,70 @@
 import {
+  buildItineraryPopFacts,
   idealLabelFr,
-  paceLabelFr,
   parseFaq,
   parseStay,
   parseTips,
   sanitizeUserFacingText,
   type Itinerary,
+  type ItineraryPopFact,
 } from '@waypop/shared'
 
 type Props = {
   itinerary: Itinerary
   cityLabel?: string | null
+  /** facts = Next-like row; blocks = stay/tips/faq; all = both (legacy). */
+  sections?: 'facts' | 'blocks' | 'all'
 }
 
-/** Stay / tips / FAQ / pace·idéal facts — mirrors Next Pop editorial blocks. */
-export function ItineraryEditorialSections({ itinerary, cityLabel }: Props) {
-  const stay = parseStay(itinerary.stay)
-  const tips = parseTips(itinerary.tips)
-  const faq = parseFaq(itinerary.faq)
-  const pace = paceLabelFr(itinerary.pace)
-  const ideal = idealLabelFr((itinerary.ideal_for || [])[0] || '')
-  const budget =
-    itinerary.budget_estimate_eur != null &&
-    Number(itinerary.budget_estimate_eur) > 0
-      ? `≈ ${Math.round(Number(itinerary.budget_estimate_eur))} € / jour`
-      : null
+function FactsRow({ facts }: { facts: ItineraryPopFact[] }) {
+  if (!facts.length) return null
+  return (
+    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {facts.map((f) => (
+        <div key={f.label} className="rounded-2xl bg-[#F7F4EF] px-3.5 py-3">
+          <dt className="text-[10px] font-bold uppercase tracking-wide text-[#A3988C]">
+            {f.label}
+          </dt>
+          <dd className="mt-1 text-sm font-bold text-[#1A120E]">{f.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
 
-  const facts = [
-    pace ? { label: 'Rythme', value: pace } : null,
-    budget ? { label: 'Budget', value: budget } : null,
-    ideal ? { label: 'Idéal', value: ideal } : null,
-  ].filter(Boolean) as { label: string; value: string }[]
+/** Stay / tips / FAQ / facts — mirrors Next Pop editorial order when split. */
+export function ItineraryEditorialSections({
+  itinerary,
+  cityLabel,
+  sections = 'all',
+}: Props) {
+  const showFacts = sections === 'facts' || sections === 'all'
+  const showBlocks = sections === 'blocks' || sections === 'all'
 
-  const hasAny = facts.length > 0 || stay || tips.length > 0 || faq.length > 0
+  const facts = showFacts ? buildItineraryPopFacts(itinerary) : []
+  const stay = showBlocks ? parseStay(itinerary.stay) : null
+  const tips = showBlocks ? parseTips(itinerary.tips) : []
+  const faq = showBlocks ? parseFaq(itinerary.faq) : []
+
+  const hasAny =
+    facts.length > 0 || stay || tips.length > 0 || faq.length > 0
   if (!hasAny) return null
 
+  const idealOne = idealLabelFr(
+    (itinerary.ideal_for || [])[0] || (itinerary.occasions || [])[0],
+  )
   const stayTitle = cityLabel
-    ? `Où dormir à ${cityLabel}`
+    ? idealOne
+      ? `Où dormir à ${cityLabel} pour une ${idealOne.toLowerCase()}`
+      : `Où dormir à ${cityLabel}`
     : 'Où dormir'
+  const faqTitle = cityLabel
+    ? `Questions fréquentes sur un week-end à ${cityLabel}`
+    : 'Questions fréquentes'
 
   return (
     <div className="space-y-7">
-      {facts.length > 0 ? (
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {facts.map((f) => (
-            <div
-              key={f.label}
-              className="rounded-2xl bg-[#F7F4EF] px-3.5 py-3"
-            >
-              <dt className="text-[10px] font-bold uppercase tracking-wide text-[#A3988C]">
-                {f.label}
-              </dt>
-              <dd className="mt-1 text-sm font-bold text-[#1A120E]">{f.value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
+      {showFacts ? <FactsRow facts={facts} /> : null}
 
       {stay ? (
         <section className="space-y-2">
@@ -111,9 +120,7 @@ export function ItineraryEditorialSections({ itinerary, cityLabel }: Props) {
           <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#A3988C]">
             Questions
           </p>
-          <h2 className="text-lg font-bold text-[#1A120E]">
-            Questions fréquentes
-          </h2>
+          <h2 className="text-lg font-bold text-[#1A120E]">{faqTitle}</h2>
           <div className="divide-y divide-[#EDE8E1] border-y border-[#EDE8E1]">
             {faq.map((item, i) => (
               <details key={i} className="group py-3.5">

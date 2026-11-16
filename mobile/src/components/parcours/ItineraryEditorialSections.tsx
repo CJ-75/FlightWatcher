@@ -1,54 +1,58 @@
 import React from 'react'
 import { View, Text, StyleSheet } from 'react-native'
 import {
+  buildItineraryPopFacts,
   idealLabelFr,
-  paceLabelFr,
   parseFaq,
   parseStay,
   parseTips,
   sanitizeUserFacingText,
   type Itinerary,
+  type ItineraryPopFact,
 } from '@waypop/shared'
 import { colors, fonts, radius } from '../../theme'
 
 type Props = {
   itinerary: Itinerary
   cityLabel?: string | null
+  /** facts = Next-like row; blocks = stay/tips/faq; all = both (legacy). */
+  sections?: 'facts' | 'blocks' | 'all'
 }
 
-export function ItineraryEditorialSections({ itinerary, cityLabel }: Props) {
-  const stay = parseStay(itinerary.stay)
-  const tips = parseTips(itinerary.tips)
-  const faq = parseFaq(itinerary.faq)
-  const pace = paceLabelFr(itinerary.pace)
-  const ideal = idealLabelFr((itinerary.ideal_for || [])[0] || '')
-  const budget =
-    itinerary.budget_estimate_eur != null &&
-    Number(itinerary.budget_estimate_eur) > 0
-      ? `≈ ${Math.round(Number(itinerary.budget_estimate_eur))} € / jour`
-      : null
+function FactsRow({ facts }: { facts: ItineraryPopFact[] }) {
+  if (!facts.length) return null
+  return (
+    <View style={styles.facts}>
+      {facts.map((f) => (
+        <View key={f.label} style={styles.fact}>
+          <Text style={styles.factLabel}>{f.label}</Text>
+          <Text style={styles.factValue}>{f.value}</Text>
+        </View>
+      ))}
+    </View>
+  )
+}
 
-  const facts = [
-    pace ? { label: 'Rythme', value: pace } : null,
-    budget ? { label: 'Budget', value: budget } : null,
-    ideal ? { label: 'Idéal', value: ideal } : null,
-  ].filter(Boolean) as { label: string; value: string }[]
+export function ItineraryEditorialSections({
+  itinerary,
+  cityLabel,
+  sections = 'all',
+}: Props) {
+  const showFacts = sections === 'facts' || sections === 'all'
+  const showBlocks = sections === 'blocks' || sections === 'all'
 
-  const hasAny = facts.length > 0 || stay || tips.length > 0 || faq.length > 0
+  const facts = showFacts ? buildItineraryPopFacts(itinerary) : []
+  const stay = showBlocks ? parseStay(itinerary.stay) : null
+  const tips = showBlocks ? parseTips(itinerary.tips) : []
+  const faq = showBlocks ? parseFaq(itinerary.faq) : []
+
+  const hasAny =
+    facts.length > 0 || stay || tips.length > 0 || faq.length > 0
   if (!hasAny) return null
 
   return (
     <View style={styles.wrap}>
-      {facts.length > 0 ? (
-        <View style={styles.facts}>
-          {facts.map((f) => (
-            <View key={f.label} style={styles.fact}>
-              <Text style={styles.factLabel}>{f.label}</Text>
-              <Text style={styles.factValue}>{f.value}</Text>
-            </View>
-          ))}
-        </View>
-      ) : null}
+      {showFacts ? <FactsRow facts={facts} /> : null}
 
       {stay ? (
         <View style={styles.section}>

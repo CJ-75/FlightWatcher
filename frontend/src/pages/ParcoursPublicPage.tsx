@@ -2,12 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   buildItineraryMapsUrl,
-  buildItineraryMarkerTiles,
   buildItinerarySticky,
   citySlugDisplayNameFr,
   cityImageUrl,
   itineraryDatedLabelFr,
-  itineraryInfoChips,
+  itineraryHeroMetaChips,
   itineraryOccasionPhaseLabel,
   resolveParcoursCoverUrl,
   sanitizeUserFacingText,
@@ -26,7 +25,6 @@ import { getCurrentUser } from '../lib/supabase'
 import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
 import { ItineraryEditorialSections } from '../components/parcours/ItineraryEditorialSections'
-import { ItineraryMarkerTiles } from '../components/parcours/ItineraryMarkerTiles'
 import { ItineraryStepsTimeline } from '../components/parcours/ItineraryStepsTimeline'
 import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
 import { peekConfigFlag } from '../lib/configFlags'
@@ -226,11 +224,17 @@ export default function ParcoursPublicPage() {
       width: 1920,
     }) || cityImageUrl('paris')
   const cityLabel = citySlugDisplayNameFr(itin.city_slug) || itin.city_slug
-  const chips = [cityLabel, ...itineraryInfoChips(itin)].filter(Boolean) as string[]
+  const chips = [cityLabel, ...itineraryHeroMetaChips(itin)].filter(
+    Boolean,
+  ) as string[]
   const phaseLabel = itineraryOccasionPhaseLabel(itin)
   const dateLabel = itineraryDatedLabelFr(itin)
-  const markers = buildItineraryMarkerTiles(itin)
   const items = (itin.itinerary_items || []) as ItineraryItem[]
+  const dayCount = new Set(items.map((it) => it.day_offset ?? 0)).size || 1
+  const h2Programme =
+    dayCount === 1
+      ? `Programme d’une journée à ${cityLabel}`
+      : `Programme de ${dayCount} jours à ${cityLabel}`
   const sticky = buildItinerarySticky({
     itinerary: itin,
     userCitySlug: userCity,
@@ -368,27 +372,37 @@ export default function ParcoursPublicPage() {
         stickyCta={sticky.ctaLabel}
         onStickyCta={() => void onSticky()}
       >
-        <div className="space-y-7">
+        <div className="space-y-8">
           {itin.intro ? (
             <p className="text-[15px] leading-relaxed text-[#3D342C] whitespace-pre-line">
               {itin.intro}
             </p>
           ) : null}
 
-          <ItineraryMarkerTiles tiles={markers} />
-
           <ItineraryEditorialSections
             itinerary={itin}
             cityLabel={cityLabel}
+            sections="facts"
           />
 
           <section>
-            <h2 className="mb-4 text-lg font-bold text-[#1A120E]">Les étapes</h2>
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#A3988C]">
+              Itinéraire
+            </p>
+            <h2 className="mb-4 mt-1 text-lg font-bold text-[#1A120E]">
+              {h2Programme}
+            </h2>
             <ItineraryStepsTimeline
               items={items}
               onBookActivity={openActivity}
             />
           </section>
+
+          <ItineraryEditorialSections
+            itinerary={itin}
+            cityLabel={cityLabel}
+            sections="blocks"
+          />
         </div>
       </ItineraryDetailChrome>
 

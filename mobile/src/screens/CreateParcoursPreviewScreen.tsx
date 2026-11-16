@@ -53,6 +53,29 @@ const MOMENT_FR: Record<string, string> = {
   evening: 'Soir',
 }
 
+/** Après publish : détail Pop, retour ← Explorer (pas l’éditeur). */
+function openPublishedDetail(
+  navigation: Props['navigation'],
+  opts: {
+    itineraryId: string
+    preview: RootStackParamList['ItineraryDetail']['preview']
+  },
+) {
+  navigation.reset({
+    index: 1,
+    routes: [
+      { name: 'Main', params: { screen: 'Deals' } },
+      {
+        name: 'ItineraryDetail',
+        params: {
+          itineraryId: opts.itineraryId,
+          preview: opts.preview,
+        },
+      },
+    ],
+  })
+}
+
 function sessionToItinerary(
   title: string,
   citySlug: string,
@@ -322,7 +345,7 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
       clearParcoursCreateSession()
       invalidateParcoursCatalog()
       const id = String(published.id)
-      navigation.replace('ItineraryDetail', {
+      openPublishedDetail(navigation, {
         itineraryId: published?.slug || id,
         preview: {
           id: published.id,
