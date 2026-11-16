@@ -9,6 +9,7 @@ export function prefetchAdminRoute(path: string) {
     '/admin/onboarding': () => import('../pages/OnboardingPage'),
     '/admin/activite': () => import('../pages/ActivitePage'),
     '/admin/parcours': () => import('../pages/ParcoursAdminPage'),
+    '/admin/seo': () => import('../pages/SeoPage'),
     '/admin/activities': () => import('../pages/ActivitiesAdminPage'),
     '/admin/occasions': () => import('../pages/OccasionsPage'),
     '/admin/planner': () => import('../pages/PlannerAdminPage'),

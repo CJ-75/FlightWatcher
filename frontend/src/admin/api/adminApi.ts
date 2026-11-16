@@ -225,6 +225,23 @@ export const adminApi = {
   productFunnel: (days = 14) =>
     adminFetch('/api/admin/product-funnel', { query: { days } }),
   parcoursQuality: () => adminFetch('/api/admin/parcours-quality'),
+  seoDashboard: () => adminFetch('/api/admin/seo'),
+  seoUpsertCity: (
+    citySlug: string,
+    body: { indexable?: boolean; notes?: string | null },
+  ) =>
+    adminFetch(`/api/admin/seo/cities/${encodeURIComponent(citySlug)}`, {
+      method: 'PATCH',
+      body,
+    }),
+  seoRevalidate: (opts?: { city_slug?: string; slug?: string }) =>
+    adminFetch('/api/admin/seo/revalidate', {
+      method: 'POST',
+      body: {
+        city_slug: opts?.city_slug || null,
+        slug: opts?.slug || null,
+      },
+    }),
   userTimeline: (userId: string) =>
     adminFetch(`/api/admin/users/${encodeURIComponent(userId)}/timeline`),
   addUserNote: (userId: string, note: string) =>

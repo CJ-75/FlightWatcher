@@ -52,8 +52,18 @@ export function getParcoursCreateSession(): ParcoursCreateSession | null {
   return session
 }
 
+/** Édition locale d’un pop déjà publié (pas un vrai brouillon à reprendre via +). */
+export function isPublishedEditSession(
+  s: ParcoursCreateSession | null = session,
+): boolean {
+  return !!s?.editing_id && String(s.editing_status || '') === 'published'
+}
+
+/** Brouillon à reprendre via + — ignore les éditions d’un déjà publié. */
 export function hasParcoursCreateDraft(): boolean {
-  return session != null
+  if (!session) return false
+  if (isPublishedEditSession(session)) return false
+  return true
 }
 
 export function isEditingParcours(): boolean {
@@ -216,11 +226,19 @@ export function clearParcoursCreateSession(): void {
   persistDisk()
 }
 
+/**
+ * Prépare le + : si le slot est une édition d’un déjà publié, on libère
+ * pour un vrai nouveau create (pas d’écran « brouillon »).
+ */
+export function prepareParcoursCreateFromFab(): void {
+  if (isPublishedEditSession(session)) clearParcoursCreateSession()
+}
+
 /** Ouvre l’écran adapté pour reprendre le brouillon. */
 export function resumeParcoursCreateRoute():
   | 'CreateParcours'
   | 'CreateParcoursSteps' {
-  if (!session) return 'CreateParcours'
+  if (!session || isPublishedEditSession(session)) return 'CreateParcours'
   if (session.steps.length > 0) return 'CreateParcoursSteps'
   return 'CreateParcours'
 }

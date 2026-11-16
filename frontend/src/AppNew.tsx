@@ -72,6 +72,9 @@ const ParcoursAdminPage = lazy(() =>
     default: m.ParcoursAdminPage,
   })),
 )
+const SeoPage = lazy(() =>
+  import('./admin/pages/SeoPage').then((m) => ({ default: m.SeoPage })),
+)
 const ParcoursEditorPage = lazy(() =>
   import('./admin/pages/ParcoursEditorPage').then((m) => ({
     default: m.ParcoursEditorPage,
@@ -160,6 +163,7 @@ function App() {
           <Route path="activities" element={<ActivitiesAdminPage />} />
           <Route path="parcours" element={<ParcoursAdminPage />} />
           <Route path="parcours/:itineraryId" element={<ParcoursEditorPage />} />
+          <Route path="seo" element={<SeoPage />} />
           <Route path="planner" element={<PlannerAdminPage />} />
           <Route path="digests" element={<DigestsPage />} />
           <Route path="status" element={<StatusPage />} />

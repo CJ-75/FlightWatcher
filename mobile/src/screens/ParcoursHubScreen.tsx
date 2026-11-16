@@ -24,6 +24,7 @@ import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import {
   hasParcoursCreateDraft,
   hydrateParcoursCreateSession,
+  prepareParcoursCreateFromFab,
   resumeParcoursCreateRoute,
   subscribeParcoursCreateSession,
 } from '../lib/parcoursCreateSession'
@@ -97,6 +98,7 @@ export function ParcoursHubScreen() {
   }, [windowWidth])
 
   const openCreateOrResume = () => {
+    prepareParcoursCreateFromFab()
     const route = resumeParcoursCreateRoute()
     if (route === 'CreateParcoursSteps') {
       navigation.navigate('CreateParcoursSteps')
@@ -107,9 +109,9 @@ export function ParcoursHubScreen() {
 
   const tabs = (
     [
-      { id: 'parcours' as const, label: 'Parcours' },
+      { id: 'parcours' as const, label: 'Pops' },
       ...(canCreate
-        ? [{ id: 'mes' as const, label: 'Mes parcours' }]
+        ? [{ id: 'mes' as const, label: 'Mes pops' }]
         : []),
       { id: 'sejours' as const, label: 'Séjours' },
     ] as const

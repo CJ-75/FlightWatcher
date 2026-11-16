@@ -23,6 +23,7 @@ const GROUPS: Array<{
     label: 'Contenu',
     items: [
       { to: '/admin/parcours', label: 'Parcours', ico: 'P' },
+      { to: '/admin/seo', label: 'SEO', ico: 'G' },
       { to: '/admin/activities', label: 'Activités', ico: 'V' },
       { to: '/admin/occasions', label: 'Occasions séjours', ico: 'S' },
     ],

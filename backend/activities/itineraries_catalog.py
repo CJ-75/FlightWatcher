@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
@@ -505,6 +506,173 @@ def is_city_indexable(supabase, city_slug: str) -> bool:
     except Exception as e:
         logger.warning("is_city_indexable: %s", e)
         return False
+
+
+def upsert_pop_index_city(
+    supabase,
+    city_slug: str,
+    *,
+    indexable: Optional[bool] = None,
+    notes: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Create/update pop_index_cities row (admin SEO tab)."""
+    from datetime import datetime, timezone
+
+    city = str(city_slug or "").strip().lower()
+    if not city or not re.match(r"^[a-z0-9-]{2,64}$", city):
+        return {"ok": False, "error": "invalid_city_slug"}
+    if not supabase:
+        return {"ok": False, "error": "no_supabase"}
+
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        existing = (
+            supabase.table("pop_index_cities")
+            .select("city_slug,indexable,opened_at,notes,updated_at")
+            .eq("city_slug", city)
+            .limit(1)
+            .execute()
+        )
+        prev = (existing.data or [None])[0]
+        payload: Dict[str, Any] = {"city_slug": city, "updated_at": now}
+        if notes is not None:
+            payload["notes"] = str(notes)[:2000] if notes else None
+        if indexable is not None:
+            payload["indexable"] = bool(indexable)
+            was_open = bool(prev.get("indexable")) if prev else False
+            if bool(indexable) and not was_open:
+                payload["opened_at"] = now
+            elif not prev:
+                payload["opened_at"] = now if bool(indexable) else None
+        elif not prev:
+            payload["indexable"] = False
+
+        res = (
+            supabase.table("pop_index_cities")
+            .upsert(payload, on_conflict="city_slug")
+            .execute()
+        )
+        row = (res.data or [payload])[0]
+        return {"ok": True, "city": _serialize(row)}
+    except Exception as e:
+        logger.warning("upsert_pop_index_city: %s", e)
+        return {"ok": False, "error": str(e)}
+
+
+def admin_seo_dashboard(supabase) -> Dict[str, Any]:
+    """Cities indexation + published pops SEO gaps for admin tab."""
+    if not supabase:
+        return {"ok": False, "error": "no_supabase", "cities": [], "pops": []}
+
+    cities = list_pop_index_cities(supabase)
+    open_set = {
+        str(c.get("city_slug") or "").lower()
+        for c in cities
+        if c.get("indexable")
+    }
+
+    pops: List[Dict[str, Any]] = []
+    published_by_city: Dict[str, int] = {}
+    try:
+        res = (
+            supabase.table("itineraries")
+            .select(
+                "id,slug,title,city_slug,status,is_demo,featured,"
+                "target_query,intro,cover_image,photo_license,verified_at,"
+                "indexable_override,canonical_itinerary_id,updated_at,published_at"
+            )
+            .eq("status", "published")
+            .eq("is_demo", False)
+            .order("city_slug")
+            .limit(500)
+            .execute()
+        )
+        for raw in res.data or []:
+            row = _serialize(raw)
+            city = str(row.get("city_slug") or "").strip().lower()
+            if city:
+                published_by_city[city] = published_by_city.get(city, 0) + 1
+            gaps: List[str] = []
+            intro_len = len(str(row.get("intro") or "").strip())
+            if intro_len < 80:
+                gaps.append("intro")
+            if not str(row.get("cover_image") or "").strip():
+                gaps.append("cover")
+            if not str(row.get("photo_license") or "").strip():
+                gaps.append("license")
+            if not str(row.get("target_query") or "").strip():
+                gaps.append("target_query")
+            if not row.get("verified_at"):
+                gaps.append("verified_at")
+            if row.get("canonical_itinerary_id"):
+                gaps.append("canonical")
+            if row.get("indexable_override") is False:
+                gaps.append("override_off")
+            city_open = city in open_set
+            if not city_open and row.get("indexable_override") is not True:
+                gaps.append("city_closed")
+            pops.append(
+                {
+                    "id": row.get("id"),
+                    "slug": row.get("slug"),
+                    "title": row.get("title"),
+                    "city_slug": city,
+                    "featured": bool(row.get("featured")),
+                    "target_query": row.get("target_query"),
+                    "intro_len": intro_len,
+                    "gaps": gaps,
+                    "seo_ready": len(gaps) == 0,
+                    "updated_at": row.get("updated_at"),
+                }
+            )
+    except Exception as e:
+        logger.warning("admin_seo_dashboard pops: %s", e)
+        return {
+            "ok": False,
+            "error": str(e),
+            "cities": cities,
+            "pops": [],
+            "open_cities": sorted(open_set),
+        }
+
+    city_rows = []
+    for c in cities:
+        slug = str(c.get("city_slug") or "").lower()
+        city_rows.append(
+            {
+                **_serialize(c),
+                "published_count": published_by_city.get(slug, 0),
+            }
+        )
+    # Cities with pops but no pop_index_cities row
+    known = {str(c.get("city_slug") or "").lower() for c in cities}
+    for slug, n in sorted(published_by_city.items()):
+        if slug and slug not in known:
+            city_rows.append(
+                {
+                    "city_slug": slug,
+                    "indexable": False,
+                    "opened_at": None,
+                    "notes": None,
+                    "updated_at": None,
+                    "published_count": n,
+                    "missing_row": True,
+                }
+            )
+
+    ready = sum(1 for p in pops if p.get("seo_ready"))
+    return {
+        "ok": True,
+        "cities": city_rows,
+        "pops": pops,
+        "open_cities": sorted(open_set),
+        "stats": {
+            "cities_total": len(city_rows),
+            "cities_open": len(open_set),
+            "pops_published": len(pops),
+            "pops_seo_ready": ready,
+        },
+    }
 
 
 def list_sitemap_pops(supabase) -> Dict[str, Any]:

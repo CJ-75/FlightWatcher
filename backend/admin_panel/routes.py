@@ -158,6 +158,75 @@ async def admin_parcours_quality(request: Request):
     return overview_mod.parcours_quality()
 
 
+@router.get("/seo")
+@require_admin
+async def admin_seo_dashboard(request: Request):
+    """Pop SEO: city indexation + published pops gaps."""
+    from activities.itineraries_catalog import admin_seo_dashboard
+    from supabase_client import get_supabase_service_client
+
+    return admin_seo_dashboard(get_supabase_service_client())
+
+
+class SeoCityBody(BaseModel):
+    indexable: Optional[bool] = None
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+@router.patch("/seo/cities/{city_slug}")
+@require_admin
+async def admin_seo_upsert_city(
+    request: Request, city_slug: str, body: SeoCityBody
+):
+    """Open/close a city for Pop indexation (ville par ville)."""
+    from activities.itineraries_catalog import upsert_pop_index_city
+    from supabase_client import get_supabase_service_client
+
+    out = upsert_pop_index_city(
+        get_supabase_service_client(),
+        city_slug,
+        indexable=body.indexable,
+        notes=body.notes,
+    )
+    if not out.get("ok"):
+        raise HTTPException(
+            status_code=400, detail=out.get("error") or "upsert failed"
+        )
+    _audit(
+        request,
+        "seo_city_upsert",
+        target=str(city_slug).lower(),
+        payload={
+            "indexable": body.indexable,
+            "notes_set": body.notes is not None,
+        },
+        result="ok",
+    )
+    return out
+
+
+class SeoRevalidateBody(BaseModel):
+    city_slug: Optional[str] = None
+    slug: Optional[str] = None
+
+
+@router.post("/seo/revalidate")
+@require_admin
+async def admin_seo_revalidate(request: Request, body: SeoRevalidateBody = SeoRevalidateBody()):
+    """Ping Next ISR for a city/slug (or sitemap)."""
+    from routes.pop_public import ping_next_revalidate
+
+    out = ping_next_revalidate(city_slug=body.city_slug, slug=body.slug)
+    _audit(
+        request,
+        "seo_revalidate",
+        target=body.slug or body.city_slug or "sitemap",
+        payload={"city_slug": body.city_slug, "slug": body.slug},
+        result="ok" if out.get("ok") else "fail",
+    )
+    return out
+
+
 @router.get("/users/{user_id}/timeline")
 @require_admin
 async def admin_user_timeline(
