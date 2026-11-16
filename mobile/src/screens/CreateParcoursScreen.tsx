@@ -22,6 +22,10 @@ import {
 } from '@waypop/shared'
 import { ActivityCityPicker } from '../components/ActivityCityPicker'
 import { CreateFlowProgress } from '../components/parcours/CreateFlowProgress'
+import {
+  ParcoursEditorialFields,
+  type ParcoursEditorialValues,
+} from '../components/parcours/ParcoursEditorialFields'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { getMediaStorage } from '../lib/media'
@@ -60,6 +64,35 @@ export function CreateParcoursScreen({ navigation }: Props) {
   })
   const [pickingCover, setPickingCover] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editorial, setEditorial] = useState<ParcoursEditorialValues>(() => ({
+    subtitle: existing?.subtitle || '',
+    intro: existing?.intro || '',
+    pace: existing?.pace || null,
+    ideal_for: existing?.ideal_for ? [...existing.ideal_for] : [],
+    stay_area: existing?.stay_area || '',
+    stay_vibe: existing?.stay_vibe || '',
+    stay_note: existing?.stay_note || '',
+    tipsText: (existing?.tips || []).join('\n'),
+    faq: existing?.faq ? [...existing.faq] : [],
+  }))
+
+  const editorialSessionPatch = useCallback(() => {
+    const tips = editorial.tipsText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+    return {
+      subtitle: editorial.subtitle.trim(),
+      intro: editorial.intro.trim(),
+      pace: editorial.pace,
+      ideal_for: editorial.ideal_for,
+      stay_area: editorial.stay_area.trim(),
+      stay_vibe: editorial.stay_vibe.trim(),
+      stay_note: editorial.stay_note.trim(),
+      tips,
+      faq: editorial.faq.filter((r) => r.q.trim() && r.a.trim()),
+    }
+  }, [editorial])
 
   const cityCover = useMemo(
     () => cityImageUrl(cityLabel || citySlugDisplayNameFr(citySlug) || citySlug),
@@ -132,11 +165,12 @@ export function CreateParcoursScreen({ navigation }: Props) {
         title: t,
         city_slug: citySlug,
         cover_image: cover,
+        ...editorialSessionPatch(),
       })
     }
     if (navigation.canGoBack()) navigation.goBack()
     else navigation.navigate('Main')
-  }, [navigation, title, citySlug, cover])
+  }, [navigation, title, citySlug, cover, editorialSessionPatch])
 
   const abandonDraft = useCallback(() => {
     Alert.alert(
@@ -174,12 +208,88 @@ export function CreateParcoursScreen({ navigation }: Props) {
       city_slug: citySlug,
       cover_image: cover,
       editing_id: existing?.editing_id ?? null,
+      editing_status: existing?.editing_status ?? null,
+      ...editorialSessionPatch(),
     })
-    navigation.replace('CreateParcoursSteps', {
+    navigation.navigate('CreateParcoursSteps', {
       itineraryId: existing?.editing_id || undefined,
       seed: { title: t, city_slug: citySlug, cover_image: cover },
     })
-  }, [title, cover, citySlug, navigation, existing?.editing_id])
+  }, [
+    title,
+    cover,
+    citySlug,
+    navigation,
+    existing?.editing_id,
+    existing?.editing_status,
+    editorialSessionPatch,
+  ])
+
+  const persistIdea = useCallback(() => {
+    const t = title.trim()
+    if (!t || !citySlug.trim()) return false
+    startParcoursCreateSession({
+      title: t,
+      city_slug: citySlug,
+      cover_image: cover,
+      editing_id: existing?.editing_id ?? null,
+      editing_status: existing?.editing_status ?? null,
+      ...editorialSessionPatch(),
+    })
+    return true
+  }, [
+    title,
+    citySlug,
+    cover,
+    existing?.editing_id,
+    existing?.editing_status,
+    editorialSessionPatch,
+  ])
+
+  const onFlowStepPress = useCallback(
+    (n: 1 | 2 | 3) => {
+      if (n === 1) return
+      if (!persistIdea()) {
+        setError('Donne un titre et une ville avant de continuer')
+        return
+      }
+      const s = getParcoursCreateSession()
+      if (n === 2) {
+        navigation.navigate('CreateParcoursSteps', {
+          itineraryId: existing?.editing_id || undefined,
+          seed: {
+            title: title.trim(),
+            city_slug: citySlug,
+            cover_image: cover,
+          },
+        })
+        return
+      }
+      if (!s?.steps?.length) {
+        Alert.alert('Les lieux', 'Ajoute au moins un lieu avant le rendu.')
+        navigation.navigate('CreateParcoursSteps', {
+          itineraryId: existing?.editing_id || undefined,
+        })
+        return
+      }
+      if (!s.occasions?.[0]) {
+        Alert.alert('Tag', 'Choisis un tag sur l’écran des lieux.')
+        navigation.navigate('CreateParcoursSteps', {
+          itineraryId: existing?.editing_id || undefined,
+        })
+        return
+      }
+      navigation.navigate('CreateParcoursPreview')
+    },
+    [
+      persistIdea,
+      navigation,
+      existing?.editing_id,
+      title,
+      citySlug,
+      cover,
+    ],
+  )
 
   if (!allowed) return null
 
@@ -210,7 +320,7 @@ export function CreateParcoursScreen({ navigation }: Props) {
               </Pressable>
             ) : null}
           </View>
-          <CreateFlowProgress step={1} />
+          <CreateFlowProgress step={1} onStepPress={onFlowStepPress} />
         </View>
 
         <ScrollView
@@ -302,6 +412,13 @@ export function CreateParcoursScreen({ navigation }: Props) {
               includeParcoursFrCities
             />
           </View>
+
+          <ParcoursEditorialFields
+            values={editorial}
+            onChange={(patch) =>
+              setEditorial((prev) => ({ ...prev, ...patch }))
+            }
+          />
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
         </ScrollView>

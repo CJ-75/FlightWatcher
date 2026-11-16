@@ -68,7 +68,8 @@ export function createApiMediaStorage(
       } else {
         const name = guessImageFileName(src.fileName || src.uri, 'photo.jpg')
         const type = src.contentType || guessImageContentType(name)
-        // React Native FormData file shape
+        // RN legacy FormData shape — Expo SDK 54+ global fetch may reject this.
+        // Mobile should upload via expo-file-system File.upload instead.
         form.append('file', {
           uri: src.uri,
           name,

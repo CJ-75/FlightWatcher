@@ -472,17 +472,29 @@ function RootNavigator() {
           <Stack.Screen
             name="CreateParcours"
             component={CreateParcoursScreen}
-            options={{ headerShown: false }}
+            options={{
+              headerShown: false,
+              animation: 'fade',
+              animationDuration: 180,
+            }}
           />
           <Stack.Screen
             name="CreateParcoursSteps"
             component={CreateParcoursStepsScreen}
-            options={{ headerShown: false }}
+            options={{
+              headerShown: false,
+              animation: 'fade',
+              animationDuration: 180,
+            }}
           />
           <Stack.Screen
             name="CreateParcoursPreview"
             component={CreateParcoursPreviewScreen}
-            options={{ headerShown: false }}
+            options={{
+              headerShown: false,
+              animation: 'fade',
+              animationDuration: 180,
+            }}
           />
           <Stack.Screen
             name="NotFound"

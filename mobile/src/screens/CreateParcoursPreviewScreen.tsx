@@ -10,6 +10,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
+  buildStayPayload,
   canPublish,
   citySlugDisplayNameFr,
   ensureRemoteMediaUrl,
@@ -213,7 +214,17 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
           title: session.title,
           city_slug: session.city_slug,
           cover_image,
-          intro,
+          subtitle: session.subtitle || null,
+          intro: session.intro?.trim() || intro,
+          pace: session.pace || null,
+          ideal_for: session.ideal_for || [],
+          stay: buildStayPayload({
+            area: session.stay_area,
+            vibe: session.stay_vibe,
+            note: session.stay_note,
+          }),
+          tips: session.tips || [],
+          faq: (session.faq || []).filter((r) => r.q.trim() && r.a.trim()),
           budget_estimate_eur: total,
           budget_basis: 'per_person',
           occasions: session.occasions || [],
@@ -251,7 +262,17 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
         title: session.title,
         city_slug: session.city_slug,
         cover_image,
-        intro,
+        subtitle: session.subtitle || null,
+        intro: session.intro?.trim() || intro,
+        pace: session.pace || null,
+        ideal_for: session.ideal_for || [],
+        stay: buildStayPayload({
+          area: session.stay_area,
+          vibe: session.stay_vibe,
+          note: session.stay_note,
+        }),
+        tips: session.tips || [],
+        faq: (session.faq || []).filter((r) => r.q.trim() && r.a.trim()),
         budget_estimate_eur: total,
         budget_basis: 'per_person',
         occasions: session.occasions || [],
@@ -336,6 +357,10 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
             <CreateFlowProgress
               step={3}
               style={{ marginHorizontal: 0, marginTop: 0 }}
+              onStepPress={(n) => {
+                if (n === 1) navigation.navigate('CreateParcours')
+                else if (n === 2) navigation.navigate('CreateParcoursSteps')
+              }}
             />
             <Text style={styles.previewHint}>
               {editing
@@ -383,7 +408,13 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
           <Text style={styles.navCta}>Fermer</Text>
         </Pressable>
       </View>
-      <CreateFlowProgress step={3} />
+      <CreateFlowProgress
+        step={3}
+        onStepPress={(n) => {
+          if (n === 1) navigation.navigate('CreateParcours')
+          else if (n === 2) navigation.navigate('CreateParcoursSteps')
+        }}
+      />
 
       <ScrollView
         contentContainerStyle={{

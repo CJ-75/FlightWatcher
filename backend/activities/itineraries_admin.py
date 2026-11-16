@@ -424,9 +424,27 @@ def create_and_publish_admin_itinerary(
     title = (_sanitize_text((body or {}).get("title")) or "Nouveau parcours")[:200]
     city_slug = str((body or {}).get("city_slug") or "").strip().lower() or None
     cover_image = (body or {}).get("cover_image")
+    subtitle = _sanitize_text((body or {}).get("subtitle")) or None
     intro = _sanitize_text((body or {}).get("intro"), multiline=True) or ""
     if not intro and city_slug:
         intro = f"Parcours à {city_slug}."
+    pace_raw = (body or {}).get("pace")
+    pace = str(pace_raw).strip() if pace_raw else None
+    if pace and pace not in ("slow", "moderate", "packed"):
+        pace = None
+    ideal_raw = (body or {}).get("ideal_for") or []
+    ideal_for = []
+    if isinstance(ideal_raw, list):
+        ideal_for = [str(x).strip() for x in ideal_raw if str(x).strip()][:8]
+    stay = (body or {}).get("stay")
+    if stay is not None and not isinstance(stay, dict):
+        stay = None
+    tips = (body or {}).get("tips")
+    if tips is not None and not isinstance(tips, list):
+        tips = None
+    faq = (body or {}).get("faq")
+    if faq is not None and not isinstance(faq, list):
+        faq = None
     budget_raw = (body or {}).get("budget_estimate_eur")
     if budget_raw is None or budget_raw == "":
         budget = 0
@@ -485,7 +503,13 @@ def create_and_publish_admin_itinerary(
                 "title": title,
                 "slug": slug,
                 "city_slug": city_slug,
+                "subtitle": subtitle,
                 "intro": intro,
+                "pace": pace,
+                "ideal_for": ideal_for,
+                "stay": stay,
+                "tips": tips if tips is not None else [],
+                "faq": faq if faq is not None else [],
                 "cover_image": cover_image,
                 "budget_estimate_eur": budget,
                 "budget_basis": budget_basis,

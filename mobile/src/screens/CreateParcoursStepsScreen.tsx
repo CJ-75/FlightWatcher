@@ -68,6 +68,13 @@ export function draftToPayload(steps: DraftStep[]) {
     if (typeof s.budget_eur === 'number' && Number.isFinite(s.budget_eur)) {
       meta.budget_eur = s.budget_eur
     }
+    if (
+      typeof s.travel_minutes === 'number' &&
+      Number.isFinite(s.travel_minutes) &&
+      s.travel_minutes >= 0
+    ) {
+      meta.travel_minutes = Math.round(s.travel_minutes)
+    }
     return {
       kind: 'free' as const,
       title: s.title,
@@ -312,7 +319,17 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
           <Text style={styles.navMuted}>Fermer</Text>
         </Pressable>
       </View>
-      <CreateFlowProgress step={2} />
+      <CreateFlowProgress
+        step={2}
+        onStepPress={(n) => {
+          persistLocal(steps)
+          if (n === 1) {
+            navigation.navigate('CreateParcours')
+            return
+          }
+          if (n === 3) goFinalRender()
+        }}
+      />
 
       <ScrollView
           style={styles.scroll}

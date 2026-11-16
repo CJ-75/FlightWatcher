@@ -35,6 +35,8 @@ export type DraftStep = {
   budget_eur: number | null
   /** Conservé pour compat — plus enrichi via Google */
   description: string
+  /** Minutes depuis le stop précédent (meta.travel_minutes). */
+  travel_minutes: number | null
 }
 
 type Props = {
@@ -78,6 +80,7 @@ function emptyStep(): DraftStep {
     lng: null,
     budget_eur: 0,
     description: '',
+    travel_minutes: null,
   }
 }
 
@@ -107,6 +110,11 @@ export function AddParcoursStepSheet({
               : 0,
           moment: initial.moment ?? null,
           description: String(initial.description || ''),
+          travel_minutes:
+            typeof initial.travel_minutes === 'number' &&
+            Number.isFinite(initial.travel_minutes)
+              ? initial.travel_minutes
+              : null,
         }
       : emptyStep()
     setStep(base)
@@ -331,6 +339,24 @@ export function AddParcoursStepSheet({
                 placeholderTextColor={colors.faint}
                 multiline
                 style={styles.noteInput}
+              />
+
+              <View style={styles.line} />
+              <Text style={styles.fieldLabel}>Trajet depuis le stop précédent</Text>
+              <TextInput
+                value={
+                  step.travel_minutes != null ? String(step.travel_minutes) : ''
+                }
+                onChangeText={(t) => {
+                  const raw = t.replace(/[^\d]/g, '')
+                  patch({
+                    travel_minutes: raw ? Number(raw) : null,
+                  })
+                }}
+                placeholder="Minutes (ex. 12)"
+                placeholderTextColor={colors.faint}
+                keyboardType="number-pad"
+                style={styles.titleInput}
               />
 
               <View style={styles.line} />

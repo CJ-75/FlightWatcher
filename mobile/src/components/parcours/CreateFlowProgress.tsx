@@ -1,47 +1,95 @@
-import React from 'react'
-import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
+import React, { useEffect, useRef, useState } from 'react'
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  Animated,
+  LayoutChangeEvent,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native'
 import { colors, fonts, radius, spacing } from '../../theme'
 
 const LABELS = ['L’idée', 'Les lieux', 'Le rendu'] as const
 
 type Props = {
   step: 1 | 2 | 3
+  /** Tap a step to jump (édition / brouillon). */
+  onStepPress?: (step: 1 | 2 | 3) => void
   style?: StyleProp<ViewStyle>
 }
 
-export function CreateFlowProgress({ step, style }: Props) {
+export function CreateFlowProgress({ step, onStepPress, style }: Props) {
+  const [trackW, setTrackW] = useState(0)
+  const slide = useRef(new Animated.Value(step - 1)).current
+
+  useEffect(() => {
+    Animated.spring(slide, {
+      toValue: step - 1,
+      useNativeDriver: true,
+      friction: 9,
+      tension: 120,
+    }).start()
+  }, [step, slide])
+
+  const onTrackLayout = (e: LayoutChangeEvent) => {
+    setTrackW(e.nativeEvent.layout.width)
+  }
+
+  const innerW = Math.max(0, trackW - 8)
+  const cellW = innerW > 0 ? innerW / 3 : 0
+  const translateX =
+    cellW > 0
+      ? slide.interpolate({
+          inputRange: [0, 1, 2],
+          outputRange: [0, cellW, cellW * 2],
+        })
+      : 0
+
   return (
     <View
       style={[styles.wrap, style]}
       accessibilityRole="progressbar"
       accessibilityValue={{ min: 1, max: 3, now: step }}
+      onLayout={onTrackLayout}
     >
+      {cellW > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.thumb,
+            {
+              width: cellW,
+              transform: [{ translateX }],
+            },
+          ]}
+        />
+      ) : null}
       {LABELS.map((label, i) => {
         const n = (i + 1) as 1 | 2 | 3
-        const done = n < step
         const active = n === step
+        const clickable = !!onStepPress && n !== step
         return (
-          <View key={label} style={styles.cell}>
+          <Pressable
+            key={label}
+            disabled={!clickable}
+            style={({ pressed }) => [
+              styles.cell,
+              pressed && clickable && { opacity: 0.75 },
+            ]}
+            onPress={() => onStepPress?.(n)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active, disabled: !clickable }}
+            accessibilityLabel={label}
+          >
             <Text
-              style={[
-                styles.label,
-                done && styles.labelDone,
-                active && styles.labelActive,
-              ]}
+              style={[styles.label, active && styles.labelActive]}
               numberOfLines={1}
             >
               {label}
             </Text>
-            <View style={styles.track}>
-              <View
-                style={[
-                  styles.fill,
-                  done && styles.fillDone,
-                  active && styles.fillActive,
-                ]}
-              />
-            </View>
-          </View>
+          </Pressable>
         )
       })}
     </View>
@@ -51,55 +99,43 @@ export function CreateFlowProgress({ step, style }: Props) {
 const styles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
+    alignItems: 'center',
+    position: 'relative',
     marginTop: 4,
     marginBottom: 14,
     marginHorizontal: spacing.xl,
-    paddingTop: 12,
-    paddingBottom: 10,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    borderRadius: radius.md,
+    padding: 4,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderRadius: radius.full,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.line,
+  },
+  thumb: {
+    position: 'absolute',
+    left: 4,
+    top: 4,
+    bottom: 4,
+    borderRadius: radius.full,
+    backgroundColor: colors.white,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
   },
   cell: {
     flex: 1,
     minWidth: 0,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
   label: {
-    fontFamily: fonts.medium,
+    fontFamily: fonts.semibold,
     fontSize: 12,
     color: colors.faint,
-    marginBottom: 7,
     textAlign: 'center',
-  },
-  labelDone: {
-    fontFamily: fonts.semibold,
-    color: colors.primaryInk,
   },
   labelActive: {
     fontFamily: fonts.bold,
     color: colors.ink,
-  },
-  track: {
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.line,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: '100%',
-    width: 0,
-    borderRadius: 2,
-  },
-  fillDone: {
-    width: '100%',
-    backgroundColor: colors.primaryMuted,
-  },
-  fillActive: {
-    width: '100%',
-    backgroundColor: colors.primary,
   },
 })
