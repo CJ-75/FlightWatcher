@@ -312,6 +312,12 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
         metaChips={chips}
         phaseLabel={phaseLabel}
         dateLabel={dateLabel}
+        authorName={
+          String(itin.author_kind || 'admin') === 'user'
+            ? 'Communauté'
+            : 'Waypop'
+        }
+        authorVerified={String(itin.author_kind || 'admin') !== 'user'}
         onBack={() => navigation.goBack()}
         shareUrl={shareUrl}
         liked={liked}

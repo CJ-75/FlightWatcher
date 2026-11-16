@@ -342,6 +342,12 @@ export default function ParcoursPublicPage() {
         title={itin.title}
         metaChips={chips}
         phaseLabel={phaseLabel}
+        authorName={
+          String(itin.author_kind || 'admin') === 'user'
+            ? 'Communauté'
+            : 'Waypop'
+        }
+        authorVerified={String(itin.author_kind || 'admin') !== 'user'}
         dateLabel={dateLabel}
         onBack={() => navigate('/sejours')}
         liked={liked}

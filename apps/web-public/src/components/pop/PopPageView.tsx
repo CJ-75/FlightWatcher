@@ -15,6 +15,7 @@ import { PopJsonLd } from '@/components/pop/JsonLd'
 import { isPublicImageSrc, PopImage } from '@/components/pop/PopImage'
 import { ShareButton } from '@/components/pop/ShareButton'
 import { LaunchPopCta } from '@/components/pop/LaunchPopCta'
+import { PopAuthor } from '@/components/ui/WaypopMark'
 import { WpEyebrow } from '@/components/ui/WpEyebrow'
 import { WpPopCard } from '@/components/ui/WpPopCard'
 import { WpRule } from '@/components/ui/WpRule'
@@ -211,10 +212,11 @@ export function PopPageView({
             <span className="line-clamp-1 text-white/90">{h1}</span>
           </nav>
 
-          <p className="hidden text-[11px] font-semibold uppercase tracking-brand text-white/75 sm:block">
-            Waypop
-            {verified ? ` · vérifié le ${verified}` : ''}
-          </p>
+          <PopAuthor
+            authorKind={itin.author_kind as string | undefined}
+            verifiedDate={verified}
+            className="mt-0"
+          />
           <h1 className="mt-1 max-w-3xl text-[1.35rem] font-extrabold leading-[1.18] tracking-tight text-white sm:mt-3 sm:text-4xl lg:text-[2.75rem]">
             {h1}
           </h1>

@@ -72,11 +72,9 @@ export function AdminLogin() {
     <div className="fw-login">
       <div className="fw-login-card">
         <div className="fw-login-mark" aria-hidden>
-          F
+          W
         </div>
-        <h1 className="brand">
-          Flight<span>Watcher</span>
-        </h1>
+        <h1 className="brand">Waypop</h1>
         <p className="sub">Espace administrateur — mot de passe uniquement</p>
 
         {error ? <div className="fw-login-error">{error}</div> : null}

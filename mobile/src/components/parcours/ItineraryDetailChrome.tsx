@@ -22,6 +22,9 @@ type Props = {
   phaseLabel?: string
   /** Dated parcours — e.g. « Mercredi 11 novembre » (replaces budget under title) */
   dateLabel?: string | null
+  /** Editorial author — Waypop gets blue verified badge */
+  authorName?: string | null
+  authorVerified?: boolean
   onBack: () => void
   shareUrl?: string
   onLike?: () => void
@@ -37,12 +40,34 @@ type Props = {
   stickyCtaDisabled?: boolean
 }
 
+function VerifiedBadge({ size = 14 }: { size?: number }) {
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: '#1D9BF0',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      accessibilityLabel="Certifié"
+    >
+      <Text style={{ color: '#fff', fontSize: size * 0.55, fontWeight: '800', marginTop: -1 }}>
+        ✓
+      </Text>
+    </View>
+  )
+}
+
 export function ItineraryDetailChrome({
   heroUrl,
   title,
   metaChips,
   phaseLabel = 'Parcours',
   dateLabel,
+  authorName,
+  authorVerified = false,
   onBack,
   shareUrl,
   onLike,
@@ -130,6 +155,12 @@ export function ItineraryDetailChrome({
             <View style={styles.phase}>
               <Text style={styles.phaseText}>{phaseLabel}</Text>
             </View>
+            {authorName ? (
+              <View style={styles.authorRow}>
+                <Text style={styles.authorText}>Par {authorName}</Text>
+                {authorVerified ? <VerifiedBadge /> : null}
+              </View>
+            ) : null}
             <Text style={styles.title}>{title}</Text>
             {chips.length ? (
               <Text style={styles.chips}>{chips.join(' · ')}</Text>
@@ -225,6 +256,18 @@ const styles = StyleSheet.create({
     marginLeft: -1,
   },
   heroCopy: { paddingHorizontal: 20, paddingBottom: 40, gap: 8 },
+  authorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  authorText: {
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.85)',
+  },
   phase: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(255,255,255,0.18)',

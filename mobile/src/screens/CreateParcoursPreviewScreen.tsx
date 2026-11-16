@@ -314,6 +314,8 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
             `${items.length} étape${items.length > 1 ? 's' : ''}`,
           ].filter(Boolean) as string[]}
           phaseLabel={badge || 'Rendu'}
+          authorName="Waypop"
+          authorVerified
           onBack={() => navigation.navigate('CreateParcoursSteps')}
           stickySecondary="Modifier"
           onStickySecondary={() => navigation.navigate('CreateParcoursSteps')}

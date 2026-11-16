@@ -10,6 +10,8 @@ type Props = {
   metaChips?: string[]
   phaseLabel?: string
   dateLabel?: string | null
+  authorName?: string | null
+  authorVerified?: boolean
   onBack: () => void
   onShare?: () => void
   onLike?: () => void
@@ -78,6 +80,8 @@ export function ItineraryDetailChrome({
   metaChips,
   phaseLabel = 'Parcours',
   dateLabel,
+  authorName,
+  authorVerified = false,
   onBack,
   onShare,
   onLike,
@@ -176,6 +180,27 @@ export function ItineraryDetailChrome({
             <span className="inline-flex rounded-full bg-white/18 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/95 backdrop-blur-md ring-1 ring-white/25">
               {phaseLabel}
             </span>
+            {authorName ? (
+              <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/85">
+                <span>Par {authorName}</span>
+                {authorVerified ? (
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 22 22"
+                    aria-label="Certifié"
+                    role="img"
+                  >
+                    <title>Certifié</title>
+                    <circle cx="11" cy="11" r="11" fill="#1D9BF0" />
+                    <path
+                      d="M9.6 14.85 6.4 11.65l1.2-1.2 2 2 4.8-4.8 1.2 1.2-6 6z"
+                      fill="#fff"
+                    />
+                  </svg>
+                ) : null}
+              </p>
+            ) : null}
             <h1 className="max-w-[95%] text-[2.35rem] font-extrabold leading-[1.05] tracking-[-0.02em] text-white drop-shadow sm:text-5xl lg:text-6xl">
               {title}
             </h1>

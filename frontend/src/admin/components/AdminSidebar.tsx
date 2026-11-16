@@ -43,7 +43,7 @@ export function AdminSidebar({ open, onNavigate }: Props) {
   return (
     <aside className={`fw-admin-sidebar${open ? ' open' : ''}`}>
       <div className="fw-admin-brand">
-        Flight<span>Watcher</span>
+        Waypop
         <span className="fw-admin-brand-sub">Console admin</span>
       </div>
       <nav style={{ overflowY: 'auto', flex: 1 }}>
