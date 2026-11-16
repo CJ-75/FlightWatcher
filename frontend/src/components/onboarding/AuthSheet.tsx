@@ -138,7 +138,7 @@ export function AuthSheet({
   const title = authSheetTitle(trigger, { firstName: inviteFirstName })
   const lead =
     step === 'providers'
-      ? 'Choisis comment tu veux continuer — en un geste.'
+      ? 'Connecte-toi pour lancer — Apple, Google ou email.'
       : mode === 'login'
         ? 'Ton email et ton mot de passe, et c’est reparti.'
         : 'On t’envoie un lien magique — pas de mot de passe à retenir.'
