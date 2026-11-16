@@ -11,7 +11,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   buildStayPayload,
-  canPublish,
+  getPublishBlockers,
   citySlugDisplayNameFr,
   ensureRemoteMediaUrl,
   ensureRemoteMediaUrls,
@@ -146,12 +146,33 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
   const badge =
     itineraryBadgeLabel({ occasions: session?.occasions || [] }) || null
 
-  const closeKeepDraft = () => {
+  const editing = isEditingParcours()
+  const saveLabel = editing ? 'Enregistrer' : 'Publier'
+
+  const closeEditWindow = () => {
+    // Ferme l’édition — brouillon / session conservés
     navigation.navigate('Main')
   }
 
-  const editing = isEditingParcours()
-  const saveLabel = editing ? 'Enregistrer' : 'Publier'
+  const abandonDraft = () => {
+    Alert.alert(
+      'Abandonner ce brouillon ?',
+      editing
+        ? 'Tu quittes l’édition sans enregistrer les changements locaux.'
+        : 'Tu pourras ensuite en créer un nouveau. Rien n’a été publié.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Abandonner',
+          style: 'destructive',
+          onPress: () => {
+            clearParcoursCreateSession()
+            navigation.navigate('Main')
+          },
+        },
+      ],
+    )
+  }
 
   const tryPublish = async () => {
     if (!session || !session.steps.length) {
@@ -184,18 +205,28 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
 
       const itemsPayload = draftToPayload(stepsRemote)
       const total = sumStepBudgets(stepsRemote)
-      const intro = `Parcours à ${citySlugDisplayNameFr(session.city_slug) || session.city_slug}.`
+      const intro =
+        session.intro?.trim() ||
+        `Parcours à ${citySlugDisplayNameFr(session.city_slug) || session.city_slug}.`
       const probe = {
         title: session.title,
         city_slug: session.city_slug,
         cover_image,
         intro,
         slug: 'ok',
+        occasions: session.occasions || [],
       } as unknown as Itinerary
-      if (!canPublish(probe, itemsPayload as unknown as ItineraryItem[])) {
+      const blockers = getPublishBlockers(
+        probe,
+        itemsPayload as unknown as ItineraryItem[],
+      )
+      if (blockers.length) {
         Alert.alert(
           'Pas encore publiable',
-          'Il manque titre, couverture ou au moins une étape.',
+          blockers
+            .slice(0, 6)
+            .map((b) => b.message)
+            .join('\n'),
         )
         return
       }
@@ -315,7 +346,7 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
       <View style={[styles.root, styles.center, { padding: spacing.xl }]}>
         <ScreenBackground />
         <Text style={styles.error}>Parcours non commencé</Text>
-        <Pressable onPress={() => navigation.navigate('Main')}>
+        <Pressable onPress={closeEditWindow}>
           <Text style={styles.link}>Fermer</Text>
         </Pressable>
       </View>
@@ -404,9 +435,14 @@ export function CreateParcoursPreviewScreen({ navigation }: Props) {
         >
           <Text style={styles.navMuted}>Retour</Text>
         </Pressable>
-        <Pressable onPress={closeKeepDraft} hitSlop={12}>
-          <Text style={styles.navCta}>Fermer</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+          <Pressable onPress={abandonDraft} hitSlop={12}>
+            <Text style={styles.navMuted}>Abandonner</Text>
+          </Pressable>
+          <Pressable onPress={closeEditWindow} hitSlop={12}>
+            <Text style={styles.navCta}>Fermer</Text>
+          </Pressable>
+        </View>
       </View>
       <CreateFlowProgress
         step={3}

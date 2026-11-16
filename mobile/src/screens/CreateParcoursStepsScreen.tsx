@@ -27,6 +27,7 @@ import { ScreenBackground } from '../components/ScreenBackground'
 import { useAuth } from '../context/AuthContext'
 import { canCreateParcoursOnDevice } from '../lib/parcoursAccess'
 import {
+  clearParcoursCreateSession,
   getParcoursCreateSession,
   patchParcoursCreateSession,
   startParcoursCreateSession,
@@ -64,7 +65,9 @@ export function draftToPayload(steps: DraftStep[]) {
     if (s.lat != null) meta.lat = s.lat
     if (s.lng != null) meta.lng = s.lng
     if (photos.length) meta.photos = photos
-    if (s.description.trim()) meta.description = s.description.trim()
+    if (String(s.description || '').trim()) {
+      meta.description = String(s.description).trim()
+    }
     if (typeof s.budget_eur === 'number' && Number.isFinite(s.budget_eur)) {
       meta.budget_eur = s.budget_eur
     }
@@ -309,15 +312,39 @@ export function CreateParcoursStepsScreen({ navigation, route }: Props) {
         >
           <Text style={styles.navMuted}>Retour</Text>
         </Pressable>
-        <Pressable
-          onPress={() => {
-            persistLocal(steps)
-            navigation.navigate('Main')
-          }}
-          hitSlop={12}
-        >
-          <Text style={styles.navMuted}>Fermer</Text>
-        </Pressable>
+        <View style={styles.topRight}>
+          <Pressable
+            onPress={() => {
+              Alert.alert(
+                'Abandonner ce brouillon ?',
+                'Les changements locaux non enregistrés seront perdus.',
+                [
+                  { text: 'Annuler', style: 'cancel' },
+                  {
+                    text: 'Abandonner',
+                    style: 'destructive',
+                    onPress: () => {
+                      clearParcoursCreateSession()
+                      navigation.navigate('Main')
+                    },
+                  },
+                ],
+              )
+            }}
+            hitSlop={12}
+          >
+            <Text style={styles.navMuted}>Abandonner</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              persistLocal(steps)
+              navigation.navigate('Main')
+            }}
+            hitSlop={12}
+          >
+            <Text style={styles.navMuted}>Fermer</Text>
+          </Pressable>
+        </View>
       </View>
       <CreateFlowProgress
         step={2}
@@ -594,6 +621,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     marginBottom: 2,
     minHeight: 36,
+  },
+  topRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   kicker: {
     fontFamily: fonts.bold,

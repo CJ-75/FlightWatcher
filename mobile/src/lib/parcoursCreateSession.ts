@@ -166,13 +166,17 @@ export function itemToDraftStep(it: ItineraryItem, index: number): DraftStep {
     : it.photo
       ? [String(it.photo)]
       : []
-  const budgetRaw = meta.budget_eur
+  const budgetNum = Number(meta.budget_eur)
   const budget_eur =
-    typeof budgetRaw === 'number' && Number.isFinite(budgetRaw)
-      ? budgetRaw
+    meta.budget_eur != null &&
+    meta.budget_eur !== '' &&
+    Number.isFinite(budgetNum) &&
+    budgetNum >= 0
+      ? budgetNum
       : null
   const moment = it.moment
   const travel = travelMinutesFromMeta(meta)
+  const mapsRaw = String(meta.maps_url || meta.google_maps_url || '').trim()
   return {
     localId: it.id || `edit-${index}`,
     kind: it.kind === 'place' ? 'place' : 'free',
@@ -187,10 +191,11 @@ export function itemToDraftStep(it: ItineraryItem, index: number): DraftStep {
         : null,
     photo: it.photo || photos[0] || null,
     photos,
-    maps_url: String(meta.maps_url || ''),
+    maps_url: mapsRaw,
     lat: typeof meta.lat === 'number' ? meta.lat : null,
     lng: typeof meta.lng === 'number' ? meta.lng : null,
-    budget_eur,
+    // Édition : budget manquant → 0 (Gratuit) pour ne pas bloquer à tort
+    budget_eur: budget_eur ?? 0,
     description: String(meta.description || ''),
     travel_minutes: travel,
   }

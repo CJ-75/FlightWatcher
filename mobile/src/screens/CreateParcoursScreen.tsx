@@ -157,25 +157,37 @@ export function CreateParcoursScreen({ navigation }: Props) {
     }
   }
 
-  const closeKeepDraft = useCallback(() => {
-    // Brouillon cache conservé — slot unique tant que non publié / abandonné
+  const closeEditWindow = useCallback(() => {
+    // Ferme l’édition — brouillon / session conservés
     const t = title.trim()
     if (t && citySlug.trim()) {
       startParcoursCreateSession({
         title: t,
         city_slug: citySlug,
         cover_image: cover,
+        editing_id: existing?.editing_id ?? null,
+        editing_status: existing?.editing_status ?? null,
         ...editorialSessionPatch(),
       })
     }
     if (navigation.canGoBack()) navigation.goBack()
     else navigation.navigate('Main')
-  }, [navigation, title, citySlug, cover, editorialSessionPatch])
+  }, [
+    navigation,
+    title,
+    citySlug,
+    cover,
+    existing?.editing_id,
+    existing?.editing_status,
+    editorialSessionPatch,
+  ])
 
   const abandonDraft = useCallback(() => {
     Alert.alert(
       'Abandonner ce brouillon ?',
-      'Tu pourras ensuite en créer un nouveau. Rien n’a été publié.',
+      isEditingParcours()
+        ? 'Tu quittes l’édition sans enregistrer les changements locaux.'
+        : 'Tu pourras ensuite en créer un nouveau. Rien n’a été publié.',
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -307,14 +319,14 @@ export function CreateParcoursScreen({ navigation }: Props) {
         <View style={{ paddingTop: insets.top + 8 }}>
           <View style={styles.topRow}>
             <Pressable
-              onPress={closeKeepDraft}
+              onPress={closeEditWindow}
               hitSlop={14}
               accessibilityRole="button"
               accessibilityLabel="Fermer"
             >
               <Text style={styles.close}>Fermer</Text>
             </Pressable>
-            {isResume || !!title.trim() ? (
+            {isResume || !!title.trim() || isEdit ? (
               <Pressable onPress={abandonDraft} hitSlop={14}>
                 <Text style={styles.abandon}>Abandonner</Text>
               </Pressable>

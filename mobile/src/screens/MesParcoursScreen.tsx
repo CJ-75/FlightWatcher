@@ -184,12 +184,7 @@ export function MesParcoursScreen({ headerExtra, scrollRef }: Props) {
     const draft = getParcoursCreateSession()
 
     const proceed = () => {
-      const hasItems =
-        Array.isArray(it.itinerary_items) && it.itinerary_items.length > 0
-      if (hasItems) {
-        goEdit(it as Itinerary, it.id)
-        return
-      }
+      // Toujours recharger le détail (meta maps/budget/photos) avant édition
       goEdit(
         {
           ...it,
