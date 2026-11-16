@@ -32,7 +32,7 @@ export default function OgImage() {
           Waypop
         </div>
         <div style={{ fontSize: 36, fontWeight: 700, maxWidth: 900, lineHeight: 1.2 }}>
-          Week-ends entre potes, déjà organisés, pas chers
+          Week-ends déjà organisés, pas chers
         </div>
       </div>
     ),

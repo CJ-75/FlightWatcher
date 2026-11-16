@@ -194,7 +194,7 @@ export function LandingHome({
     {
       photo: takePhoto(parisHero, parisHero),
       title: 'Vendredi 18h',
-      line: 'Le séjour est booké. Le groupe est chaud. Toi, tu souris déjà.',
+      line: 'Le séjour est booké. Le week-end est calé. Toi, tu souris déjà.',
     },
     {
       photo: takePhoto(barcelonaHero, barcelonaHero),
@@ -261,11 +261,11 @@ export function LandingHome({
               Ce week-end, tu es ailleurs
             </p>
             <h1 className="mt-2 text-[2.2rem] font-extrabold leading-[1.1] tracking-tight text-ink sm:text-4xl lg:text-[2.85rem]">
-              Week-ends pas chers entre amis, déjà organisés
+              Week-ends pas chers, déjà organisés
             </h1>
             <p className="mt-4 max-w-md text-base leading-relaxed text-ink-muted">
-              Prix vol + hôtel, Pops jour par jour, Planner de groupe. Le tout
-              dans une seule app.
+              Prix vol + hôtel, Pops jour par jour, Planner partagé. Solo, à
+              deux ou à plusieurs — dans une seule app.
             </p>
             <div className="mt-8">
               <LandingSearch />
@@ -298,7 +298,7 @@ export function LandingHome({
           <span className="text-accent">·</span>
           <span>Alertes prix</span>
           <span className="text-accent">·</span>
-          <span>Planner de groupe</span>
+          <span>Planner partagé</span>
         </div>
       </section>
 
@@ -307,7 +307,7 @@ export function LandingHome({
           <div className="mx-auto max-w-xl text-center">
             <p className="text-sm font-bold text-accent">3 étapes</p>
             <h2 className="mt-2 text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
-              Choisis. Invite. Pars.
+              Choisis. Planifie. Pars.
             </h2>
           </div>
           <ol className="mt-12 grid gap-5 md:grid-cols-3">
@@ -324,8 +324,8 @@ export function LandingHome({
               },
               {
                 n: '3',
-                t: 'Lance le groupe',
-                d: 'Planner + alerte prix. Vous décidez, vous partez.',
+                t: 'Ajoute au Planner',
+                d: 'Alerte prix + programme. Tu décides, tu pars.',
               },
             ].map((step) => (
               <li
@@ -522,7 +522,7 @@ export function LandingHome({
               },
               {
                 title: 'Planner',
-                d: 'Invite, votez, validez — entre potes.',
+                d: 'Invite qui tu veux, votez, validez.',
                 icon: <TicketIcon />,
               },
             ].map((s) => (
@@ -590,7 +590,7 @@ export function LandingHome({
               Ton prochain week-end t’attend
             </h2>
             <p className="relative mx-auto mt-3 max-w-sm text-sm text-ink-muted">
-              Cherche un séjour, ouvre un Pop, invite ton groupe.
+              Cherche un séjour, ouvre un Pop, pars à ton rythme.
             </p>
             <div className="relative mt-6 flex justify-center">
               <Link href="/sejours" className="wp-cta-ink">
@@ -612,7 +612,7 @@ export function LandingHome({
               Waypop
             </p>
             <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-              L’app des week-ends entre potes.
+              L’app des week-ends déjà organisés.
             </p>
           </div>
           {[

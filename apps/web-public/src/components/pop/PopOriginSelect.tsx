@@ -227,8 +227,8 @@ export function PopOriginSelect({
           aria-expanded={open}
           aria-autocomplete="list"
           autoComplete="off"
-          className={`w-full appearance-none rounded-2xl border border-line bg-white py-3 text-sm font-extrabold text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20 ${
-            selectedGroup ? 'pl-10 pr-10' : 'px-4 pr-10'
+          className={`w-full appearance-none rounded-xl border border-line bg-white py-2.5 text-sm font-extrabold text-ink outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20 ${
+            selectedGroup ? 'pl-9 pr-9' : 'px-3.5 pr-9'
           }`}
         />
         {selectedGroup && !open ? (

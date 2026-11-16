@@ -7,16 +7,16 @@ export const revalidate = 3600
 
 export const metadata: Metadata = {
   title: {
-    absolute: 'Week-ends pas chers entre amis, déjà organisés | Waypop',
+    absolute: 'Week-ends pas chers, déjà organisés | Waypop',
   },
   description:
-    'Week-ends pas chers entre amis : vol + hôtel, Pops jour par jour, alertes prix et Planner de groupe. Cherche un séjour ou télécharge Waypop.',
+    'Week-ends pas chers : vol + hôtel, Pops jour par jour, alertes prix et Planner. Solo, à deux ou à plusieurs. Cherche un séjour ou télécharge Waypop.',
   alternates: { canonical: 'https://waypop.co/' },
   robots: { index: true, follow: true },
   openGraph: {
-    title: 'Week-ends pas chers entre amis, déjà organisés | Waypop',
+    title: 'Week-ends pas chers, déjà organisés | Waypop',
     description:
-      'Prix, programme, groupe — déjà organisés. Voir les week-ends ou télécharger l’app.',
+      'Prix, programme, Planner — déjà organisés. Voir les week-ends ou télécharger l’app.',
     url: 'https://waypop.co/',
     type: 'website',
   },
@@ -71,7 +71,7 @@ export default async function LandingPage() {
         name: 'Waypop',
         url: 'https://waypop.co',
         description:
-          'Week-ends pas chers entre amis : séjours vol+hôtel, Pops et Planner.',
+          'Week-ends pas chers : séjours vol+hôtel, Pops et Planner.',
       },
       {
         '@type': 'WebSite',

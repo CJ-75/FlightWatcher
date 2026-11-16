@@ -29,7 +29,7 @@ export const DREAM_SCENES = [
   {
     photo: LP.sunsetTerrace,
     title: 'Vendredi 18h',
-    line: 'Le vol est booké. Le groupe est chaud. Toi, tu souris déjà.',
+    line: 'Le vol est booké. Le week-end est calé. Toi, tu souris déjà.',
   },
   {
     photo: LP.nightCity,
