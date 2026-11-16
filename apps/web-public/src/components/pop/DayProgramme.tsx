@@ -1,11 +1,16 @@
 'use client'
 
-import { useEffect, useId, useState, type KeyboardEvent } from 'react'
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
 import { formatDurationMinutes, sanitizeUserFacingText } from '@waypop/shared'
 import { LaunchPopCta } from '@/components/pop/LaunchPopCta'
+import {
+  PopPhotoLightbox,
+  type PopGalleryItem,
+} from '@/components/pop/PopPhotoLightbox'
 import { StopVisual } from '@/components/pop/StopVisual'
 import { WpEyebrow } from '@/components/ui/WpEyebrow'
 import { WpRule } from '@/components/ui/WpRule'
+import { isPublicImageSrc } from '@/components/pop/PopImage'
 import { pickExclusivePhoto } from '@/lib/popPhotos'
 
 export type PopStop = {
@@ -83,7 +88,12 @@ export function DayProgramme({
     }
   }, [days, active])
 
-  const exclusiveByStop = (() => {
+  const [lightbox, setLightbox] = useState<{ open: boolean; index: number }>({
+    open: false,
+    index: 0,
+  })
+
+  const exclusiveByStop = useMemo(() => {
     const used = new Set<string>()
     pickExclusivePhoto(coverImage, used)
     const map = new Map<string, string | null>()
@@ -94,7 +104,34 @@ export function DayProgramme({
       })
     }
     return map
-  })()
+  }, [days, coverImage])
+
+  const gallery = useMemo(() => {
+    const items: PopGalleryItem[] = []
+    if (isPublicImageSrc(coverImage)) {
+      items.push({ src: coverImage!, title: `Couverture · ${cityLabel}` })
+    }
+    for (const d of days) {
+      d.items.forEach((step, idx) => {
+        const key = String(step.id || `${d.day}-${idx}`)
+        const src = exclusiveByStop.get(key)
+        if (!isPublicImageSrc(src)) return
+        const title =
+          sanitizeUserFacingText(step.title) ||
+          step.places?.name ||
+          `Stop ${idx + 1}`
+        items.push({ src: src!, title })
+      })
+    }
+    return items
+  }, [coverImage, cityLabel, days, exclusiveByStop])
+
+  const openPhoto = (src: string | null | undefined) => {
+    if (!isPublicImageSrc(src)) return
+    const i = gallery.findIndex((g) => g.src === src)
+    if (i < 0) return
+    setLightbox({ open: true, index: i })
+  }
 
   const onKeyNav = (e: KeyboardEvent, index: number) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
@@ -234,6 +271,7 @@ export function DayProgramme({
                                 layout="stack"
                                 photoSource={step.photo_source}
                                 photoLicense={step.photo_license}
+                                onOpen={() => openPhoto(exclusive)}
                               />
                             </div>
                             <div className="hidden sm:block">
@@ -245,6 +283,7 @@ export function DayProgramme({
                                 layout="row"
                                 photoSource={step.photo_source}
                                 photoLicense={step.photo_license}
+                                onOpen={() => openPhoto(exclusive)}
                               />
                             </div>
                           </div>
@@ -272,6 +311,14 @@ export function DayProgramme({
           </div>
         )
       })}
+
+      <PopPhotoLightbox
+        items={gallery}
+        open={lightbox.open}
+        index={lightbox.index}
+        onClose={() => setLightbox((s) => ({ ...s, open: false }))}
+        onIndexChange={(i) => setLightbox((s) => ({ ...s, index: i }))}
+      />
     </section>
   )
 }

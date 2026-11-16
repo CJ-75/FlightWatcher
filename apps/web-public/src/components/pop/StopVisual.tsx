@@ -1,3 +1,5 @@
+'use client'
+
 import { cityFallbackStyle } from '@/lib/popHelpers'
 import { isPublicImageSrc, PopImage } from '@/components/pop/PopImage'
 
@@ -10,6 +12,7 @@ type Props = {
   layout?: 'stack' | 'row'
   photoSource?: string | null
   photoLicense?: string | null
+  onOpen?: () => void
 }
 
 export function StopVisual({
@@ -21,6 +24,7 @@ export function StopVisual({
   layout = 'stack',
   photoSource,
   photoLicense,
+  onOpen,
 }: Props) {
   const hasPhoto = isPublicImageSrc(photo)
   const credit =
@@ -32,51 +36,83 @@ export function StopVisual({
       </span>
     ) : null
 
+  const openable = hasPhoto && !!onOpen
+
   if (layout === 'row') {
-    return (
+    const inner = hasPhoto ? (
+      <>
+        <PopImage
+          src={photo!}
+          alt={title}
+          variant="card"
+          fill
+          className="object-cover transition duration-300 group-hover:scale-[1.03]"
+          sizes="176px"
+        />
+        {credit}
+        {openable ? (
+          <span className="pointer-events-none absolute inset-0 bg-ink/0 transition group-hover:bg-ink/10" />
+        ) : null}
+      </>
+    ) : (
       <div
-        className={`relative h-[128px] w-[176px] shrink-0 overflow-hidden rounded-xl ${className}`}
+        className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 text-center text-white"
+        style={cityFallbackStyle(colorKey, city)}
+        role="img"
+        aria-label={title}
       >
-        {hasPhoto ? (
-          <>
-            <PopImage
-              src={photo!}
-              alt={title}
-              variant="card"
-              fill
-              className="object-cover"
-              sizes="176px"
-            />
-            {credit}
-          </>
-        ) : (
-          <div
-            className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 text-center text-white"
-            style={cityFallbackStyle(colorKey, city)}
-            role="img"
-            aria-label={title}
-          >
-            <span aria-hidden>📍</span>
-            <span className="text-[11px] font-extrabold leading-tight">
-              {title}
-            </span>
-          </div>
-        )}
+        <span aria-hidden>📍</span>
+        <span className="text-[11px] font-extrabold leading-tight">{title}</span>
       </div>
     )
+
+    const shell =
+      'relative h-[128px] w-[176px] shrink-0 overflow-hidden rounded-xl'
+
+    if (openable) {
+      return (
+        <button
+          type="button"
+          onClick={onOpen}
+          className={`group ${shell} cursor-zoom-in border-0 bg-transparent p-0 text-left ${className}`}
+          aria-label={`Agrandir la photo — ${title}`}
+        >
+          {inner}
+        </button>
+      )
+    }
+
+    return <div className={`${shell} ${className}`}>{inner}</div>
   }
 
   if (hasPhoto) {
-    return (
-      <div className={`mt-4 overflow-hidden rounded-2xl ${className}`}>
+    const img = (
+      <>
         <PopImage
           src={photo!}
           alt={title}
           variant="stop"
-          className="h-48 w-full object-cover sm:h-56"
+          className={`h-48 w-full object-cover sm:h-56 ${
+            openable ? 'transition duration-300 group-hover:scale-[1.02]' : ''
+          }`}
         />
         {credit}
-      </div>
+      </>
+    )
+    if (openable) {
+      return (
+        <button
+          type="button"
+          onClick={onOpen}
+          className={`group mt-4 block w-full overflow-hidden rounded-2xl border-0 bg-transparent p-0 text-left cursor-zoom-in ${className}`}
+          aria-label={`Agrandir la photo — ${title}`}
+        >
+          {img}
+        </button>
+      )
+    }
+    return (
+      <div className={`mt-4 overflow-hidden rounded-2xl ${className}`}>{img}</div>
     )
   }
 

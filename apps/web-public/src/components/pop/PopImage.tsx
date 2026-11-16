@@ -67,7 +67,7 @@ export function PopImage({
         fill
         sizes={sizes || v.sizes}
         priority={v.priority}
-        className={`object-cover ${className}`}
+        className={className.includes('object-') ? className : `object-cover ${className}`}
       />
     )
   }

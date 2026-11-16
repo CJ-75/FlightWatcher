@@ -76,7 +76,7 @@ export function KeepButton({
         aria-pressed={kept}
         aria-label={kept ? 'Retirer des favoris' : 'Ajouter aux favoris'}
         title={kept ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-        className={`inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/95 shadow-soft transition-colors hover:bg-white ${
+        className={`inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/95 shadow-soft transition-colors hover:bg-white [&>svg]:block ${
           kept ? 'text-[#FF6B35]' : 'text-ink'
         } ${className}`}
       >

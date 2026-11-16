@@ -16,6 +16,7 @@ import { isPublicImageSrc, PopImage } from '@/components/pop/PopImage'
 import { KeepButton } from '@/components/pop/KeepButton'
 import { ShareButton } from '@/components/pop/ShareButton'
 import { LaunchPopCta } from '@/components/pop/LaunchPopCta'
+import { PlannerAddCta } from '@/components/pop/PlannerAddCta'
 import { PopAuthor } from '@/components/ui/WaypopMark'
 import { WpEyebrow } from '@/components/ui/WpEyebrow'
 import { WpPopCard } from '@/components/ui/WpPopCard'
@@ -113,7 +114,7 @@ export function PopPageView({
   if (durationLabel) facts.push({ label: 'Durée', value: durationLabel })
   if (itin.budget_estimate_eur && Number(itin.budget_estimate_eur) > 0) {
     facts.push({
-      label: 'Budget éditorial',
+      label: 'Budget',
       value: `≈ ${Math.round(Number(itin.budget_estimate_eur))} € / jour (estimé)`,
     })
   }
@@ -226,12 +227,10 @@ export function PopPageView({
           ) : null}
 
           <div className="mt-5 flex flex-wrap items-center gap-2.5 sm:mt-8 sm:gap-3">
-            <a
+            <PlannerAddCta
               href={`/sejours?dest=${encodeURIComponent(city)}`}
-              className="wp-cta-ink px-5 py-3 text-sm sm:px-7 sm:py-3.5"
-            >
-              Ajouter au Planner
-            </a>
+              variant="ink"
+            />
             <LaunchPopCta href={launchHref} variant="hero" />
             <ShareButton title={h1} variant="icon" />
             <KeepButton
@@ -259,6 +258,7 @@ export function PopPageView({
                     destCity={city}
                     cityLabel={cityLabel}
                     stopCount={items.length}
+                    dayCount={dayCount}
                     shareUrl={shareUrl}
                     shareTitle={h1}
                   />
@@ -276,13 +276,16 @@ export function PopPageView({
             ) : null}
 
             {facts.length > 0 ? (
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
+              <dl className="flex flex-wrap gap-x-8 gap-y-5 pr-1 sm:flex-nowrap sm:justify-between sm:gap-x-6">
                 {facts.slice(0, 4).map((f) => (
-                  <div key={f.label}>
+                  <div
+                    key={f.label}
+                    className="min-w-0 shrink-0 overflow-visible sm:max-w-[28%]"
+                  >
                     <dt>
                       <WpTag>{f.label}</WpTag>
                     </dt>
-                    <dd className="mt-1.5 text-sm font-bold text-ink">
+                    <dd className="mt-1.5 pr-1.5 text-sm font-bold text-ink">
                       {f.value}
                     </dd>
                   </div>
@@ -430,6 +433,7 @@ export function PopPageView({
                     destCity={city}
                     cityLabel={cityLabel}
                     stopCount={items.length}
+                    dayCount={dayCount}
                     shareUrl={shareUrl}
                     shareTitle={h1}
                   />
@@ -447,6 +451,7 @@ export function PopPageView({
               destCity={city}
               cityLabel={cityLabel}
               stopCount={items.length}
+              dayCount={dayCount}
               variant="bar"
             />
           </Suspense>

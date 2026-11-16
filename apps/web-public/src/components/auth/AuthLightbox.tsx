@@ -374,11 +374,11 @@ function ProviderButton({
       onClick={onClick}
       className={
         accent
-          ? 'flex w-full items-center justify-center gap-2.5 rounded-2xl border border-transparent bg-ink px-4 py-3.5 text-center text-[0.95rem] font-semibold text-cream shadow-[0_12px_28px_rgba(29,27,25,0.22)] transition enabled:hover:bg-accent enabled:active:scale-[0.985] disabled:cursor-wait disabled:opacity-55'
-          : 'flex w-full items-center justify-center gap-2.5 rounded-2xl border border-line bg-white/90 px-4 py-3.5 text-center text-[0.95rem] font-semibold text-ink transition enabled:hover:border-ink/20 enabled:hover:bg-white enabled:active:scale-[0.985] disabled:cursor-wait disabled:opacity-55'
+          ? 'flex w-full items-center justify-center gap-2.5 rounded-2xl border border-transparent bg-ink px-4 py-3.5 text-center text-[0.95rem] font-semibold leading-none text-cream shadow-[0_12px_28px_rgba(29,27,25,0.22)] transition enabled:hover:bg-accent enabled:active:scale-[0.985] disabled:cursor-wait disabled:opacity-55'
+          : 'flex w-full items-center justify-center gap-2.5 rounded-2xl border border-line bg-white/90 px-4 py-3.5 text-center text-[0.95rem] font-semibold leading-none text-ink transition enabled:hover:border-ink/20 enabled:hover:bg-white enabled:active:scale-[0.985] disabled:cursor-wait disabled:opacity-55'
       }
     >
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center [&>svg]:block [&>svg]:h-[18px] [&>svg]:w-[18px]">
         {icon}
       </span>
       <span>{label}</span>
@@ -441,7 +441,7 @@ function BackIcon() {
 
 function GoogleIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden>
+    <svg viewBox="0 0 24 24" aria-hidden>
       <path
         fill="#4285F4"
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
@@ -464,7 +464,12 @@ function GoogleIcon() {
 
 function AppleIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      className="translate-y-[-0.5px]"
+    >
       <path d="M16.7 12.6c0-2.2 1.8-3.3 1.9-3.4-1-1.5-2.6-1.7-3.2-1.7-1.3-.1-2.6.8-3.3.8-.7 0-1.8-.8-3-.7-1.5 0-2.9.9-3.7 2.3-1.6 2.7-.4 6.8 1.1 9 .8 1.1 1.7 2.3 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7c1.2 0 2-.1 3-2.3.7-1.1 1-2.1 1-2.2-.1 0-2.1-.8-2.1-3.1zM14.4 5.9c.6-.8 1.1-1.9.9-3-.9 0-2 .6-2.6 1.4-.6.7-1.1 1.8-.9 2.9 1 .1 2-.5 2.6-1.3z" />
     </svg>
   )
@@ -472,7 +477,7 @@ function AppleIcon() {
 
 function EmailIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden>
       <rect
         x="3"
         y="5"

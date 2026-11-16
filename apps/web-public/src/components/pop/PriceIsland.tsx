@@ -8,7 +8,9 @@ import {
   parseAirportCodes,
   seedPopularAirports,
 } from '@waypop/shared'
+import { PlannerAddCta } from '@/components/pop/PlannerAddCta'
 import { PopOriginSelect } from '@/components/pop/PopOriginSelect'
+import { useAuthGateNavigate } from '@/components/auth/useAuthGateNavigate'
 
 type PricePayload = {
   ok?: boolean
@@ -72,6 +74,8 @@ type Props = {
   destCity: string
   cityLabel: string
   stopCount: number
+  /** Number of programme days (local-mode stat). */
+  dayCount?: number
   variant?: 'card' | 'bar'
   className?: string
   shareUrl?: string
@@ -82,6 +86,7 @@ export function PriceIsland({
   destCity,
   cityLabel,
   stopCount,
+  dayCount = 2,
   variant = 'card',
   className = '',
   shareUrl,
@@ -91,6 +96,7 @@ export function PriceIsland({
   const [origin, setOrigin] = useState(DEFAULT_ORIGIN)
   const [data, setData] = useState<PricePayload | null>(null)
   const [loading, setLoading] = useState(true)
+  const gateNavigate = useAuthGateNavigate()
 
   const localMode = useMemo(
     () => isSameCityOrigin(origin, destCity, cityLabel, groups),
@@ -225,6 +231,10 @@ export function PriceIsland({
           </div>
           <a
             href={plannerHref}
+            onClick={(e) => {
+              e.preventDefault()
+              gateNavigate(plannerHref)
+            }}
             className="relative shrink-0 overflow-hidden rounded-2xl bg-ink px-5 py-2.5 text-sm font-bold text-cream no-underline"
           >
             <span
@@ -280,18 +290,18 @@ export function PriceIsland({
               <div className="grid grid-cols-2 gap-px border-y border-line bg-line">
                 <div className="bg-white px-4 py-2.5">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-                    Stops
+                    {Math.max(1, dayCount) === 1 ? 'Jour' : 'Jours'}
                   </p>
                   <p className="mt-0.5 text-xl font-extrabold tracking-tight text-ink">
-                    {stopCount}
+                    {Math.max(1, dayCount)}
                   </p>
                 </div>
                 <div className="bg-white px-4 py-2.5">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
-                    Format
+                    Stops
                   </p>
                   <p className="mt-0.5 text-xl font-extrabold tracking-tight text-ink">
-                    Local
+                    {stopCount}
                   </p>
                 </div>
               </div>
@@ -372,15 +382,7 @@ export function PriceIsland({
           )}
 
           <div className="mt-4 space-y-2">
-            <a
-              href={plannerHref}
-              className="wp-cta-planner !rounded-xl !px-4 !py-3 !text-sm"
-            >
-              <span>Ajouter au Planner</span>
-              <span className="wp-cta-planner-arrow" aria-hidden>
-                →
-              </span>
-            </a>
+            <PlannerAddCta href={plannerHref} />
             <p className="text-center text-[11px] font-semibold text-ink-muted">
               {localMode
                 ? 'Organise à ton rythme, sans friction'
@@ -406,7 +408,7 @@ export function PriceIsland({
             rel="noopener noreferrer"
             className="mt-4 flex w-full items-center gap-3 rounded-xl bg-[#E8F8EE] px-3.5 py-3 no-underline transition-colors hover:bg-[#DFF5E8]"
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#25D366] text-white">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#25D366] text-white [&>svg]:block">
               <WhatsAppIcon />
             </span>
             <span className="min-w-0 flex-1">

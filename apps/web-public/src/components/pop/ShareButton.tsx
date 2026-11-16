@@ -46,13 +46,9 @@ export function ShareButton({
         onClick={() => void share()}
         aria-label={copied ? 'Lien copié' : 'Partager'}
         title={copied ? 'Lien copié' : 'Partager'}
-        className={`inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/95 text-ink shadow-soft transition-colors hover:bg-white ${className}`}
+        className={`inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/95 text-ink shadow-soft transition-colors hover:bg-white [&>svg]:block ${className}`}
       >
-        {copied ? (
-          <CheckIcon />
-        ) : (
-          <ShareIcon />
-        )}
+        {copied ? <CheckIcon /> : <ShareIcon />}
       </button>
     )
   }
