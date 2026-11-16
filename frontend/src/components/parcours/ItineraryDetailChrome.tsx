@@ -7,6 +7,8 @@ type Props = {
   citySlug?: string | null
   slug?: string | null
   title: string
+  /** Promise / sous-titre sous le H1 */
+  subtitle?: string | null
   metaChips?: string[]
   phaseLabel?: string
   dateLabel?: string | null
@@ -77,6 +79,7 @@ export function ItineraryDetailChrome({
   citySlug,
   slug,
   title,
+  subtitle,
   metaChips,
   phaseLabel = 'Parcours',
   dateLabel,
@@ -204,6 +207,11 @@ export function ItineraryDetailChrome({
             <h1 className="max-w-[95%] text-[2.35rem] font-extrabold leading-[1.05] tracking-[-0.02em] text-white drop-shadow sm:text-5xl lg:text-6xl">
               {title}
             </h1>
+            {subtitle ? (
+              <p className="max-w-2xl text-[15px] font-medium leading-snug text-white/88 sm:text-base">
+                {subtitle}
+              </p>
+            ) : null}
             {chips.length > 0 ? (
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-medium text-white/90">
                 {chips.map((c, i) => (

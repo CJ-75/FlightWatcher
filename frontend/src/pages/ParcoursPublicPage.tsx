@@ -25,6 +25,7 @@ import {
 import { getCurrentUser } from '../lib/supabase'
 import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
+import { ItineraryEditorialSections } from '../components/parcours/ItineraryEditorialSections'
 import { ItineraryMarkerTiles } from '../components/parcours/ItineraryMarkerTiles'
 import { ItineraryStepsTimeline } from '../components/parcours/ItineraryStepsTimeline'
 import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
@@ -340,6 +341,7 @@ export default function ParcoursPublicPage() {
         citySlug={itin.city_slug}
         slug={itin.slug}
         title={itin.title}
+        subtitle={itin.subtitle}
         metaChips={chips}
         phaseLabel={phaseLabel}
         authorName={
@@ -374,6 +376,11 @@ export default function ParcoursPublicPage() {
           ) : null}
 
           <ItineraryMarkerTiles tiles={markers} />
+
+          <ItineraryEditorialSections
+            itinerary={itin}
+            cityLabel={cityLabel}
+          />
 
           <section>
             <h2 className="mb-4 text-lg font-bold text-[#1A120E]">Les étapes</h2>

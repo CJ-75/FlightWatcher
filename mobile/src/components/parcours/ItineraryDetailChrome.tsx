@@ -18,6 +18,8 @@ import { colors, fonts } from '../../theme'
 type Props = {
   heroUrl: string
   title: string
+  /** Promise / sous-titre sous le H1 */
+  subtitle?: string | null
   metaChips?: string[]
   phaseLabel?: string
   /** Dated parcours — e.g. « Mercredi 11 novembre » (replaces budget under title) */
@@ -63,6 +65,7 @@ function VerifiedBadge({ size = 14 }: { size?: number }) {
 export function ItineraryDetailChrome({
   heroUrl,
   title,
+  subtitle,
   metaChips,
   phaseLabel = 'Parcours',
   dateLabel,
@@ -162,6 +165,7 @@ export function ItineraryDetailChrome({
               </View>
             ) : null}
             <Text style={styles.title}>{title}</Text>
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
             {chips.length ? (
               <Text style={styles.chips}>{chips.join(' · ')}</Text>
             ) : null}
@@ -294,6 +298,12 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.35)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  subtitle: {
+    fontFamily: fonts.medium,
+    fontSize: 15,
+    lineHeight: 21,
+    color: 'rgba(255,255,255,0.88)',
   },
   chips: {
     fontFamily: fonts.medium,

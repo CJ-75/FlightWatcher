@@ -3,8 +3,11 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ITINERARY_DURATIONS,
   ITINERARY_DURATION_LABELS,
+  ITINERARY_IDEAL_LABELS,
   ITINERARY_OCCASIONS,
   ITINERARY_OCCASION_LABELS,
+  PACE_LABEL,
+  buildStayPayload,
   canPublish,
   citySlugDisplayNameFr,
   cityImageUrl,
@@ -12,6 +15,10 @@ import {
   getPublishBlockers,
   getPublishWarnings,
   normalizeItineraryBudgetEur,
+  parseFaq,
+  parseStay,
+  parseTips,
+  travelMinutesFromMeta,
   type Itinerary,
   type ItineraryDurationKind,
   type ItineraryItem,
@@ -34,7 +41,15 @@ type DraftItem = {
   viator_product_code: string
   day_offset: string
   moment: string
+  travel_minutes: string
+  meta: Record<string, unknown> | null
 }
+
+const IDEAL_OPTIONS = Array.from(
+  new Set([...ITINERARY_OCCASIONS, 'premiere_fois']),
+)
+
+const PACE_OPTIONS = ['slow', 'moderate', 'packed'] as const
 
 const CITY_OPTIONS = [
   'paris',
@@ -60,35 +75,59 @@ function newLocalId() {
 }
 
 function toDraftItems(items?: ItineraryItem[] | null): DraftItem[] {
-  return (items || []).map((it) => ({
-    localId: it.id || newLocalId(),
-    kind: (it.kind || 'free') as ItineraryItemKind,
-    title: it.title || '',
-    note: it.note || '',
-    duration_minutes:
-      it.duration_minutes != null ? String(it.duration_minutes) : '',
-    photo: it.photo || '',
-    place_id: it.place_id || '',
-    place_name: it.places?.name || '',
-    viator_product_code: it.viator_product_code || '',
-    day_offset: String(it.day_offset ?? 0),
-    moment: it.moment || '',
-  }))
+  return (items || []).map((it) => {
+    const meta =
+      it.meta && typeof it.meta === 'object'
+        ? ({ ...it.meta } as Record<string, unknown>)
+        : null
+    const travel = travelMinutesFromMeta(meta)
+    return {
+      localId: it.id || newLocalId(),
+      kind: (it.kind || 'free') as ItineraryItemKind,
+      title: it.title || '',
+      note: it.note || '',
+      duration_minutes:
+        it.duration_minutes != null ? String(it.duration_minutes) : '',
+      photo: it.photo || '',
+      place_id: it.place_id || '',
+      place_name: it.places?.name || '',
+      viator_product_code: it.viator_product_code || '',
+      day_offset: String(it.day_offset ?? 0),
+      moment: it.moment || '',
+      travel_minutes: travel != null ? String(travel) : '',
+      meta,
+    }
+  })
 }
 
 function itemsPayload(drafts: DraftItem[]) {
-  return drafts.map((d, position) => ({
-    kind: d.kind,
-    position,
-    title: d.title.trim() || null,
-    note: d.note.trim() || null,
-    duration_minutes: d.duration_minutes ? Number(d.duration_minutes) : null,
-    photo: d.photo.trim() || null,
-    place_id: d.place_id || null,
-    viator_product_code: d.viator_product_code.trim() || null,
-    day_offset: Number(d.day_offset || 0),
-    moment: d.moment || null,
-  }))
+  return drafts.map((d, position) => {
+    const baseMeta: Record<string, unknown> = {
+      ...(d.meta && typeof d.meta === 'object' ? d.meta : {}),
+    }
+    if (d.travel_minutes.trim()) {
+      baseMeta.travel_minutes = Number(d.travel_minutes)
+    } else {
+      delete baseMeta.travel_minutes
+      delete baseMeta.travel_time_min
+      delete baseMeta.walk_minutes
+      delete baseMeta.transit_minutes
+    }
+    const metaKeys = Object.keys(baseMeta)
+    return {
+      kind: d.kind,
+      position,
+      title: d.title.trim() || null,
+      note: d.note.trim() || null,
+      duration_minutes: d.duration_minutes ? Number(d.duration_minutes) : null,
+      photo: d.photo.trim() || null,
+      place_id: d.place_id || null,
+      viator_product_code: d.viator_product_code.trim() || null,
+      day_offset: Number(d.day_offset || 0),
+      moment: d.moment || null,
+      meta: metaKeys.length ? baseMeta : null,
+    }
+  })
 }
 
 function statusBadgeClass(status?: string | null) {
@@ -196,6 +235,11 @@ export function ParcoursEditorPage() {
         budget_basis: itin.budget_basis,
         sort_weight: itin.sort_weight ?? 0,
         is_demo: itin.is_demo ?? false,
+        pace: itin.pace || null,
+        ideal_for: itin.ideal_for || [],
+        stay: buildStayPayload(parseStay(itin.stay) || {}),
+        tips: parseTips(itin.tips),
+        faq: parseFaq(itin.faq).filter((r) => r.q.trim() && r.a.trim()),
         items: itemsPayload(items),
       })
       if (!res.ok || !res.itinerary) {
@@ -308,6 +352,8 @@ export function ParcoursEditorPage() {
         viator_product_code: '',
         day_offset: '0',
         moment: '',
+        travel_minutes: '',
+        meta: null,
       },
     ])
   }
@@ -327,6 +373,8 @@ export function ParcoursEditorPage() {
         viator_product_code: '',
         day_offset: '0',
         moment: '',
+        travel_minutes: '',
+        meta: null,
       },
     ])
   }
@@ -359,6 +407,8 @@ export function ParcoursEditorPage() {
           viator_product_code: '',
           day_offset: '0',
           moment: '',
+          travel_minutes: '',
+          meta: null,
         },
       ])
       setMapsPaste('')
@@ -685,6 +735,195 @@ export function ParcoursEditorPage() {
           </section>
 
           <section className="fw-editor-block">
+            <h2 className="fw-section-title">Page Pop (SEO / éditorial)</h2>
+            <div className="fw-field-row cols-2">
+              <label className="fw-label">
+                Rythme
+                <select
+                  className="fw-select"
+                  value={itin.pace || ''}
+                  onChange={(e) =>
+                    patchField('pace', (e.target.value || null) as Itinerary['pace'])
+                  }
+                >
+                  <option value="">—</option>
+                  {PACE_OPTIONS.map((p) => (
+                    <option key={p} value={p}>
+                      {PACE_LABEL[p]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="fw-label">
+                Idéal pour
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '0.45rem',
+                    marginTop: 6,
+                  }}
+                >
+                  {IDEAL_OPTIONS.map((o) => {
+                    const on = (itin.ideal_for || []).includes(o)
+                    return (
+                      <button
+                        key={o}
+                        type="button"
+                        onClick={() => {
+                          const cur = new Set(itin.ideal_for || [])
+                          if (on) cur.delete(o)
+                          else cur.add(o)
+                          patchField('ideal_for', [...cur])
+                        }}
+                        className={`fw-chip${on ? ' on' : ''}`}
+                      >
+                        {ITINERARY_IDEAL_LABELS[o] ||
+                          ITINERARY_OCCASION_LABELS[o as ItineraryOccasion] ||
+                          o}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <h3 className="fw-section-title" style={{ marginTop: '1.25rem' }}>
+              Hébergement
+            </h3>
+            <div className="fw-field-row cols-2">
+              <label className="fw-label">
+                Quartier / zone
+                <input
+                  className="fw-input"
+                  value={parseStay(itin.stay)?.area || ''}
+                  onChange={(e) => {
+                    const cur = parseStay(itin.stay) || {}
+                    patchField(
+                      'stay',
+                      buildStayPayload({ ...cur, area: e.target.value }),
+                    )
+                  }}
+                />
+              </label>
+              <label className="fw-label">
+                Ambiance
+                <input
+                  className="fw-input"
+                  value={parseStay(itin.stay)?.vibe || ''}
+                  onChange={(e) => {
+                    const cur = parseStay(itin.stay) || {}
+                    patchField(
+                      'stay',
+                      buildStayPayload({ ...cur, vibe: e.target.value }),
+                    )
+                  }}
+                />
+              </label>
+              <label className="fw-label" style={{ gridColumn: '1 / -1' }}>
+                Note hébergement
+                <textarea
+                  className="fw-input"
+                  rows={3}
+                  value={parseStay(itin.stay)?.note || ''}
+                  onChange={(e) => {
+                    const cur = parseStay(itin.stay) || {}
+                    patchField(
+                      'stay',
+                      buildStayPayload({ ...cur, note: e.target.value }),
+                    )
+                  }}
+                />
+              </label>
+            </div>
+
+            <label className="fw-label" style={{ marginTop: '1rem', display: 'block' }}>
+              Conseils (1 par ligne)
+              <textarea
+                className="fw-input"
+                rows={4}
+                value={parseTips(itin.tips).join('\n')}
+                onChange={(e) =>
+                  patchField(
+                    'tips',
+                    e.target.value
+                      .split('\n')
+                      .map((l) => l.trim())
+                      .filter(Boolean),
+                  )
+                }
+              />
+            </label>
+
+            <div style={{ marginTop: '1rem' }}>
+              <div className="fw-section-head">
+                <h3 className="fw-section-title">FAQ</h3>
+                <button
+                  type="button"
+                  className="fw-btn fw-btn-ghost"
+                  onClick={() =>
+                    patchField('faq', [
+                      ...parseFaq(itin.faq),
+                      { q: '', a: '' },
+                    ])
+                  }
+                >
+                  + Question
+                </button>
+              </div>
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                {parseFaq(itin.faq).map((row, i) => (
+                  <div
+                    key={i}
+                    className="fw-field-row cols-2"
+                    style={{ alignItems: 'start' }}
+                  >
+                    <label className="fw-label">
+                      Question
+                      <input
+                        className="fw-input"
+                        value={row.q}
+                        onChange={(e) => {
+                          const next = parseFaq(itin.faq).map((r, idx) =>
+                            idx === i ? { ...r, q: e.target.value } : r,
+                          )
+                          patchField('faq', next)
+                        }}
+                      />
+                    </label>
+                    <label className="fw-label">
+                      Réponse
+                      <textarea
+                        className="fw-input"
+                        rows={2}
+                        value={row.a}
+                        onChange={(e) => {
+                          const next = parseFaq(itin.faq).map((r, idx) =>
+                            idx === i ? { ...r, a: e.target.value } : r,
+                          )
+                          patchField('faq', next)
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="fw-btn fw-btn-ghost"
+                      onClick={() =>
+                        patchField(
+                          'faq',
+                          parseFaq(itin.faq).filter((_, idx) => idx !== i),
+                        )
+                      }
+                    >
+                      Retirer
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="fw-editor-block">
             <div className="fw-section-head">
               <h2 className="fw-section-title">Couverture</h2>
               <button
@@ -865,7 +1104,7 @@ export function ParcoursEditorPage() {
                       onChange={(e) =>
                         updateItem(index, { duration_minutes: e.target.value })
                       }
-                      placeholder="min"
+                      placeholder="durée min"
                     />
                     <input
                       className="fw-input"
@@ -889,13 +1128,23 @@ export function ParcoursEditorPage() {
                     </select>
                     <input
                       className="fw-input"
-                      value={it.photo}
+                      value={it.travel_minutes}
                       onChange={(e) =>
-                        updateItem(index, { photo: e.target.value })
+                        updateItem(index, { travel_minutes: e.target.value })
                       }
-                      placeholder="photo URL"
+                      placeholder="trajet min"
+                      title="Minutes depuis le stop précédent"
                     />
                   </div>
+                  <input
+                    className="fw-input"
+                    value={it.photo}
+                    onChange={(e) =>
+                      updateItem(index, { photo: e.target.value })
+                    }
+                    placeholder="photo URL"
+                    style={{ marginTop: 6 }}
+                  />
                   <label
                     className="fw-btn fw-btn-ghost"
                     style={{

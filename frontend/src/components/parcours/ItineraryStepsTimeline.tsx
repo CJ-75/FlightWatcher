@@ -5,8 +5,10 @@ import {
   filterRemoteHttpMediaUrls,
   formatDurationMinutes,
   groupItemsByDay,
+  momentLabelFr,
   sanitizeUserFacingText,
   stepKindLabel,
+  travelMinutesFromMeta,
   type ItineraryItem,
 } from '@waypop/shared'
 import { webCoverSrc } from '../../utils/parcoursCover'
@@ -191,11 +193,13 @@ export function ItineraryStepsTimeline({ items, onBookActivity }: Props) {
                 ) || `Étape ${i + 1}`
               const note = sanitizeUserFacingText(it.note, { multiline: true })
               const dur = formatDurationMinutes(it.duration_minutes)
+              const moment = momentLabelFr(it.moment)
+              const travelMin = travelMinutesFromMeta(it.meta || null)
               const mapsUrl = buildItineraryStepMapsUrl(it)
               const photos = stepPhotos(it)
               const single = photos.length === 1 ? photos[0] : null
               const gallery = photos.length >= 2 ? photos : []
-              const kindLine = [stepKindLabel(it.kind), dur]
+              const kindLine = [stepKindLabel(it.kind), moment, dur]
                 .filter(Boolean)
                 .join(' · ')
 
@@ -225,6 +229,11 @@ export function ItineraryStepsTimeline({ items, onBookActivity }: Props) {
                     </button>
                   ) : null}
                   <div className="min-w-0 flex-1">
+                    {travelMin != null && i > 0 ? (
+                      <p className="mb-1.5 text-[12px] font-medium text-[#A3988C]">
+                        ≈ {travelMin} min depuis le stop précédent
+                      </p>
+                    ) : null}
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-[#A3988C]">
                       {kindLine}
                     </p>

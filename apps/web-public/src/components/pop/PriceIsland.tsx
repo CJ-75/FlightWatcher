@@ -288,7 +288,7 @@ export function PriceIsland({
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-px border-y border-line bg-line">
-                <div className="bg-white px-4 py-2.5">
+                <div className="bg-white px-4 py-2.5 text-center">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
                     {Math.max(1, dayCount) === 1 ? 'Jour' : 'Jours'}
                   </p>
@@ -296,7 +296,7 @@ export function PriceIsland({
                     {Math.max(1, dayCount)}
                   </p>
                 </div>
-                <div className="bg-white px-4 py-2.5">
+                <div className="bg-white px-4 py-2.5 text-center">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
                     Stops
                   </p>

@@ -20,6 +20,8 @@ import {
   itineraryDatedLabelFr,
   itineraryInfoChips,
   itineraryOccasionPhaseLabel,
+  momentLabelFr,
+  travelMinutesFromMeta,
   type Itinerary,
   type ItineraryItem,
 } from '@waypop/shared'
@@ -35,6 +37,7 @@ import { coverUri } from '../lib/coverUri'
 import { useAuth } from '../context/AuthContext'
 import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
+import { ItineraryEditorialSections } from '../components/parcours/ItineraryEditorialSections'
 import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
 import { ParcoursDayHeader } from '../components/parcours/ParcoursDayHeader'
 import { ParcoursStepBlock } from '../components/parcours/ParcoursStepBlock'
@@ -309,6 +312,7 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
       <ItineraryDetailChrome
         heroUrl={cover}
         title={itin.title}
+        subtitle={itin.subtitle}
         metaChips={chips}
         phaseLabel={phaseLabel}
         dateLabel={dateLabel}
@@ -340,6 +344,11 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
             </View>
           ) : null}
 
+          <ItineraryEditorialSections
+            itinerary={itin}
+            cityLabel={cityLabel}
+          />
+
           <Text style={styles.sectionTitle}>Les étapes</Text>
           {loadingSteps && !items.length ? (
             <View style={{ gap: 12 }}>
@@ -365,6 +374,8 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
                   key={it.id || `${day.dayOffset}-${i}`}
                   item={it}
                   index={i}
+                  momentLabel={momentLabelFr(it.moment) || null}
+                  travelMinutes={travelMinutesFromMeta(it.meta || null)}
                 />
               ))}
             </View>

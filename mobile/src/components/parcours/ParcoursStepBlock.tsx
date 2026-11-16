@@ -24,6 +24,8 @@ type Props = {
   item: ItineraryItem
   index: number
   momentLabel?: string | null
+  /** Minutes from previous stop (shown when index > 0). */
+  travelMinutes?: number | null
 }
 
 function stepPhotos(it: ItineraryItem): string[] {
@@ -50,7 +52,12 @@ function stepPhotos(it: ItineraryItem): string[] {
     .slice(0, 5)
 }
 
-export function ParcoursStepBlock({ item, index, momentLabel }: Props) {
+export function ParcoursStepBlock({
+  item,
+  index,
+  momentLabel,
+  travelMinutes,
+}: Props) {
   const title =
     sanitizeUserFacingText(item.title || item.places?.name || `Étape ${index + 1}`) ||
     `Étape ${index + 1}`
@@ -81,6 +88,11 @@ export function ParcoursStepBlock({ item, index, momentLabel }: Props) {
         </Pressable>
       ) : null}
       <View style={{ flex: 1 }}>
+        {travelMinutes != null && index > 0 ? (
+          <Text style={styles.travel}>
+            ≈ {travelMinutes} min depuis le stop précédent
+          </Text>
+        ) : null}
         <Text style={styles.stepKind}>{kindLine}</Text>
         <Text style={styles.stepTitle}>{title}</Text>
         {note ? <Text style={styles.stepNote}>{note}</Text> : null}
@@ -164,6 +176,12 @@ const styles = StyleSheet.create({
     height: 72,
     borderRadius: 16,
     backgroundColor: '#EDE8E1',
+  },
+  travel: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: 4,
   },
   stepKind: {
     fontFamily: fonts.semibold,
