@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient'
 import {
   authSheetTitle,
+  friendlyAuthError,
   type AuthTrigger,
   type PendingAction,
   setPendingAction,
@@ -33,6 +34,10 @@ type Props = {
   onClose: () => void
   onAuthenticated?: () => void
 }
+
+type Step = 'providers' | 'email'
+type EmailMode = 'login' | 'signup'
+type Busy = 'apple' | 'google' | 'email' | null
 
 const SHEET_HERO =
   'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80&fm=jpg'
@@ -57,17 +62,25 @@ export function AuthSheet({
   onClose,
   onAuthenticated,
 }: Props) {
-  const { signInWithGoogle, signInWithApple, signInWithOtp, user } = useAuth()
+  const { signInWithGoogle, signInWithApple, signInWithOtp, signInWithEmail, user } =
+    useAuth()
+  const [step, setStep] = useState<Step>('providers')
+  const [mode, setMode] = useState<EmailMode>('login')
   const [email, setEmail] = useState('')
-  const [busy, setBusy] = useState<'apple' | 'google' | 'email' | null>(null)
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState<Busy>(null)
   const [emailSent, setEmailSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
+    setStep('providers')
+    setMode('login')
     setError(null)
     setEmailSent(false)
     setBusy(null)
+    setEmail('')
+    setPassword('')
     track('auth_sheet_opened', { trigger })
     if (pending) void setPendingAction(pending)
   }, [open, trigger, pending])
@@ -88,7 +101,7 @@ export function AuthSheet({
       method === 'apple' ? await signInWithApple() : await signInWithGoogle()
     if (err) {
       track('auth_failed', { trigger, method, message: err.message })
-      setError(err.message)
+      setError(friendlyAuthError(err.message))
     }
     setBusy(null)
   }
@@ -96,11 +109,31 @@ export function AuthSheet({
   const runEmail = async () => {
     setBusy('email')
     setError(null)
-    track('auth_started', { trigger, method: 'email' })
+    track('auth_started', {
+      trigger,
+      method: mode === 'login' ? 'email_password' : 'email_otp',
+    })
+
+    if (mode === 'login') {
+      const { error: err } = await signInWithEmail(email, password)
+      if (err) {
+        track('auth_failed', {
+          trigger,
+          method: 'email_password',
+          message: err.message,
+        })
+        setError(friendlyAuthError(err.message))
+        setBusy(null)
+        return
+      }
+      setBusy(null)
+      return
+    }
+
     const { error: err } = await signInWithOtp(email)
     if (err) {
-      track('auth_failed', { trigger, method: 'email', message: err.message })
-      setError(err.message)
+      track('auth_failed', { trigger, method: 'email_otp', message: err.message })
+      setError(friendlyAuthError(err.message))
       setBusy(null)
       return
     }
@@ -109,6 +142,12 @@ export function AuthSheet({
   }
 
   const title = authSheetTitle(trigger, { firstName: inviteFirstName })
+  const lead =
+    step === 'providers'
+      ? 'Choisis comment tu veux continuer — en un geste.'
+      : mode === 'login'
+        ? 'Ton email et ton mot de passe, et c’est reparti.'
+        : 'On t’envoie un lien magique — pas de mot de passe à retenir.'
 
   return (
     <Modal visible={open} animationType="slide" transparent onRequestClose={onClose}>
@@ -134,81 +173,153 @@ export function AuthSheet({
           </ImageBackground>
 
           <View style={styles.body}>
-            <Text style={styles.lead}>
-              Apple, Google ou un lien par e-mail — un geste, et on reprend.
-            </Text>
+            <Text style={styles.lead}>{lead}</Text>
 
-            <Pressable
-              style={[styles.btn, styles.btnGoogle]}
-              disabled={!!busy}
-              onPress={() => void runOAuth('google')}
-            >
-              {busy === 'google' ? (
-                <ActivityIndicator color={colors.ink} />
-              ) : (
-                <View style={styles.btnRow}>
-                  <GoogleGIcon size={20} />
-                  <Text style={styles.btnGoogleText}>Continuer avec Google</Text>
-                </View>
-              )}
-            </Pressable>
-            <Pressable
-              style={[styles.btn, styles.btnApple]}
-              disabled={!!busy}
-              onPress={() => void runOAuth('apple')}
-            >
-              {busy === 'apple' ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <View style={styles.btnRow}>
-                  <AppleLogoIcon size={20} color="#fff" />
-                  <Text style={styles.btnAppleText}>Continuer avec Apple</Text>
-                </View>
-              )}
-            </Pressable>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>ou</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {emailSent ? (
-              <Text style={styles.sent}>
-                Lien envoyé à {email} — ouvre-le pour te connecter.
-              </Text>
-            ) : (
+            {step === 'providers' ? (
               <>
-                <TextInput
-                  style={styles.input}
-                  autoCapitalize="none"
-                  keyboardType="email-address"
-                  autoComplete="email"
-                  placeholder="ton@email.com"
-                  placeholderTextColor="rgba(40,32,24,0.35)"
-                  value={email}
-                  onChangeText={setEmail}
-                  editable={!busy}
-                />
                 <Pressable
-                  style={[styles.btn, styles.btnEmail]}
+                  style={[styles.btn, styles.btnOutline]}
                   disabled={!!busy}
-                  onPress={() => void runEmail()}
+                  onPress={() => void runOAuth('google')}
                 >
-                  {busy === 'email' ? (
-                    <ActivityIndicator color="#fff" />
+                  {busy === 'google' ? (
+                    <ActivityIndicator color={colors.ink} />
                   ) : (
-                    <Text style={styles.btnEmailText}>Recevoir un lien</Text>
+                    <View style={styles.btnRow}>
+                      <GoogleGIcon size={20} />
+                      <Text style={styles.btnOutlineText}>Continuer avec Google</Text>
+                    </View>
                   )}
                 </Pressable>
+                <Pressable
+                  style={[styles.btn, styles.btnOutline]}
+                  disabled={!!busy}
+                  onPress={() => void runOAuth('apple')}
+                >
+                  {busy === 'apple' ? (
+                    <ActivityIndicator color={colors.ink} />
+                  ) : (
+                    <View style={styles.btnRow}>
+                      <AppleLogoIcon size={20} color={colors.ink} />
+                      <Text style={styles.btnOutlineText}>Continuer avec Apple</Text>
+                    </View>
+                  )}
+                </Pressable>
+                <Pressable
+                  style={[styles.btn, styles.btnPrimary]}
+                  disabled={!!busy}
+                  onPress={() => {
+                    setError(null)
+                    setStep('email')
+                  }}
+                >
+                  <Text style={styles.btnPrimaryText}>Continuer avec Email</Text>
+                </Pressable>
+                <Pressable onPress={onClose} style={styles.later}>
+                  <Text style={styles.laterText}>Plus tard</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  onPress={() => {
+                    setEmailSent(false)
+                    setError(null)
+                    setStep('providers')
+                  }}
+                  style={styles.back}
+                >
+                  <Text style={styles.backText}>← Autres options</Text>
+                </Pressable>
+
+                {emailSent ? (
+                  <Text style={styles.sent}>
+                    Lien envoyé à {email} — ouvre-le pour activer ton compte.
+                  </Text>
+                ) : (
+                  <>
+                    <View style={styles.tabs}>
+                      <Pressable
+                        style={[styles.tab, mode === 'login' && styles.tabActive]}
+                        onPress={() => {
+                          setMode('login')
+                          setError(null)
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.tabText,
+                            mode === 'login' && styles.tabTextActive,
+                          ]}
+                        >
+                          Connexion
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.tab, mode === 'signup' && styles.tabActive]}
+                        onPress={() => {
+                          setMode('signup')
+                          setError(null)
+                          setPassword('')
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.tabText,
+                            mode === 'signup' && styles.tabTextActive,
+                          ]}
+                        >
+                          Inscription
+                        </Text>
+                      </Pressable>
+                    </View>
+
+                    <TextInput
+                      style={styles.input}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      autoComplete="email"
+                      placeholder="toi@email.com"
+                      placeholderTextColor="rgba(40,32,24,0.35)"
+                      value={email}
+                      onChangeText={setEmail}
+                      editable={!busy}
+                    />
+                    {mode === 'login' ? (
+                      <TextInput
+                        style={styles.input}
+                        secureTextEntry
+                        autoComplete="password"
+                        placeholder="Mot de passe"
+                        placeholderTextColor="rgba(40,32,24,0.35)"
+                        value={password}
+                        onChangeText={setPassword}
+                        editable={!busy}
+                      />
+                    ) : (
+                      <Text style={styles.hint}>
+                        Pas de mot de passe : tu reçois un lien pour confirmer.
+                      </Text>
+                    )}
+                    <Pressable
+                      style={[styles.btn, styles.btnPrimary]}
+                      disabled={!!busy}
+                      onPress={() => void runEmail()}
+                    >
+                      {busy === 'email' ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <Text style={styles.btnPrimaryText}>
+                          {mode === 'login' ? 'Se connecter' : 'Recevoir mon lien'}
+                        </Text>
+                      )}
+                    </Pressable>
+                  </>
+                )}
               </>
             )}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <Pressable onPress={onClose} style={styles.later}>
-              <Text style={styles.laterText}>Plus tard</Text>
-            </Pressable>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -224,7 +335,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     maxHeight: Dimensions.get('window').height * 0.92,
-    backgroundColor: '#FAF6F1',
+    backgroundColor: '#FFF9F5',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     overflow: 'hidden',
@@ -280,6 +391,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 15,
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 10,
   },
   btnRow: {
@@ -288,33 +400,45 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
-  btnApple: { backgroundColor: '#111' },
-  btnAppleText: { fontFamily: fonts.semibold, fontSize: 15, color: '#fff' },
-  btnGoogle: {
+  btnOutline: {
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: 'rgba(40,32,24,0.12)',
   },
-  btnGoogleText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.ink },
-  btnEmail: { backgroundColor: colors.primary, marginTop: 4 },
-  btnEmailText: { fontFamily: fonts.semibold, fontSize: 15, color: '#fff' },
-  divider: {
+  btnOutlineText: { fontFamily: fonts.semibold, fontSize: 15, color: colors.ink },
+  btnPrimary: { backgroundColor: colors.ink },
+  btnPrimaryText: { fontFamily: fonts.semibold, fontSize: 15, color: '#FFF9F5' },
+  back: { marginBottom: 12, paddingVertical: 4 },
+  backText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: 'rgba(40,32,24,0.55)',
+  },
+  tabs: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginVertical: 12,
+    backgroundColor: 'rgba(29,27,25,0.05)',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 12,
+    gap: 4,
   },
-  dividerLine: {
+  tab: {
     flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(40,32,24,0.12)',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
   },
-  dividerText: {
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    color: 'rgba(40,32,24,0.4)',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+  tabActive: {
+    backgroundColor: '#fff',
+  },
+  tabText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: 'rgba(40,32,24,0.5)',
+  },
+  tabTextActive: {
+    fontFamily: fonts.semibold,
+    color: colors.ink,
   },
   input: {
     fontFamily: fonts.regular,
@@ -326,6 +450,18 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     backgroundColor: '#fff',
     color: colors.ink,
+    marginBottom: 10,
+  },
+  hint: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(29,27,25,0.8)',
+    backgroundColor: 'rgba(255,231,220,0.7)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 10,
   },
   sent: {
     fontFamily: fonts.regular,
@@ -339,7 +475,7 @@ const styles = StyleSheet.create({
     color: '#b42318',
     marginTop: 10,
   },
-  later: { marginTop: 14, alignItems: 'center', padding: 8 },
+  later: { marginTop: 6, alignItems: 'center', padding: 8 },
   laterText: {
     fontFamily: fonts.medium,
     fontSize: 14,

@@ -24,6 +24,10 @@ interface AuthContextValue {
   signInWithGoogle: () => Promise<{ error: Error | null }>
   signInWithApple: () => Promise<{ error: Error | null }>
   signInWithOtp: (email: string) => Promise<{ error: Error | null }>
+  signInWithEmail: (
+    email: string,
+    password: string,
+  ) => Promise<{ error: Error | null }>
   signOut: () => Promise<void>
 }
 
@@ -195,6 +199,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signInWithGoogle: () => auth.signInWithGoogle(),
       signInWithApple: () => auth.signInWithApple(),
       signInWithOtp: (email: string) => auth.signInWithOtp(email),
+      signInWithEmail: (email: string, password: string) =>
+        auth.signInWithEmail(email, password),
       signOut: async () => {
         try {
           await auth.signOut()

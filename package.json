@@ -16,7 +16,9 @@
     "dev:web": "npm run dev -w waypop-frontend",
     "dev:public": "npm run dev -w waypop-web-public",
     "dev:mobile": "npm run start -w waypop-mobile --if-present",
-    "accept:pop": "npm run accept -w waypop-web-public"
+    "accept:pop": "npm run accept -w waypop-web-public",
+    "check:auth": "npm test -w @waypop/shared -- authContract",
+    "check:auth:live": "node scripts/auth-live-smoke.mjs"
   },
   "overrides": {
     "ws": "8.22.0"

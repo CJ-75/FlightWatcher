@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { seedPopularAirports } from '@waypop/shared'
+import { citySlugDisplayNameFr, seedPopularAirports } from '@waypop/shared'
 
 type PricePayload = {
   ok?: boolean
@@ -34,11 +34,34 @@ function formatEuro(n: number): string {
   }).format(n)
 }
 
-function departureCities(): CityOpt[] {
+function cityKey(s: string): string {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+}
+
+function departureCities(excludeDest?: {
+  destCity: string
+  cityLabel: string
+}): CityOpt[] {
+  const banned = new Set(
+    [
+      excludeDest?.destCity,
+      excludeDest?.cityLabel,
+      excludeDest?.destCity
+        ? citySlugDisplayNameFr(excludeDest.destCity)
+        : '',
+    ]
+      .map((x) => cityKey(String(x || '')))
+      .filter(Boolean),
+  )
   const byCity = new Map<string, string[]>()
   for (const a of seedPopularAirports()) {
     const city = String(a.city || a.name || a.code).trim()
     if (!city) continue
+    if (banned.has(cityKey(city))) continue
     const list = byCity.get(city) || []
     if (!list.includes(a.code)) list.push(a.code)
     byCity.set(city, list)
@@ -55,6 +78,14 @@ function cityLabelForCodes(codes: string, opts: CityOpt[]): string {
       o.codes.split(',').includes(codes.split(',')[0] || ''),
   )
   return hit?.label || codes
+}
+
+function originInList(codes: string, opts: CityOpt[]): boolean {
+  return opts.some(
+    (o) =>
+      o.codes === codes ||
+      o.codes.split(',').includes(codes.split(',')[0] || ''),
+  )
 }
 
 type Props = {
@@ -76,7 +107,10 @@ export function PriceIsland({
   shareUrl,
   shareTitle,
 }: Props) {
-  const cities = useMemo(() => departureCities(), [])
+  const cities = useMemo(
+    () => departureCities({ destCity, cityLabel }),
+    [destCity, cityLabel],
+  )
   const [origin, setOrigin] = useState(DEFAULT_ORIGIN)
   const [data, setData] = useState<PricePayload | null>(null)
   const [loading, setLoading] = useState(true)
@@ -85,12 +119,21 @@ export function PriceIsland({
     try {
       const saved = localStorage.getItem(ORIGIN_LS)
       if (saved && /^[A-Z]{3}(,[A-Z]{3})*$/i.test(saved)) {
-        setOrigin(saved.toUpperCase())
+        const next = saved.toUpperCase()
+        if (originInList(next, cities)) {
+          setOrigin(next)
+          return
+        }
       }
     } catch {
       /* ignore */
     }
-  }, [])
+    const fallback =
+      (originInList(DEFAULT_ORIGIN, cities) && DEFAULT_ORIGIN) ||
+      cities[0]?.codes ||
+      DEFAULT_ORIGIN
+    setOrigin(fallback)
+  }, [cities])
 
   useEffect(() => {
     let cancelled = false

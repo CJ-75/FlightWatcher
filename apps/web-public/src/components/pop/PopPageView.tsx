@@ -13,6 +13,7 @@ import { popSeoCopy } from '@/lib/popSeoPage'
 import { PopFooter } from '@/components/pop/PopFooter'
 import { PopJsonLd } from '@/components/pop/JsonLd'
 import { isPublicImageSrc, PopImage } from '@/components/pop/PopImage'
+import { KeepButton } from '@/components/pop/KeepButton'
 import { ShareButton } from '@/components/pop/ShareButton'
 import { LaunchPopCta } from '@/components/pop/LaunchPopCta'
 import { PopAuthor } from '@/components/ui/WaypopMark'
@@ -122,19 +123,6 @@ export function PopPageView({
   const stay = parseStay(itin.stay)
   const tips = parseTips(itin.tips)
   const faq = parseFaq(itin.faq)
-  const verified =
-    itin.verified_at &&
-    (() => {
-      try {
-        return new Date(String(itin.verified_at)).toLocaleDateString('fr-FR', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      } catch {
-        return null
-      }
-    })()
 
   const launchHref = `/parcours/${encodeURIComponent(itin.slug || slug)}`
   const transport = (itin.transport_modes as string[] | undefined) || []
@@ -212,11 +200,7 @@ export function PopPageView({
             <span className="line-clamp-1 text-white/90">{h1}</span>
           </nav>
 
-          <PopAuthor
-            authorKind={itin.author_kind as string | undefined}
-            verifiedDate={verified}
-            className="mt-0"
-          />
+          <PopAuthor authorKind={itin.author_kind as string | undefined} />
           <h1 className="mt-1 max-w-3xl text-[1.35rem] font-extrabold leading-[1.18] tracking-tight text-white sm:mt-3 sm:text-4xl lg:text-[2.75rem]">
             {h1}
           </h1>
@@ -249,10 +233,12 @@ export function PopPageView({
               Ajouter au Planner
             </a>
             <LaunchPopCta href={launchHref} variant="hero" />
-            <ShareButton
+            <ShareButton title={h1} variant="icon" />
+            <KeepButton
+              city={city}
+              slug={String(itin.slug || slug)}
               title={h1}
-              variant="link"
-              className="!text-white/75 hover:!text-white"
+              variant="icon"
             />
           </div>
         </div>

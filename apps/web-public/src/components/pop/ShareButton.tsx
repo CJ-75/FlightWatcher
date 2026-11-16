@@ -11,7 +11,7 @@ export function ShareButton({
   title: string
   url?: string
   className?: string
-  variant?: 'ghost' | 'link'
+  variant?: 'ghost' | 'link' | 'icon'
 }) {
   const [copied, setCopied] = useState(false)
 
@@ -32,12 +32,30 @@ export function ShareButton({
       window.setTimeout(() => setCopied(false), 2000)
     } catch {
       window.open(
-        `https://wa.me/?text=${encodeURIComponent(`${title} — ${href}`)}`,
+        `https://wa.me/?text=${encodeURIComponent(`${title} ${href}`)}`,
         '_blank',
         'noopener,noreferrer',
       )
     }
   }, [title, url])
+
+  if (variant === 'icon') {
+    return (
+      <button
+        type="button"
+        onClick={() => void share()}
+        aria-label={copied ? 'Lien copié' : 'Partager'}
+        title={copied ? 'Lien copié' : 'Partager'}
+        className={`inline-flex h-11 w-11 items-center justify-center rounded-full bg-white/95 text-ink shadow-soft transition-colors hover:bg-white ${className}`}
+      >
+        {copied ? (
+          <CheckIcon />
+        ) : (
+          <ShareIcon />
+        )}
+      </button>
+    )
+  }
 
   const base =
     variant === 'link'
@@ -52,5 +70,46 @@ export function ShareButton({
     >
       {copied ? 'Lien copié' : 'Partager'}
     </button>
+  )
+}
+
+function ShareIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 3v12"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M8 7l4-4 4 4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M5 12.5 10 17l9-10"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }

@@ -31,25 +31,20 @@ export function PopAuthor({
   authorKind,
   className = '',
   textClassName = 'text-[11px] font-semibold uppercase tracking-brand text-white/75',
-  verifiedDate,
 }: {
   authorKind?: string | null
   className?: string
   textClassName?: string
-  verifiedDate?: string | null
 }) {
   const isWaypop = String(authorKind || 'admin') !== 'user'
   const name = isWaypop ? 'Waypop' : 'Communauté'
 
   return (
-    <p className={`inline-flex flex-wrap items-center gap-1.5 ${className}`}>
-      <span className={`inline-flex items-center gap-1 ${textClassName}`}>
-        <span>Par {name}</span>
-        {isWaypop ? <VerifiedBadge size={14} /> : null}
-      </span>
-      {verifiedDate ? (
-        <span className={textClassName}>· vérifié le {verifiedDate}</span>
-      ) : null}
+    <p
+      className={`inline-flex flex-wrap items-center gap-1 ${textClassName} ${className}`}
+    >
+      <span>Par {name}</span>
+      {isWaypop ? <VerifiedBadge size={14} /> : null}
     </p>
   )
 }

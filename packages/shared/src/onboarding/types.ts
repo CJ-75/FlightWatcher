@@ -48,7 +48,7 @@ export const DEFAULT_ONBOARDING_PREFS: OnboardingPrefs = {
 
 export const AUTH_SHEET_TITLES: Record<AuthTrigger, string> = {
   invite_join: 'Rejoins {name} en un geste',
-  favorite: 'Garde ce week-end',
+  favorite: 'Lancer ce pop',
   create_trip: 'Crée ton voyage en un geste',
   invite_friends: 'Invite tes amis en un geste',
   book: 'Connecte-toi pour réserver',

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Sora } from 'next/font/google'
+import { AuthHost } from '@/components/auth/AuthHost'
 import { PreviewBadge } from '@/components/PreviewBadge'
 import './globals.css'
 
@@ -35,8 +36,10 @@ export default function RootLayout({
   return (
     <html lang="fr" className={sora.variable}>
       <body className="min-h-screen font-sans">
-        {children}
-        <PreviewBadge />
+        <AuthHost>
+          {children}
+          <PreviewBadge />
+        </AuthHost>
       </body>
     </html>
   )
