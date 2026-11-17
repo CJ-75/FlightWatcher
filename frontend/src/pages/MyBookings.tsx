@@ -948,9 +948,8 @@ export default function MyBookings() {
             ) : null}
           </>
         )}
-
-        <SiteFooter />
       </div>
+      <SiteFooter />
     </div>
   )
 }

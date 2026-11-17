@@ -1806,9 +1806,7 @@ function Dashboard() {
         duration={toastType === 'info' ? 5000 : 3000}
       />
 
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 xl:px-10">
-        <SiteFooter />
-      </div>
+      <SiteFooter />
     </div>
   )
 }

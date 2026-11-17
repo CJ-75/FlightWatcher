@@ -7,6 +7,10 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      '@waypop/shared/web': path.resolve(
+        __dirname,
+        '../packages/shared/src/web/SiteFooter.tsx',
+      ),
       '@waypop/shared': path.resolve(__dirname, '../packages/shared/src/index.ts'),
     },
   },

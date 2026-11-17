@@ -12,6 +12,7 @@ import {
   type ItineraryOccasion,
 } from '@waypop/shared'
 import type { PublicItinerary } from '@/lib/parcoursApi'
+import { SiteFooter } from '@waypop/shared/web'
 import { LandingSearch } from '@/components/landing/LandingSearch'
 import { LandingStoreCtas } from '@/components/landing/LandingStoreCtas'
 import { LivePriceBadge } from '@/components/landing/LivePriceBadge'
@@ -604,65 +605,7 @@ export function LandingHome({
         </div>
       </section>
 
-      <footer id="contact" className="border-t border-line bg-sand/50">
-        <div className="mx-auto grid max-w-pop gap-10 px-5 py-12 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <p className="flex items-center gap-2 text-lg font-extrabold text-ink">
-              <PlaneLogo />
-              Waypop
-            </p>
-            <p className="mt-3 text-sm leading-relaxed text-ink-muted">
-              L’app des week-ends déjà organisés.
-            </p>
-          </div>
-          {[
-            {
-              t: 'Produit',
-              links: [
-                { href: '/sejours', l: 'Séjours' },
-                { href: '/pop/paris', l: 'Pops' },
-                { href: '/alertes', l: 'Alertes' },
-              ],
-            },
-            {
-              t: 'Découvrir',
-              links: [
-                { href: '#how', l: 'Comment ça marche' },
-                { href: '#destinations', l: 'Destinations' },
-                { href: '#pops', l: 'Pops' },
-                { href: '#alertes', l: 'Alertes' },
-              ],
-            },
-            {
-              t: 'Légal',
-              links: [
-                { href: '/mentions-legales', l: 'Mentions' },
-                { href: '/confidentialite', l: 'Confidentialité' },
-                { href: 'mailto:hello@waypop.co', l: 'Contact' },
-              ],
-            },
-          ].map((col) => (
-            <div key={col.t}>
-              <p className="text-sm font-extrabold text-ink">{col.t}</p>
-              <ul className="mt-3 space-y-2">
-                {col.links.map((link) => (
-                  <li key={link.l}>
-                    <a
-                      href={link.href}
-                      className="text-sm text-ink-muted no-underline hover:text-accent"
-                    >
-                      {link.l}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-        <div className="border-t border-line px-5 py-4 text-center text-xs text-ink-muted">
-          © {new Date().getFullYear()} Waypop
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }

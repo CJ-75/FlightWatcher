@@ -12,7 +12,8 @@
     "./auth": "./src/auth/createSupabaseAuth.ts",
     "./i18n": "./src/i18n/translations.ts",
     "./storage": "./src/storage/kv.ts",
-    "./media": "./src/media/index.ts"
+    "./media": "./src/media/index.ts",
+    "./web": "./src/web/SiteFooter.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -22,7 +23,15 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.90.1"
   },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true }
+  },
   "devDependencies": {
+    "@types/react": "^18.2.0",
+    "react": "^18.2.0",
     "typescript": "^5.2.2",
     "vitest": "^3.2.7"
   }

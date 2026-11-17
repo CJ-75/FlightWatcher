@@ -5,7 +5,10 @@ import type { Config } from 'tailwindcss'
  * (accent #FF6B35, ink #1D1B19, cream #FFF9F5) — no violet.
  */
 const config: Config = {
-  content: ['./src/**/*.{ts,tsx}'],
+  content: [
+    './src/**/*.{ts,tsx}',
+    '../../packages/shared/src/web/**/*.{ts,tsx}',
+  ],
   theme: {
     extend: {
       colors: {

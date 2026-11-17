@@ -191,9 +191,8 @@ export default function Legal() {
             </section>
           ))}
         </div>
-
-        <SiteFooter />
       </div>
+      <SiteFooter />
     </div>
   )
 }

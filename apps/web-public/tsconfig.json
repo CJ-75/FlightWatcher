@@ -16,7 +16,9 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
-      "@waypop/shared": ["../../packages/shared/src/index.ts"]
+      "@waypop/shared": ["../../packages/shared/src/index.ts"],
+      "@waypop/shared/web": ["../../packages/shared/src/web/SiteFooter.tsx"],
+      "@waypop/shared/web/*": ["../../packages/shared/src/web/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

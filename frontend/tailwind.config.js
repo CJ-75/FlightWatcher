@@ -4,7 +4,11 @@
  * Warm peach canvas, orange brand, deep warm ink (no cool gray).
  */
 export default {
-  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  content: [
+    './index.html',
+    './src/**/*.{js,ts,jsx,tsx}',
+    '../packages/shared/src/web/**/*.{ts,tsx}',
+  ],
   theme: {
     extend: {
       colors: {
@@ -18,12 +22,17 @@ export default {
           900: '#8B2E0E',
         },
         accent: {
+          DEFAULT: '#FF6B35',
+          soft: '#FFE7DC',
           500: '#FF3D6B',
         },
         canvas: '#FFF9F5',
+        cream: '#FFF9F5',
+        sand: '#FFE9DD',
         ink: {
           DEFAULT: '#1A120E',
           soft: '#4A3428',
+          muted: '#7A6F68',
         },
         muted: '#8A6A58',
         faint: '#C4A794',
@@ -84,6 +93,9 @@ export default {
       },
       letterSpacing: {
         tightest: '-0.06em',
+      },
+      maxWidth: {
+        pop: '72rem',
       },
     },
   },
