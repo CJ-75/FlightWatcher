@@ -32,8 +32,6 @@ type Props = {
   onOpenItem?: (item: ProgrammeSlotItem) => void
 }
 
-const SERIF = '"Instrument Serif", Georgia, serif'
-
 const KIND_LABEL: Record<ProgrammeItemKind, string> = {
   flight_out: 'Vol',
   flight_ret: 'Vol',
@@ -157,10 +155,7 @@ export function ProgrammePanel({
   if (timeline.needsDates) {
     return (
       <div className="space-y-3">
-        <h3
-          className="text-2xl font-normal italic tracking-tight text-[#1A120E]"
-          style={{ fontFamily: SERIF }}
-        >
+        <h3 className="text-2xl font-black tracking-tight text-[#1A120E]">
           Programme
         </h3>
         <p className="text-[13px] leading-relaxed text-[#8A7B6E]">
@@ -180,10 +175,7 @@ export function ProgrammePanel({
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h3
-          className="text-2xl font-normal italic tracking-tight text-[#1A120E]"
-          style={{ fontFamily: SERIF }}
-        >
+        <h3 className="text-2xl font-black tracking-tight text-[#1A120E]">
           Programme
         </h3>
         <p className="text-[13px] text-[#8A7B6E]">
@@ -210,10 +202,7 @@ export function ProgrammePanel({
               className="absolute bottom-0 left-[3px] top-4 w-px bg-[#EDE8E1]"
               aria-hidden
             />
-            <h4
-              className="text-xl font-normal capitalize italic tracking-tight text-[#1A120E]"
-              style={{ fontFamily: SERIF }}
-            >
+            <h4 className="text-xl font-black capitalize tracking-tight text-[#1A120E]">
               {d.label}
             </h4>
             {d.empty ? (
@@ -260,10 +249,7 @@ function UnplacedBlock({
 }) {
   return (
     <section className="rounded-2xl border border-dashed border-[#EDE8E1] bg-[#F7F4EF]/70 p-4">
-      <h4
-        className="text-lg font-normal italic tracking-tight text-[#1A120E]"
-        style={{ fontFamily: SERIF }}
-      >
+      <h4 className="text-lg font-black tracking-tight text-[#1A120E]">
         À placer
       </h4>
       <p className="mt-1 text-[12px] font-medium text-[#8A7B6E]">{hint}</p>

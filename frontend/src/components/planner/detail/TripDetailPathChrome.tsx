@@ -17,9 +17,14 @@ type HotelHero = {
 type Props = {
   tripId: string
   heroUrl: string
-  /** City shown as the hero headline */
+  /** City shown as the hero headline (default Path hero) */
   city: string
-  /** When set, hero becomes a sliding hotel photo gallery */
+  /**
+   * When set, replaces the default full-bleed Path hero (e.g. classic desktop card).
+   * Sheet + tabs still render below.
+   */
+  hero?: ReactNode
+  /** When set (and no custom hero), hero becomes a sliding hotel photo gallery */
   hotelHero?: HotelHero | null
   metaChips?: string[]
   phaseLabel: string
@@ -43,8 +48,6 @@ type Props = {
   onTabChange?: (tab: TripDetailTabId) => void
 }
 
-const SERIF = '"Instrument Serif", "Times New Roman", Georgia, serif'
-
 function PencilIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
   return (
     <svg
@@ -64,13 +67,14 @@ function PencilIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
 }
 
 /**
- * Path chrome — V0.2 visual language (serif hero, cream sheet) +
- * hotel carousel, rename, voyageurs.
+ * Path chrome — cream sheet + tabs.
+ * Default hero = serif full-bleed; pass `hero` for classic desktop card.
  */
 export function TripDetailPathChrome({
   tripId,
   heroUrl,
   city,
+  hero,
   hotelHero,
   metaChips,
   phaseLabel,
@@ -116,10 +120,11 @@ export function TripDetailPathChrome({
         ? voyageurs
         : apercu
   const chips = (metaChips || []).filter(Boolean)
+  const useCustomHero = hero != null
 
   const heroCopy = (
     <div className="max-w-3xl space-y-3">
-      <span className="inline-flex rounded-full bg-white/18 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/90 backdrop-blur-md ring-1 ring-white/25">
+      <span className="inline-flex rounded-full bg-[rgba(255,255,255,0.82)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#1A120E] shadow-sm ring-1 ring-black/10 backdrop-blur-md">
         {phaseLabel}
       </span>
       {titleEditing ? (
@@ -142,8 +147,7 @@ export function TripDetailPathChrome({
             }}
             maxLength={80}
             disabled={titleSaving}
-            className="min-w-0 flex-1 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-2xl font-normal italic tracking-tight text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 sm:text-3xl"
-            style={{ fontFamily: SERIF }}
+            className="min-w-0 flex-1 rounded-xl border border-white/25 bg-white/10 px-3.5 py-2 text-2xl font-black tracking-tight text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 sm:text-3xl"
             placeholder="Nom du voyage"
             aria-label="Nom du voyage"
           />
@@ -165,10 +169,7 @@ export function TripDetailPathChrome({
         </form>
       ) : (
         <div className="flex flex-wrap items-end gap-3">
-          <h1
-            className="max-w-[90%] text-[2.35rem] font-normal leading-[1.05] tracking-[-0.02em] text-white sm:text-5xl lg:text-6xl"
-            style={{ fontFamily: SERIF, fontStyle: 'italic' }}
-          >
+          <h1 className="max-w-[90%] text-[2.35rem] font-black leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
             {city}
           </h1>
           {onRename ? (
@@ -202,51 +203,69 @@ export function TripDetailPathChrome({
   )
 
   return (
-    <div className="relative w-full bg-[#F7F4EF] pb-10 lg:-mx-6 lg:w-[calc(100%+3rem)] xl:-mx-8 xl:w-[calc(100%+4rem)]">
-      <section className="relative isolate min-h-[min(52vh,440px)] overflow-hidden lg:min-h-[min(48vh,520px)]">
-        {hotelHero ? (
-          <div className="absolute inset-0">
-            <HotelPhotoGallery
-              variant="hero"
-              className="h-full min-h-full w-full"
-              hotelId={hotelHero.hotelId}
-              seedPhoto={hotelHero.seedPhoto || heroUrl}
-              seedPhotos={
-                hotelHero.seedPhotos?.length
-                  ? hotelHero.seedPhotos
-                  : [hotelHero.seedPhoto || heroUrl].filter(Boolean)
-              }
-              alt={hotelHero.hotelName}
-              hotelName={hotelHero.hotelName}
-              cityLabel={city}
-              overlay={
-                <div className="mx-auto w-full max-w-6xl px-5 pb-16 pt-4 sm:px-8 lg:px-10 lg:pb-20">
-                  {heroCopy}
-                </div>
-              }
-            />
-          </div>
-        ) : (
-          <>
-            <img
-              src={heroUrl}
-              alt=""
-              aria-hidden
-              fetchPriority="high"
-              decoding="async"
-              className="absolute inset-0 h-full w-full scale-[1.02] object-cover"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
-            <div className="relative mx-auto flex min-h-[min(52vh,440px)] w-full max-w-6xl flex-col justify-end px-5 pb-16 pt-4 sm:px-8 lg:min-h-[min(48vh,520px)] lg:px-10 lg:pb-20">
-              {heroCopy}
+    <div
+      className={
+        useCustomHero
+          ? 'relative w-full space-y-6 pb-10'
+          : 'relative w-full bg-[#F7F4EF] pb-10 lg:-mx-6 lg:w-[calc(100%+3rem)] xl:-mx-8 xl:w-[calc(100%+4rem)]'
+      }
+    >
+      {useCustomHero ? (
+        <div className="w-full">{hero}</div>
+      ) : (
+        <section className="relative isolate min-h-[min(52vh,440px)] overflow-hidden lg:min-h-[min(48vh,520px)]">
+          {hotelHero ? (
+            <div className="absolute inset-0">
+              <HotelPhotoGallery
+                variant="hero"
+                className="h-full min-h-full w-full"
+                hotelId={hotelHero.hotelId}
+                seedPhoto={hotelHero.seedPhoto || heroUrl}
+                seedPhotos={
+                  hotelHero.seedPhotos?.length
+                    ? hotelHero.seedPhotos
+                    : [hotelHero.seedPhoto || heroUrl].filter(Boolean)
+                }
+                alt={hotelHero.hotelName}
+                hotelName={hotelHero.hotelName}
+                cityLabel={city}
+                overlay={
+                  <div className="mx-auto w-full max-w-6xl px-5 pb-16 pt-4 sm:px-8 lg:px-10 lg:pb-20">
+                    {heroCopy}
+                  </div>
+                }
+              />
             </div>
-          </>
-        )}
-      </section>
+          ) : (
+            <>
+              <img
+                src={heroUrl}
+                alt=""
+                aria-hidden
+                fetchPriority="high"
+                decoding="async"
+                className="absolute inset-0 h-full w-full scale-[1.02] object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/35 via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+              <div className="relative mx-auto flex min-h-[min(52vh,440px)] w-full max-w-6xl flex-col justify-end px-5 pb-16 pt-4 sm:px-8 lg:min-h-[min(48vh,520px)] lg:px-10 lg:pb-20">
+                {heroCopy}
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
-      <div className="relative z-[1] -mt-8 rounded-t-[32px] bg-white px-5 pb-8 pt-5 shadow-[0_-8px_40px_rgba(20,12,8,0.12)] sm:px-8 lg:-mt-10 lg:rounded-t-[40px] lg:px-10 lg:pb-12 lg:pt-8">
-        <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-[#EDE8E1] lg:mb-5" aria-hidden />
+      <div
+        className={
+          useCustomHero
+            ? 'relative z-[1] rounded-[28px] border border-[#EDE8E1] bg-[#FFFBF8] px-5 pb-8 pt-5 shadow-sm sm:px-8 lg:rounded-[32px] lg:px-10 lg:pb-12 lg:pt-8'
+            : 'relative z-[1] -mt-8 rounded-t-[32px] bg-[#FFFBF8] px-5 pb-8 pt-5 shadow-[0_-8px_40px_rgba(20,12,8,0.12)] sm:px-8 lg:-mt-10 lg:rounded-t-[40px] lg:px-10 lg:pb-12 lg:pt-8'
+        }
+      >
+        {!useCustomHero ? (
+          <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-[#EDE8E1] lg:mb-5" aria-hidden />
+        ) : null}
         <div className="mx-auto w-full max-w-6xl">
           {(guideName || guideSubtitle) && (
             <div className="mb-5 flex items-center justify-between gap-3 lg:mb-7">

@@ -3,7 +3,7 @@
 const flags: Record<string, boolean> = {
   pop_page_v2_enabled: false,
   landing_v2_enabled: false,
-  trip_detail_v2_enabled: false,
+  trip_detail_v2_enabled: true,
 }
 
 export function hydrateConfigFlags(cfg: Record<string, unknown> | null | undefined): void {

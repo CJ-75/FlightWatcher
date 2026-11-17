@@ -1476,7 +1476,8 @@ function TripDetailView({
   const [pathTab, setPathTab] = useState<
     'apercu' | 'programme' | 'voyageurs'
   >('apercu')
-  const [tripDetailV2, setTripDetailV2] = useState(false)
+  /** Default Path on; only force classic when API sets flag explicitly false. */
+  const [tripDetailV2, setTripDetailV2] = useState(true)
   /** Defer heavy aperçu panels until after first paint. */
   const [deferHeavyPanels, setDeferHeavyPanels] = useState(false)
   const [orgaAuth, setOrgaAuth] = useState<{
@@ -1540,7 +1541,7 @@ function TripDetailView({
         setPlannerRestaurantsEnabled(
           cfg.planner_restaurants_enabled === true,
         )
-        setTripDetailV2(cfg.trip_detail_v2_enabled === true)
+        setTripDetailV2(cfg.trip_detail_v2_enabled !== false)
       })
       .catch(() => undefined)
   }, [])
@@ -3147,8 +3148,8 @@ function TripDetailView({
     activitiesPartial: activityStepProgress(activityItems).partial,
   })
 
-  // Web keeps classic trip form (d7e7b28). Path chrome stays on mobile only.
-  if (false && tripDetailV2) {
+  // Path body + classic desktop hero (mobile keeps its own chrome).
+  if (tripDetailV2 !== false) {
     const programmeItems = activityItems
       .filter((i) => i.id)
       .map((i) => ({
@@ -3169,11 +3170,156 @@ function TripDetailView({
       null
     const orgaFirst =
       (orgaDisplayName || '').trim().split(/\s+/)[0] || null
+
+    const classicHero = (
+      <section className="relative isolate overflow-hidden rounded-[32px] min-h-[min(42vh,360px)] shadow-xl shadow-orange-950/10 border border-orange-100/60">
+        <img
+          src={destinationImage}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover scale-[1.02]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/92 via-[#1a100c]/45 to-black/25" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#140c08]/55 via-transparent to-transparent" />
+        <div className="relative flex min-h-[min(42vh,360px)] flex-col justify-between p-5 sm:p-7 lg:p-9">
+          <div className="flex items-start justify-between gap-3">
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center rounded-full bg-white/15 px-3.5 py-2 text-sm font-bold text-white backdrop-blur-md ring-1 ring-white/20 hover:bg-white/25 min-h-[40px]"
+            >
+              ← {t('nav.planner')}
+            </button>
+            <span
+              className={`rounded-full text-[11px] font-bold px-3 py-1.5 backdrop-blur-md ${
+                canRelaunch
+                  ? 'bg-[#FF6B35]/95 text-white ring-1 ring-white/25'
+                  : workspace?.phase === 'booked'
+                    ? 'bg-emerald-400/20 text-emerald-50 ring-1 ring-emerald-200/30'
+                    : 'bg-white/90 text-slate-800'
+              }`}
+            >
+              {canRelaunch ? PLANNER_RELAUNCH_KICKER_FR : statusLabel}
+            </span>
+          </div>
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-300">
+              {destinationName}
+            </p>
+            {editingName ? (
+              <form
+                className="mt-2 flex flex-wrap items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void saveRename()
+                }}
+              >
+                <input
+                  autoFocus
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.preventDefault()
+                      cancelRename()
+                    }
+                  }}
+                  maxLength={80}
+                  disabled={savingName}
+                  className="min-w-0 flex-1 rounded-2xl border border-white/30 bg-white/15 px-4 py-2.5 text-2xl sm:text-3xl font-black text-white tracking-tight placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-white/40"
+                  placeholder="Nom du voyage"
+                  aria-label="Nom du voyage"
+                />
+                <button
+                  type="submit"
+                  disabled={savingName}
+                  className="rounded-2xl bg-white px-4 py-2.5 text-sm font-extrabold text-[#D94D1B] disabled:opacity-60 min-h-[44px]"
+                >
+                  {savingName ? '…' : 'OK'}
+                </button>
+                <button
+                  type="button"
+                  disabled={savingName}
+                  onClick={cancelRename}
+                  className="rounded-2xl border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60 min-h-[44px]"
+                >
+                  Annuler
+                </button>
+              </form>
+            ) : (
+              <div className="mt-2 flex flex-wrap items-center gap-2.5">
+                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-[1.05]">
+                  {trip.name}
+                </h2>
+                {isOrganizer ? (
+                  <button
+                    type="button"
+                    onClick={startRename}
+                    aria-label="Renommer"
+                    title="Renommer"
+                    className="inline-flex items-center justify-center rounded-full border border-white/25 bg-white/10 w-9 h-9 text-white/95 hover:bg-white/20 backdrop-blur-md"
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </button>
+                ) : null}
+              </div>
+            )}
+            <p className="mt-3 text-sm sm:text-base font-semibold text-white/80">
+              {routeLine}
+              {trip.direct ? ' · directs' : ''}
+            </p>
+            {dateLine ? (
+              <p className="mt-1 text-sm text-white/65">{dateLine}</p>
+            ) : null}
+            {workspace?.phase ? (
+              <p className="mt-2 text-sm text-white/55">
+                {PHASE_HINT[workspace.phase]}
+              </p>
+            ) : null}
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              {canRelaunch ? (
+                <button
+                  type="button"
+                  disabled={relaunching || scanning}
+                  onClick={openRelaunch}
+                  className="inline-flex items-center rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] disabled:opacity-60 min-h-[48px]"
+                >
+                  {relaunching
+                    ? t('planner.scanning')
+                    : PLANNER_RELAUNCH_ACTION_FR}
+                </button>
+              ) : isOrganizer && trip.status !== 'locked' ? (
+                <button
+                  type="button"
+                  disabled={scanning}
+                  onClick={() => void scan()}
+                  className="inline-flex items-center rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] disabled:opacity-60 min-h-[48px]"
+                >
+                  {scanning ? t('planner.scanning') : t('planner.scan')}
+                </button>
+              ) : null}
+              {reservationToken && (hotelBooked || flightBooked) ? (
+                <button
+                  type="button"
+                  onClick={openReservations}
+                  className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold text-white hover:bg-white/20 min-h-[48px] backdrop-blur-md"
+                >
+                  {hotelBooked ? HOTEL_CTA_FR.view : 'Voir les réservations'}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </section>
+    )
+
     return (
+      <>
       <TripDetailPathChrome
         tripId={trip.id}
         heroUrl={destinationImage}
         city={destinationName}
+        hero={classicHero}
         metaChips={[
           dateLine,
           `${pax} voyageur${pax > 1 ? 's' : ''}`,
@@ -3200,13 +3346,6 @@ function TripDetailView({
               }
             : undefined
         }
-        onRename={isOrganizer ? startRename : undefined}
-        titleEditing={editingName}
-        titleDraft={nameDraft}
-        onTitleDraftChange={setNameDraft}
-        onTitleSave={() => void saveRename()}
-        onTitleCancel={cancelRename}
-        titleSaving={savingName}
         apercu={
           <div className="space-y-7" ref={stayExtrasRef}>
             <PathStepsTiles
@@ -3222,14 +3361,49 @@ function TripDetailView({
                 }
               }}
             />
+            {scanning ? (
+              <PlannerScanPanel
+                fromLabel={departureRouteLabel(reservationOrigin)}
+                toLabel={
+                  reservationDest
+                    ? String(reservationDest).replace(/,/g, ' · ')
+                    : 'inspire'
+                }
+              />
+            ) : null}
+            {canRelaunch ? (
+              <button
+                type="button"
+                disabled={relaunching || scanning}
+                onClick={openRelaunch}
+                className="group relative isolate w-full overflow-hidden rounded-[28px] min-h-[240px] text-left shadow-xl shadow-orange-950/15 border border-orange-100/50 disabled:opacity-70"
+              >
+                <img
+                  src={destinationImage}
+                  alt=""
+                  aria-hidden
+                  className="absolute inset-0 h-full w-full object-cover scale-[1.02] transition-transform duration-500 group-hover:scale-105"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#140c08]/94 via-[#1a100c]/55 to-black/20" />
+                <div className="relative flex min-h-[240px] flex-col justify-end p-5 sm:p-7">
+                  <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-300">
+                    {PLANNER_RELAUNCH_KICKER_FR}
+                  </p>
+                  <h3 className="mt-2 max-w-xl text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+                    {plannerRelaunchTitleFr(destinationName)}
+                  </h3>
+                  <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
+                    {PLANNER_RELAUNCH_CARD_FR}
+                  </p>
+                  <span className="mt-5 inline-flex w-full sm:w-auto items-center justify-center self-start rounded-2xl bg-[#FF6B35] px-5 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 group-hover:bg-[#E85A28] min-h-[52px]">
+                    {PLANNER_RELAUNCH_ACTION_FR}
+                  </span>
+                </div>
+              </button>
+            ) : null}
             {accepted?.trip_data && !externalFlight ? (
               <div className="space-y-3">
-                <h3
-                  className="text-2xl font-normal italic tracking-tight text-[#1A120E]"
-                  style={{
-                    fontFamily: '"Instrument Serif", Georgia, serif',
-                  }}
-                >
+                <h3 className="text-2xl font-black tracking-tight text-[#1A120E]">
                   Vol
                 </h3>
                 <SelectedFlightBoardingPass
@@ -3247,12 +3421,7 @@ function TripDetailView({
             ) : null}
             {!externalHotel ? (
               <div className="space-y-3">
-                <h3
-                  className="text-2xl font-normal italic tracking-tight text-[#1A120E]"
-                  style={{
-                    fontFamily: '"Instrument Serif", Georgia, serif',
-                  }}
-                >
+                <h3 className="text-2xl font-black tracking-tight text-[#1A120E]">
                   Hôtel
                 </h3>
                 <div className="group relative isolate flex min-h-[280px] w-full overflow-hidden rounded-[28px] shadow-xl shadow-orange-950/10">
@@ -3341,12 +3510,7 @@ function TripDetailView({
             )}
             {plannerActivitiesEnabled && deferHeavyPanels ? (
               <div>
-                <h3
-                  className="mb-3 text-2xl font-normal italic tracking-tight text-[#1A120E]"
-                  style={{
-                    fontFamily: '"Instrument Serif", Georgia, serif',
-                  }}
-                >
+                <h3 className="mb-3 text-2xl font-black tracking-tight text-[#1A120E]">
                   Activités
                 </h3>
                 <ActivityStepPanel
@@ -3426,6 +3590,137 @@ function TripDetailView({
           />
         }
       />
+      {showRelaunch ? (
+        <div className="app-dialog-root z-[60]">
+          <button
+            type="button"
+            aria-label="Fermer"
+            className="app-dialog-backdrop"
+            disabled={relaunching}
+            onClick={() => !relaunching && setShowRelaunch(false)}
+          />
+          <div className="app-dialog-panel app-dialog-md p-5 sm:p-7 space-y-5">
+            <div>
+              <p className="text-[11px] font-black uppercase tracking-[0.18em] text-primary-600">
+                {PLANNER_RELAUNCH_KICKER_FR}
+              </p>
+              <h4 className="mt-1.5 font-extrabold text-xl sm:text-2xl text-ink tracking-tight">
+                {plannerRelaunchTitleFr(destinationName)}
+              </h4>
+              <p className="mt-1.5 text-sm text-ink-soft leading-relaxed">
+                {PLANNER_RELAUNCH_LEAD_FR}
+              </p>
+            </div>
+            <div className="space-y-2.5">
+              {(
+                [
+                  {
+                    id: 'weekend' as DatePreset,
+                    label: 'Ce week-end',
+                    hint: 'Sam → Dim',
+                  },
+                  {
+                    id: 'next-weekend' as DatePreset,
+                    label: 'Week-end prochain',
+                    hint: 'Dans ~7 jours',
+                  },
+                  {
+                    id: 'next-week' as DatePreset,
+                    label: 'Semaine prochaine',
+                    hint: 'Lun → Sam',
+                  },
+                ] as const
+              ).map((p) => {
+                const active =
+                  !showRelaunchFlexible && relaunchPreset === p.id
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={relaunching}
+                    onClick={() => onRelaunchPreset(p.id)}
+                    className={`w-full text-left rounded-2xl border-2 px-4 py-3.5 transition-colors ${
+                      active
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-line bg-canvas hover:border-primary-200'
+                    }`}
+                  >
+                    <span
+                      className={`block text-sm font-bold ${
+                        active ? 'text-primary-800' : 'text-ink'
+                      }`}
+                    >
+                      {p.label}
+                    </span>
+                    <span
+                      className={`block text-xs mt-0.5 ${
+                        active ? 'text-primary-700' : 'text-muted'
+                      }`}
+                    >
+                      {p.hint}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              type="button"
+              disabled={relaunching}
+              onClick={() => {
+                setRelaunchPreset('flexible')
+                setShowRelaunchFlexible(true)
+              }}
+              className="text-sm font-semibold text-primary-700 hover:text-primary-800"
+            >
+              {showRelaunchFlexible
+                ? 'Modifier les dates choisies'
+                : 'Choisir d’autres dates'}
+            </button>
+            {showRelaunchFlexible ? (
+              <div className="rounded-2xl border border-line bg-canvas p-3 sm:p-4">
+                <FlexibleDatesSelector
+                  flexibleDates={{
+                    dates_depart: relaunchDatesDepart,
+                    dates_retour: relaunchDatesRetour,
+                  }}
+                  onFlexibleDatesChange={(d) => {
+                    setRelaunchDatesDepart(withFullDayHours(d.dates_depart))
+                    setRelaunchDatesRetour(withFullDayHours(d.dates_retour))
+                    setRelaunchPreset('flexible')
+                  }}
+                  formatDateFr={formatDateFr}
+                />
+              </div>
+            ) : null}
+            {relaunchRangeLabel ? (
+              <p className="text-sm font-medium text-ink-soft">
+                Recherche : {relaunchRangeLabel}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              disabled={
+                relaunching ||
+                !relaunchDatesDepart.length ||
+                !relaunchDatesRetour.length
+              }
+              onClick={() => void doRelaunch()}
+              className="w-full rounded-2xl bg-primary-500 text-white font-extrabold py-3.5 min-h-[52px] hover:bg-primary-600 disabled:opacity-55"
+            >
+              {relaunching ? '…' : PLANNER_RELAUNCH_CONFIRM_FR}
+            </button>
+            <button
+              type="button"
+              disabled={relaunching}
+              onClick={() => setShowRelaunch(false)}
+              className="w-full text-center text-sm font-medium text-muted py-2"
+            >
+              Annuler
+            </button>
+          </div>
+        </div>
+      ) : null}
+      </>
     )
   }
 

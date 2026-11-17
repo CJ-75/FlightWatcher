@@ -6,13 +6,13 @@ type Props = {
   onStepPress?: (id: StayStepId) => void
 }
 
-function StepIcon({ id }: { id: StayStepId }) {
+function StepIcon({ id, color }: { id: StayStepId; color: string }) {
   const common = {
     width: 18,
     height: 18,
     viewBox: '0 0 24 24',
     fill: 'none',
-    stroke: 'currentColor',
+    stroke: color,
     strokeWidth: 1.75,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
@@ -21,7 +21,7 @@ function StepIcon({ id }: { id: StayStepId }) {
   if (id === 'flight') {
     return (
       <svg {...common}>
-        <path d="M10.5 18.5l-1.8 2.7h1.7l2.6-2.7 6.4.9.9-.9-5.4-3.5 3.5-6.2h-.9L11.2 10 7.6 7.2H6.7l1.8 3.5-4.4 2.6v.9l6.4-.7z" />
+        <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" />
       </svg>
     )
   }
@@ -48,53 +48,52 @@ function StepIcon({ id }: { id: StayStepId }) {
   )
 }
 
-/**
- * Path « Étapes » — V0.2 cream chips + SVG icons.
- */
+/** Path « Étapes » — parity mobile (cream / live / done). */
 export function PathStepsTiles({ steps, onStepPress }: Props) {
   if (!steps.length) return null
   return (
-    <div
-      className={`grid max-w-xl gap-2 lg:max-w-2xl lg:gap-3 ${
-        steps.length >= 4
-          ? 'grid-cols-4'
-          : steps.length === 3
-            ? 'grid-cols-3'
-            : 'grid-cols-2'
-      }`}
-    >
+    <div className="flex w-full gap-2 lg:gap-2.5">
       {steps.map((step) => {
         const live = step.state === 'current'
         const done = step.state === 'done'
+        const iconColor = live || done ? '#fff' : '#6B5C50'
         return (
           <button
             key={step.id}
             type="button"
             onClick={() => onStepPress?.(step.id)}
-            className={`flex flex-col items-center gap-2 rounded-2xl px-1 py-3 text-center transition lg:py-4 ${
+            className={`flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-2xl border px-1 py-3 text-center transition ${
               live
-                ? 'bg-[#FFF0E8] ring-1 ring-[#FF6B35]/25'
+                ? 'border-[rgba(255,107,53,0.3)] bg-[#FFF7F2]'
                 : done
-                  ? 'bg-[#F7F4EF] ring-1 ring-[#0F8A5F]/15'
-                  : 'bg-[#F7F4EF] hover:bg-[#EFEAE3]'
+                  ? 'border-[rgba(15,138,95,0.12)] bg-[#F3FAF6]'
+                  : 'border-[#EDE4DC] bg-white hover:bg-[#F7F2ED]'
             }`}
           >
             <span
-              className={`flex h-10 w-10 items-center justify-center rounded-full text-base shadow-sm ring-1 ring-black/5 lg:h-11 lg:w-11 ${
+              className={`flex h-9 w-9 items-center justify-center rounded-full ${
                 live
-                  ? 'bg-[#FF6B35] text-white'
+                  ? 'bg-[#FF6B35]'
                   : done
-                    ? 'bg-white text-[#0F8A5F]'
-                    : 'bg-white text-[#5C4F44]'
+                    ? 'bg-[#0F8A5F]'
+                    : 'bg-[#F7F2ED]'
               }`}
             >
-              <StepIcon id={step.id} />
+              <StepIcon id={step.id} color={iconColor} />
             </span>
-            <span className="text-[10px] font-semibold leading-tight text-[#5C4F44] lg:text-xs">
+            <span className="text-[11px] font-semibold leading-tight text-[#1A120E]">
               {step.label}
             </span>
             {step.statusLabel ? (
-              <span className="max-w-full truncate px-1 text-[9px] font-medium text-[#A3988C]">
+              <span
+                className={`max-w-full truncate px-1 text-[10px] font-medium ${
+                  live
+                    ? 'text-[#E85A28]'
+                    : done
+                      ? 'text-[#0F8A5F]'
+                      : 'text-[#9A8778]'
+                }`}
+              >
                 {step.statusLabel}
               </span>
             ) : null}
