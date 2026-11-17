@@ -206,17 +206,17 @@ export function PopPageView({
             {h1}
           </h1>
           {promise ? (
-            <p className="mt-1.5 line-clamp-2 max-w-2xl text-sm font-medium text-white/75 sm:mt-2 sm:line-clamp-none">
+            <p className="mt-1.5 line-clamp-2 max-w-2xl text-sm font-semibold text-white/90 sm:mt-2 sm:line-clamp-none">
               {promise}
             </p>
           ) : null}
 
           {metaBits.length > 0 ? (
-            <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[12px] font-semibold text-white/80 sm:mt-4 sm:text-[13px]">
+            <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[12px] font-bold text-white/90 sm:mt-4 sm:text-[13px]">
               {metaBits.map((b, i) => (
                 <span key={`${b}-${i}`} className="inline-flex items-center gap-3">
                   {i > 0 ? (
-                    <span className="text-white/35" aria-hidden>
+                    <span className="text-white/55" aria-hidden>
                       ·
                     </span>
                   ) : null}

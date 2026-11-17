@@ -30,7 +30,7 @@ export function VerifiedBadge({
 export function PopAuthor({
   authorKind,
   className = '',
-  textClassName = 'text-[11px] font-semibold uppercase tracking-brand text-white/75',
+  textClassName = 'text-[11px] font-bold uppercase tracking-brand text-white/90',
 }: {
   authorKind?: string | null
   className?: string
