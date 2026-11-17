@@ -1,22 +1,31 @@
 'use client'
 
-import { useAuthGateNavigate } from '@/components/auth/useAuthGateNavigate'
+import { useState } from 'react'
+import { PopAddPlannerSheet } from '@/components/pop/PopAddPlannerSheet'
 
 type Props = {
-  href: string
+  /** @deprecated kept for call sites; sheet uses itinerary instead of href */
+  href?: string
   className?: string
   children?: React.ReactNode
   /** planner = peach fill CTA ; ink = hero dark pill */
   variant?: 'planner' | 'ink'
+  itineraryId: string
+  itineraryTitle: string
+  citySlug: string
+  slug?: string | null
 }
 
 export function PlannerAddCta({
-  href,
   className = '',
   children,
   variant = 'planner',
+  itineraryId,
+  itineraryTitle,
+  citySlug,
+  slug,
 }: Props) {
-  const gate = useAuthGateNavigate()
+  const [open, setOpen] = useState(false)
 
   const tone =
     variant === 'ink'
@@ -24,27 +33,36 @@ export function PlannerAddCta({
       : 'wp-cta-planner !rounded-xl !px-4 !py-3 !text-sm'
 
   return (
-    <a
-      href={href}
-      onClick={(e) => {
-        e.preventDefault()
-        gate(href)
-      }}
-      className={`inline-flex items-center justify-center gap-2 leading-none ${tone} ${className}`}
-    >
-      {children ?? (
-        <>
-          <span>Ajouter au Planner</span>
-          {variant === 'planner' ? (
-            <span
-              className="wp-cta-planner-arrow inline-flex items-center leading-none"
-              aria-hidden
-            >
-              →
-            </span>
-          ) : null}
-        </>
-      )}
-    </a>
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={`inline-flex items-center justify-center gap-2 leading-none ${tone} ${className}`}
+      >
+        {children ?? (
+          <>
+            <span>Ajouter au Planner</span>
+            {variant === 'planner' ? (
+              <span
+                className="wp-cta-planner-arrow inline-flex items-center leading-none"
+                aria-hidden
+              >
+                →
+              </span>
+            ) : null}
+          </>
+        )}
+      </button>
+      <PopAddPlannerSheet
+        open={open}
+        onClose={() => setOpen(false)}
+        itinerary={{
+          id: itineraryId,
+          title: itineraryTitle,
+          city_slug: citySlug,
+          slug: slug || null,
+        }}
+      />
+    </>
   )
 }

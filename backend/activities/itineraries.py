@@ -126,10 +126,23 @@ def apply_itinerary_to_trip(
         }
         if it.get("viator_product_code"):
             meta["viator_product_code"] = it.get("viator_product_code")
+            meta["product_code"] = it.get("viator_product_code")
         if it.get("photo"):
             meta["photo"] = it.get("photo")
         if title:
             meta["title"] = title
+        raw_meta = it.get("meta") if isinstance(it.get("meta"), dict) else {}
+        for key in ("maps_url", "lat", "lng", "travel_minutes", "photos"):
+            if raw_meta.get(key) is not None and key not in meta:
+                meta[key] = raw_meta.get(key)
+        place = it.get("places") if isinstance(it.get("places"), dict) else {}
+        place_meta = place.get("meta") if isinstance(place.get("meta"), dict) else {}
+        if meta.get("lat") is None and place_meta.get("lat") is not None:
+            meta["lat"] = place_meta.get("lat")
+        if meta.get("lng") is None and place_meta.get("lng") is not None:
+            meta["lng"] = place_meta.get("lng")
+        if not meta.get("maps_url") and place_meta.get("maps_url"):
+            meta["maps_url"] = place_meta.get("maps_url")
 
         notes_parts = [p for p in (title, note) if p]
         notes = " — ".join(notes_parts) if notes_parts else None

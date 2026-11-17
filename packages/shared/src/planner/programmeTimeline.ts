@@ -25,7 +25,9 @@ export type ProgrammeSlotItem = {
   notes?: string | null
   status?: string | null
   /** Opens existing sheet when touched */
-  action?: 'flight' | 'hotel' | 'activity' | 'address' | 'scan' | null
+  action?: 'flight' | 'hotel' | 'activity' | 'address' | 'scan' | 'maps' | null
+  mapsUrl?: string | null
+  productCode?: string | null
 }
 
 export type ProgrammeDaySlot = {
@@ -144,6 +146,15 @@ export function buildProgrammeTimeline(input: {
     moment?: string | null
     notes?: string | null
     status?: string | null
+    meta?: {
+      maps_url?: string | null
+      product_code?: string | null
+      viator_product_code?: string | null
+      lat?: number | null
+      lng?: number | null
+      title?: string | null
+      [key: string]: unknown
+    } | null
   }>
 }): ProgrammeTimeline {
   const out = parseYmd(input.outDate)
@@ -277,16 +288,50 @@ export function buildProgrammeTimeline(input: {
         : type === 'restaurant'
           ? 'address'
           : 'activity'
+    const meta = raw.meta && typeof raw.meta === 'object' ? raw.meta : null
+    const productCode =
+      (meta?.viator_product_code && String(meta.viator_product_code)) ||
+      (meta?.product_code && String(meta.product_code)) ||
+      null
+    let mapsUrl =
+      (meta?.maps_url && String(meta.maps_url)) || null
+    if (
+      !mapsUrl &&
+      meta?.lat != null &&
+      meta?.lng != null &&
+      Number.isFinite(Number(meta.lat)) &&
+      Number.isFinite(Number(meta.lng))
+    ) {
+      mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        `${meta.lat},${meta.lng}`,
+      )}`
+    }
+    const titleFromMeta =
+      meta?.title != null ? String(meta.title) : null
     push({
       id: `item-${raw.id}`,
       kind,
-      title: String(raw.title || raw.name || (kind === 'address' ? 'Adresse' : 'Activité')),
+      title: String(
+        raw.title ||
+          raw.name ||
+          titleFromMeta ||
+          (kind === 'address' ? 'Adresse' : 'Activité'),
+      ),
       dayOffset,
       moment,
       tripItemId: raw.id,
       notes: raw.notes || null,
       status: raw.status || null,
-      action: kind === 'address' ? 'address' : kind === 'hotel' ? 'hotel' : 'activity',
+      action:
+        kind === 'address'
+          ? 'address'
+          : kind === 'hotel'
+            ? 'hotel'
+            : productCode || mapsUrl
+              ? 'activity'
+              : 'activity',
+      mapsUrl,
+      productCode,
     })
   }
 

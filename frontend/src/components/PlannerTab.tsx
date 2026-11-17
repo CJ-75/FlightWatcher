@@ -111,6 +111,7 @@ import { CreateTripModal } from './planner/CreateTripModal'
 import { TripDetailPathChrome } from './planner/detail/TripDetailPathChrome'
 import { ProgrammePanel } from './planner/detail/ProgrammePanel'
 import { PathStepsTiles } from './planner/detail/PathStepsTiles'
+import { TripOptInToggles } from './planner/detail/TripOptInToggles'
 import { StayPipelineStepper } from './StayPipelineStepper'
 import { ActivityStepPanel } from './ActivityStepPanel'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
@@ -1123,14 +1124,38 @@ export function PlannerTab() {
     })
   }, [searchParams, navigate])
 
-  // Parcours « En faire mon voyage » → auto-scan on open
+  // Parcours / Pop → Planner : auto-scan / open hotel on land
   useEffect(() => {
-    const st = location.state as { autoScan?: boolean } | null
-    if (st?.autoScan && tripIdParam) {
-      setAutoScanTripId(tripIdParam)
-      navigate(location.pathname, { replace: true, state: {} })
+    const st = location.state as {
+      autoScan?: boolean
+      openHotel?: boolean
+    } | null
+    const qScan = searchParams.get('autoScan') === '1'
+    const qHotel = searchParams.get('openHotel') === '1'
+    if (!tripIdParam) return
+    const doScan = Boolean(st?.autoScan || qScan)
+    const doHotel = Boolean(st?.openHotel || qHotel)
+    if (!doScan && !doHotel) return
+    if (doScan) setAutoScanTripId(tripIdParam)
+    if (doHotel) {
+      try {
+        sessionStorage.setItem(`fw_open_hotel_${tripIdParam}`, '1')
+      } catch {
+        /* ignore */
+      }
     }
-  }, [location.state, location.pathname, tripIdParam, navigate])
+    if (qScan || qHotel) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('autoScan')
+      next.delete('openHotel')
+      navigate(
+        { pathname: location.pathname, search: next.toString() ? `?${next}` : '' },
+        { replace: true, state: {} },
+      )
+      return
+    }
+    navigate(location.pathname, { replace: true, state: {} })
+  }, [location.state, location.pathname, tripIdParam, navigate, searchParams])
 
   const load = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
     if (!userId) {
@@ -1494,6 +1519,7 @@ function TripDetailView({
       moment?: string | null
       notes?: string | null
       status?: string | null
+      meta?: Record<string, unknown> | null
     }[]
   >([])
   const onActivityItemsChange = useCallback(
@@ -1507,6 +1533,7 @@ function TripDetailView({
         moment?: string | null
         notes?: string | null
         status?: string | null
+        meta?: Record<string, unknown> | null
       }[],
     ) => {
       setActivityItems((prev) => {
@@ -1755,6 +1782,10 @@ function TripDetailView({
           moment: (i.moment as string | null | undefined) ?? null,
           notes: (i.notes as string | null | undefined) ?? null,
           status: (i.status as string | null | undefined) ?? null,
+          meta:
+            i.meta && typeof i.meta === 'object'
+              ? (i.meta as Record<string, unknown>)
+              : null,
         }))
         .filter((i) => i.id)
 
@@ -2607,6 +2638,95 @@ function TripDetailView({
     void scan().finally(() => onAutoScanDone?.())
   }, [autoScan, scan, onAutoScanDone])
 
+  // Pop → Planner : open hotel compose once draft/skip ready
+  useEffect(() => {
+    let key = ''
+    try {
+      key = `fw_open_hotel_${tripId}`
+      if (sessionStorage.getItem(key) !== '1') return
+    } catch {
+      return
+    }
+    if (!trip || hotelBusy) return
+    try {
+      sessionStorage.removeItem(key)
+    } catch {
+      /* ignore */
+    }
+    openReservation(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot land
+  }, [trip, tripId, hotelBusy])
+
+  const tripMeta = (trip?.meta || {}) as {
+    want_flight?: boolean
+    want_hotel?: boolean
+    source_itinerary_id?: string | null
+    source_city_slug?: string | null
+  }
+  const fromPopSource = Boolean(tripMeta.source_itinerary_id)
+  const wantFlightOpt =
+    tripMeta.want_flight != null
+      ? Boolean(tripMeta.want_flight)
+      : fromPopSource
+        ? false
+        : !externalFlight
+  const wantHotelOpt =
+    tripMeta.want_hotel != null
+      ? Boolean(tripMeta.want_hotel)
+      : fromPopSource
+        ? false
+        : !(externalHotel || hotelBooked)
+
+  const setWantFlags = async (patch: {
+    want_flight?: boolean
+    want_hotel?: boolean
+  }) => {
+    const updated = await getApiClient().updatePlannedTrip(tripId, patch)
+    setTrip((prev) =>
+      prev
+        ? {
+            ...prev,
+            ...updated,
+            meta: { ...(prev.meta || {}), ...(updated.meta || {}), ...patch },
+          }
+        : prev,
+    )
+  }
+
+  const enableFlightOpt = async () => {
+    await setWantFlags({ want_flight: true })
+    try {
+      await getApiClient().reopenPlannedTripFlight(tripId)
+    } catch {
+      /* may already be open */
+    }
+    void scan()
+  }
+
+  const disableFlightOpt = async () => {
+    await setWantFlags({ want_flight: false })
+    if (!externalFlight) {
+      try {
+        const draft = await getApiClient().skipPlannedTripFlight(tripId)
+        setFlightDraft(draft)
+      } catch {
+        /* ignore */
+      }
+    }
+    onToast('Vol désactivé — programme conservé')
+  }
+
+  const enableHotelOpt = async () => {
+    await setWantFlags({ want_hotel: true })
+    openReservation(true)
+  }
+
+  const disableHotelOpt = async () => {
+    await setWantFlags({ want_hotel: false })
+    if (!externalHotel) await skipHotel()
+    else onToast('Hôtel désactivé')
+  }
+
   const accept = async (id: string) => {
     setActing(id)
     setError(null)
@@ -3161,6 +3281,7 @@ function TripDetailView({
         moment: i.moment,
         notes: i.notes,
         status: i.status,
+        meta: i.meta || null,
       }))
     const tripData = accepted?.trip_data as EnrichedTripResponse | undefined
     const orgaDisplayName =
@@ -3352,15 +3473,36 @@ function TripDetailView({
               steps={pathView.steps}
               onStepPress={(id) => {
                 if (id === 'flight') {
+                  if (!wantFlightOpt && fromPopSource) {
+                    void enableFlightOpt()
+                    return
+                  }
                   if (accepted) openReservation(false)
                   else void scan()
                 } else if (id === 'hotel') {
+                  if (!wantHotelOpt && fromPopSource) {
+                    void enableHotelOpt()
+                    return
+                  }
                   openReservation(true)
                 } else if (id === 'activities' && plannerActivitiesEnabled) {
                   stayExtrasRef.current?.scrollIntoView({ behavior: 'smooth' })
                 }
               }}
             />
+            {fromPopSource ||
+            tripMeta.want_flight != null ||
+            tripMeta.want_hotel != null ? (
+              <TripOptInToggles
+                wantFlight={wantFlightOpt}
+                wantHotel={wantHotelOpt}
+                busy={scanning || skippingFlight || skippingHotel || hotelBusy}
+                onEnableFlight={enableFlightOpt}
+                onDisableFlight={disableFlightOpt}
+                onEnableHotel={enableHotelOpt}
+                onDisableHotel={disableHotelOpt}
+              />
+            ) : null}
             {scanning ? (
               <PlannerScanPanel
                 fromLabel={departureRouteLabel(reservationOrigin)}
@@ -3583,8 +3725,20 @@ function TripDetailView({
               if (item.action === 'scan') void scan()
               else if (item.action === 'flight') openReservation(false)
               else if (item.action === 'hotel') openReservation(true)
-              else if (item.action === 'activity' && plannerActivitiesEnabled) {
-                setPathTab('apercu')
+              else if (item.action === 'activity') {
+                if (item.productCode) {
+                  window.open(
+                    `https://www.viator.com/tours/-/${encodeURIComponent(item.productCode)}`,
+                    '_blank',
+                    'noopener,noreferrer',
+                  )
+                  return
+                }
+                if (item.mapsUrl) {
+                  window.open(item.mapsUrl, '_blank', 'noopener,noreferrer')
+                  return
+                }
+                if (plannerActivitiesEnabled) setPathTab('apercu')
               }
             }}
           />

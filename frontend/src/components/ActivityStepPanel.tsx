@@ -270,6 +270,7 @@ export function ActivityStepPanel(props: {
       moment?: string | null
       notes?: string | null
       status?: string | null
+      meta?: Record<string, unknown> | null
     }[],
   ) => void
   /** Mon voyage: cartes type réservations (photo + prix). */
@@ -324,6 +325,7 @@ export function ActivityStepPanel(props: {
         moment: i.moment ?? null,
         notes: i.notes ?? null,
         status: i.status ?? null,
+        meta: (i.meta as Record<string, unknown> | null | undefined) || null,
       })),
     )
   }, [])

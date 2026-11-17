@@ -17,14 +17,20 @@ import { getCurrentUser } from '../../lib/supabase'
 import { useAuthSheet } from '../onboarding/AuthSheetHost'
 import { loadOnboardingPrefs } from '@waypop/shared'
 
+export type MakeTripCreated = {
+  tripId: string
+  wantFlight: boolean
+  wantHotel: boolean
+}
+
 type Props = {
   itinerary: Itinerary
   onClose: () => void
-  onCreated: (tripId: string) => void
+  onCreated: (result: MakeTripCreated) => void
 }
 
 /**
- * Feuille §7.4 — dates / départ / pax → create trip + apply parcours.
+ * Feuille Pop → Planner : programme toujours ; Vol / Hôtel opt-in séparés.
  */
 export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
   const { openAuthSheet } = useAuthSheet()
@@ -38,6 +44,8 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
   const [outbound, setOutbound] = useState(suggested.outbound)
   const [inbound, setInbound] = useState(suggested.inbound)
   const [budget, setBudget] = useState(200)
+  const [wantFlight, setWantFlight] = useState(false)
+  const [wantHotel, setWantHotel] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,15 +65,23 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
     ''
   const arrival =
     arrivalCodesForCitySlug(itinerary.city_slug) || undefined
+  const needsDates = wantFlight || wantHotel
+  const needsDeparture = wantFlight
 
   const createTrip = async () => {
     const dep = encodeAirportCodes(parseAirportCodes(departure))
-    if (!dep) {
+    if (needsDeparture && !dep) {
       setError('Choisis une ville de départ')
       return
     }
-    if (!outbound || !inbound) {
+    if (needsDates && (!outbound || !inbound)) {
       setError('Choisis des dates')
+      return
+    }
+    const out = outbound || suggested.outbound
+    const ret = inbound || suggested.inbound
+    if (!out || !ret) {
+      setError('Dates indisponibles pour ce Pop')
       return
     }
     setSaving(true)
@@ -73,21 +89,31 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
       const api = getApiClient()
       const trip = await api.createPlannedTrip({
         name: itinerary.title || `Week-end ${cityLabel}`,
-        departure_airport: dep,
+        departure_airport: dep || 'CDG,ORY',
         arrival_airport: arrival || null,
         passengers,
         dates_depart: [
-          { date: outbound, heure_min: '00:00', heure_max: '23:59' },
+          { date: out, heure_min: '00:00', heure_max: '23:59' },
         ],
         dates_retour: [
-          { date: inbound, heure_min: '00:00', heure_max: '23:59' },
+          { date: ret, heure_min: '00:00', heure_max: '23:59' },
         ],
         budget_max: budget,
         direct: false,
+        want_flight: wantFlight,
+        want_hotel: wantHotel,
+        source_itinerary_id: itinerary.id,
+        source_city_slug: itinerary.city_slug || null,
       })
       const apply = await api.applyItinerary(itinerary.id, {
         planned_trip_id: trip.id,
       })
+      if (!wantFlight) {
+        await api.skipPlannedTripFlight(trip.id).catch(() => {})
+      }
+      if (!wantHotel) {
+        await api.skipPlannedTripHotel(trip.id).catch(() => {})
+      }
       void api
         .trackActivityEvent({
           domain: 'itinerary',
@@ -98,10 +124,12 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
             itinerary_id: itinerary.id,
             trip_id: trip.id,
             created: apply.created,
+            want_flight: wantFlight,
+            want_hotel: wantHotel,
           },
         })
         .catch(() => {})
-      onCreated(trip.id)
+      onCreated({ tripId: trip.id, wantFlight, wantHotel })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Création impossible')
     } finally {
@@ -113,7 +141,6 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
     setError(null)
     const user = await getCurrentUser()
     if (!user) {
-      // Dates / form already filled — auth only at create (brief §7)
       openAuthSheet({
         trigger: 'create_trip',
         pending: {
@@ -126,6 +153,8 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
             outbound,
             inbound,
             budget,
+            wantFlight,
+            wantHotel,
           },
           createdAt: Date.now(),
         },
@@ -163,7 +192,7 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
           >
             Annuler
           </button>
-          <h3 className="text-base font-extrabold text-ink">En faire mon voyage</h3>
+          <h3 className="text-base font-extrabold text-ink">Ajouter au Planner</h3>
           <span className="w-14" />
         </div>
 
@@ -172,6 +201,28 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
             {itinerary.title}
             {cityLabel ? ` · ${cityLabel}` : ''}
           </p>
+          <p className="rounded-2xl bg-[#FFF7F2] px-3.5 py-3 text-[13px] leading-snug text-[#5C4F44]">
+            Le programme du Pop est ajouté tout de suite. Active Vol et/ou Hôtel
+            si tu en as besoin — tu pourras aussi le faire plus tard.
+          </p>
+
+          <div className="space-y-2">
+            <ToggleRow
+              label="Vol"
+              hint="Départ + dates, puis scan des prix"
+              checked={wantFlight}
+              onChange={setWantFlight}
+            />
+            <ToggleRow
+              label="Hôtel"
+              hint="Dates, puis offres près du Pop"
+              checked={wantHotel}
+              onChange={setWantHotel}
+            />
+            <p className="px-1 text-[12px] font-medium text-muted">
+              Tu viens d’une autre ville ? Active Vol et/ou Hôtel.
+            </p>
+          </div>
 
           <div>
             <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
@@ -208,54 +259,62 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
             <PassengerStepper value={passengers} onChange={setPassengers} min={1} max={9} />
           </div>
 
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
-              Départ
-            </p>
-            <CityAirportSelect
-              value={departure}
-              onChange={setDeparture}
-              placeholder="Ville / aéroport"
-            />
-          </div>
+          {needsDeparture ? (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
+                Départ
+              </p>
+              <CityAirportSelect
+                value={departure}
+                onChange={setDeparture}
+                placeholder="Ville / aéroport"
+              />
+            </div>
+          ) : null}
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className="text-xs font-bold uppercase tracking-wide text-muted space-y-1">
-              Aller
+          {needsDates ? (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-bold uppercase tracking-wide text-muted space-y-1">
+                  Aller
+                  <input
+                    type="date"
+                    value={outbound}
+                    onChange={(e) => setOutbound(e.target.value)}
+                    className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
+                  />
+                </label>
+                <label className="text-xs font-bold uppercase tracking-wide text-muted space-y-1">
+                  Retour
+                  <input
+                    type="date"
+                    value={inbound}
+                    onChange={(e) => setInbound(e.target.value)}
+                    className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={useNextWeekend}
+                className="text-xs font-bold text-[color:var(--fw-accent)]"
+              >
+                Utiliser le week-end prochain
+              </button>
+            </>
+          ) : null}
+
+          {wantFlight ? (
+            <label className="block text-xs font-bold uppercase tracking-wide text-muted space-y-1">
+              Budget max / pers. (€)
               <input
-                type="date"
-                value={outbound}
-                onChange={(e) => setOutbound(e.target.value)}
+                type="number"
+                value={budget}
+                onChange={(e) => setBudget(Number(e.target.value) || 0)}
                 className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
               />
             </label>
-            <label className="text-xs font-bold uppercase tracking-wide text-muted space-y-1">
-              Retour
-              <input
-                type="date"
-                value={inbound}
-                onChange={(e) => setInbound(e.target.value)}
-                className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
-              />
-            </label>
-          </div>
-          <button
-            type="button"
-            onClick={useNextWeekend}
-            className="text-xs font-bold text-[color:var(--fw-accent)]"
-          >
-            Utiliser le week-end prochain
-          </button>
-
-          <label className="block text-xs font-bold uppercase tracking-wide text-muted space-y-1">
-            Budget max / pers. (€)
-            <input
-              type="number"
-              value={budget}
-              onChange={(e) => setBudget(Number(e.target.value) || 0)}
-              className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
-            />
-          </label>
+          ) : null}
 
           {error ? (
             <p className="text-sm font-semibold text-red-600">{error}</p>
@@ -272,5 +331,50 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
         </div>
       </div>
     </div>
+  )
+}
+
+function ToggleRow({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string
+  hint: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition ${
+        checked
+          ? 'border-[rgba(255,107,53,0.35)] bg-[#FFF7F2]'
+          : 'border-line bg-white'
+      }`}
+    >
+      <span>
+        <span className="block text-sm font-extrabold text-ink">{label}</span>
+        <span className="mt-0.5 block text-[12px] font-medium text-muted">
+          {hint}
+        </span>
+      </span>
+      <span
+        className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+          checked ? 'bg-[#FF6B35]' : 'bg-[#E8DFD6]'
+        }`}
+        aria-hidden
+      >
+        <span
+          className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition ${
+            checked ? 'left-[1.35rem]' : 'left-0.5'
+          }`}
+        />
+      </span>
+    </button>
   )
 }

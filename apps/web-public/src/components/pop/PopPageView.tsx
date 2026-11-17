@@ -239,8 +239,11 @@ export function PopPageView({
 
           <div className="mt-5 flex flex-wrap items-center gap-2.5 sm:mt-8 sm:gap-3">
             <PlannerAddCta
-              href={`/sejours?dest=${encodeURIComponent(city)}`}
               variant="ink"
+              itineraryId={itin.id}
+              itineraryTitle={h1}
+              citySlug={city}
+              slug={String(itin.slug || slug)}
             />
             <LaunchPopCta href={launchHref} variant="hero" />
             <ShareButton title={h1} variant="icon" />
@@ -275,6 +278,9 @@ export function PopPageView({
                     shareTitle={h1}
                     shareSubtitle={promise}
                     shareImage={itin.cover_image}
+                    itineraryId={itin.id}
+                    itineraryTitle={h1}
+                    slug={String(itin.slug || slug)}
                   />
                 </Suspense>
               </div>
@@ -476,6 +482,9 @@ export function PopPageView({
                     shareTitle={h1}
                     shareSubtitle={promise}
                     shareImage={itin.cover_image}
+                    itineraryId={itin.id}
+                    itineraryTitle={h1}
+                    slug={String(itin.slug || slug)}
                   />
                 </Suspense>
               ) : null}
@@ -493,6 +502,9 @@ export function PopPageView({
               stopCount={items.length}
               dayCount={dayCount}
               variant="bar"
+              itineraryId={itin.id}
+              itineraryTitle={h1}
+              slug={String(itin.slug || slug)}
             />
           </Suspense>
         </div>

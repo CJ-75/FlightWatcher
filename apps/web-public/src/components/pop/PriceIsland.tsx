@@ -1,8 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { PlannerAddCta } from '@/components/pop/PlannerAddCta'
+import { PopAddPlannerSheet } from '@/components/pop/PopAddPlannerSheet'
 import { PopShareChannels } from '@/components/pop/PopShareChannels'
-import { useAuthGateNavigate } from '@/components/auth/useAuthGateNavigate'
 
 const BAR_MIN_H = 'min-h-[4.25rem]'
 
@@ -10,7 +11,6 @@ type Props = {
   destCity: string
   cityLabel: string
   stopCount: number
-  /** Number of programme days. */
   dayCount?: number
   variant?: 'card' | 'bar'
   className?: string
@@ -18,6 +18,9 @@ type Props = {
   shareTitle?: string
   shareSubtitle?: string | null
   shareImage?: string | null
+  itineraryId: string
+  itineraryTitle: string
+  slug?: string | null
 }
 
 export function PriceIsland({
@@ -31,42 +34,53 @@ export function PriceIsland({
   shareTitle,
   shareSubtitle,
   shareImage,
+  itineraryId,
+  itineraryTitle,
+  slug,
 }: Props) {
-  const gateNavigate = useAuthGateNavigate()
-  const plannerHref = `/sejours?dest=${encodeURIComponent(destCity)}`
+  const [barOpen, setBarOpen] = useState(false)
   const resolvedShareTitle = shareTitle || `Pop ${cityLabel}`
 
   if (variant === 'bar') {
     return (
-      <div
-        className={`fixed inset-x-0 bottom-0 z-50 border-t border-line bg-cream/95 px-4 py-3 text-ink backdrop-blur-md ${BAR_MIN_H} ${className}`}
-        style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
-      >
-        <div className="mx-auto flex max-w-pop items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-              {cityLabel}
-            </p>
-            <p className="truncate text-lg font-bold tracking-tight">
-              Programme prêt
-            </p>
+      <>
+        <div
+          className={`fixed inset-x-0 bottom-0 z-50 border-t border-line bg-cream/95 px-4 py-3 text-ink backdrop-blur-md ${BAR_MIN_H} ${className}`}
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="mx-auto flex max-w-pop items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+                {cityLabel}
+              </p>
+              <p className="truncate text-lg font-bold tracking-tight">
+                Programme prêt
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBarOpen(true)}
+              className="relative shrink-0 overflow-hidden rounded-2xl bg-ink px-5 py-2.5 text-sm font-bold text-cream"
+            >
+              <span
+                className="absolute inset-y-0 left-0 w-1 bg-[#FF6B35]"
+                aria-hidden
+              />
+              Planner
+            </button>
           </div>
-          <a
-            href={plannerHref}
-            onClick={(e) => {
-              e.preventDefault()
-              gateNavigate(plannerHref)
-            }}
-            className="relative shrink-0 overflow-hidden rounded-2xl bg-ink px-5 py-2.5 text-sm font-bold text-cream no-underline"
-          >
-            <span
-              className="absolute inset-y-0 left-0 w-1 bg-[#FF6B35]"
-              aria-hidden
-            />
-            Planner
-          </a>
         </div>
-      </div>
+        <PopAddPlannerSheet
+          open={barOpen}
+          onClose={() => setBarOpen(false)}
+          itinerary={{
+            id: itineraryId,
+            title: itineraryTitle,
+            city_slug: destCity,
+            slug: slug || null,
+          }}
+        />
+      </>
     )
   }
 
@@ -96,7 +110,6 @@ export function PriceIsland({
                 inviter qui tu veux.
               </p>
             </div>
-            {/* Desktop sidebar only — mobile already has durée/stops in the hero */}
             <div className="hidden grid-cols-2 gap-px border-y border-line bg-line lg:grid">
               <div className="bg-white px-4 py-2.5 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
@@ -118,7 +131,7 @@ export function PriceIsland({
             <ul className="space-y-0 px-3.5 py-2.5">
               {[
                 'Parcours cadencé jour par jour',
-                'Vol et hôtel depuis le Planner',
+                'Vol et hôtel optionnels',
                 'Partage du programme en un tap',
               ].map((line) => (
                 <li
@@ -138,7 +151,13 @@ export function PriceIsland({
           </div>
 
           <div className="mt-4 space-y-2">
-            <PlannerAddCta href={plannerHref} />
+            <PlannerAddCta
+              itineraryId={itineraryId}
+              itineraryTitle={itineraryTitle}
+              citySlug={destCity}
+              slug={slug}
+              className="!w-full"
+            />
             <p className="text-center text-[11px] font-semibold text-ink-muted">
               Organise à ton rythme, sans friction
             </p>

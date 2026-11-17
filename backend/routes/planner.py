@@ -240,6 +240,7 @@ def _row_to_trip(
             "full_name": org_name,
             "avatar_url": org_avatar,
         },
+        "meta": row.get("meta") if isinstance(row.get("meta"), dict) else {},
     }
 
 
@@ -2076,6 +2077,15 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
             raise _duplicate_flight_http(existing)
 
     token = secrets.token_hex(16)
+    meta: dict = {}
+    if body.want_flight is not None:
+        meta["want_flight"] = bool(body.want_flight)
+    if body.want_hotel is not None:
+        meta["want_hotel"] = bool(body.want_hotel)
+    if body.source_itinerary_id:
+        meta["source_itinerary_id"] = str(body.source_itinerary_id).strip()
+    if body.source_city_slug:
+        meta["source_city_slug"] = str(body.source_city_slug).strip().lower()
     data = {
         "organizer_id": user_id,
         "name": body.name.strip(),
@@ -2089,11 +2099,23 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
         "invite_token": token,
         "status": "planning",
         "updated_at": datetime.utcnow().isoformat(),
+        "meta": meta,
     }
-    result = supabase.table("planned_trips").insert(data).execute()
+    try:
+        result = supabase.table("planned_trips").insert(data).execute()
+    except Exception:
+        # meta column may be missing until manual migration is applied
+        data.pop("meta", None)
+        result = supabase.table("planned_trips").insert(data).execute()
+        if result.data and meta:
+            trip0 = result.data[0]
+            trip0 = {**trip0, "meta": meta}
+            result.data[0] = trip0
     if not result.data:
         raise HTTPException(status_code=500, detail="Création échouée")
     trip = result.data[0]
+    if meta and "meta" not in (trip or {}):
+        trip = {**trip, "meta": meta}
     supabase.table("trip_members").insert(
         {
             "trip_id": trip["id"],
@@ -2859,6 +2881,31 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
             body.auto_scan_interval_seconds
         )
 
+    meta_patch = False
+    cur_meta = (
+        dict(current.get("meta") or {})
+        if isinstance(current.get("meta"), dict)
+        else {}
+    )
+    if body.want_flight is not None:
+        cur_meta["want_flight"] = bool(body.want_flight)
+        meta_patch = True
+    if body.want_hotel is not None:
+        cur_meta["want_hotel"] = bool(body.want_hotel)
+        meta_patch = True
+    if body.source_itinerary_id is not None:
+        cur_meta["source_itinerary_id"] = (
+            str(body.source_itinerary_id).strip() or None
+        )
+        meta_patch = True
+    if body.source_city_slug is not None:
+        cur_meta["source_city_slug"] = (
+            str(body.source_city_slug).strip().lower() or None
+        )
+        meta_patch = True
+    if meta_patch:
+        patch["meta"] = cur_meta
+
     modality_keys = {
         "departure_airport",
         "arrival_airport",
@@ -2896,9 +2943,23 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
                 ),
             )
 
-    result = (
-        supabase.table("planned_trips").update(patch).eq("id", trip_id).execute()
-    )
+    try:
+        result = (
+            supabase.table("planned_trips").update(patch).eq("id", trip_id).execute()
+        )
+    except Exception:
+        if "meta" in patch:
+            meta_fallback = patch.pop("meta", None)
+            result = (
+                supabase.table("planned_trips")
+                .update(patch)
+                .eq("id", trip_id)
+                .execute()
+            )
+            if result.data and isinstance(meta_fallback, dict):
+                result.data[0] = {**result.data[0], "meta": meta_fallback}
+        else:
+            raise
     if not result.data:
         raise HTTPException(status_code=500, detail="Mise à jour échouée")
     if name_only:

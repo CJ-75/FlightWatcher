@@ -29,11 +29,17 @@ import { useAuth } from '../../context/AuthContext'
 import { useAuthSheet } from '../onboarding/AuthSheetHost'
 import { fonts, colors, spacing } from '../../theme'
 
+export type MakeTripCreated = {
+  tripId: string
+  wantFlight: boolean
+  wantHotel: boolean
+}
+
 type Props = {
   visible: boolean
   itinerary: Itinerary
   onClose: () => void
-  onCreated: (tripId: string) => void
+  onCreated: (result: MakeTripCreated) => void
 }
 
 export function MakeTripSheet({
@@ -55,8 +61,12 @@ export function MakeTripSheet({
   const [outbound, setOutbound] = useState(suggested.outbound)
   const [inbound, setInbound] = useState(suggested.inbound)
   const [budget, setBudget] = useState('200')
+  const [wantFlight, setWantFlight] = useState(false)
+  const [wantHotel, setWantHotel] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const needsDates = wantFlight || wantHotel
+  const needsDeparture = wantFlight
 
   useEffect(() => {
     setPassengers(partyModeDefaultPassengers(partyMode))
@@ -81,42 +91,66 @@ export function MakeTripSheet({
 
   const createTrip = async () => {
     const dep = encodeAirportCodes(parseAirportCodes(departure))
-    if (!dep) {
+    if (needsDeparture && !dep) {
       setError('Indique un aéroport de départ (ex. CDG,ORY)')
+      return
+    }
+    if (needsDates && (!outbound || !inbound)) {
+      setError('Choisis des dates')
+      return
+    }
+    const out = outbound || suggested.outbound
+    const ret = inbound || suggested.inbound
+    if (!out || !ret) {
+      setError('Dates indisponibles pour ce Pop')
       return
     }
     setSaving(true)
     try {
       const api = getApi()
-      // Ville Parcours sans hub : ne pas inventer d’IATA (arrivée manuelle plus tard).
       const arrival = noFlightHub
         ? null
         : arrivalCodesForCitySlug(itinerary.city_slug)
       const trip = await api.createPlannedTrip({
         name: itinerary.title || `Week-end ${cityLabel}`,
-        departure_airport: dep,
+        departure_airport: dep || 'CDG,ORY',
         arrival_airport: arrival || null,
         passengers,
         dates_depart: [
-          { date: outbound, heure_min: '00:00', heure_max: '23:59' },
+          { date: out, heure_min: '00:00', heure_max: '23:59' },
         ],
         dates_retour: [
-          { date: inbound, heure_min: '00:00', heure_max: '23:59' },
+          { date: ret, heure_min: '00:00', heure_max: '23:59' },
         ],
         budget_max: Number(budget) || 200,
         direct: false,
+        want_flight: wantFlight,
+        want_hotel: wantHotel,
+        source_itinerary_id: itinerary.id,
+        source_city_slug: itinerary.city_slug || null,
       })
       await api.applyItinerary(itinerary.id, { planned_trip_id: trip.id })
+      if (!wantFlight) {
+        await api.skipPlannedTripFlight(trip.id).catch(() => {})
+      }
+      if (!wantHotel) {
+        await api.skipPlannedTripHotel(trip.id).catch(() => {})
+      }
       void api
         .trackActivityEvent({
           domain: 'itinerary',
           event: 'itinerary_make_trip',
           surface: 'parcours',
           platform: Platform.OS === 'ios' ? 'ios' : 'android',
-          meta: { itinerary_id: itinerary.id, trip_id: trip.id },
+          meta: {
+            itinerary_id: itinerary.id,
+            trip_id: trip.id,
+            want_flight: wantFlight,
+            want_hotel: wantHotel,
+          },
         })
         .catch(() => {})
-      onCreated(trip.id)
+      onCreated({ tripId: trip.id, wantFlight, wantHotel })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Création impossible')
     } finally {
@@ -161,19 +195,47 @@ export function MakeTripSheet({
             { paddingBottom: Math.max(insets.bottom, 16) },
           ]}
         >
-          <Text style={[styles.title, { marginTop: 8 }]}>En faire mon voyage</Text>
+          <Text style={[styles.title, { marginTop: 8 }]}>Ajouter au Planner</Text>
           <Text style={styles.sub}>
             {itinerary.title}
             {cityLabel ? ` · ${cityLabel}` : ''}
           </Text>
-          {noFlightHub ? (
+          <Text style={styles.hubHint}>
+            Le programme est ajouté tout de suite. Active Vol et/ou Hôtel si
+            besoin — aussi plus tard dans le Planner.
+          </Text>
+          {noFlightHub && wantFlight ? (
             <Text style={styles.hubHint}>
-              Pas d’aéroport direct pour {cityLabel} — le voyage est créé sans
-              arrivée ; tu pourras la renseigner ensuite.
+              Pas d’aéroport direct pour {cityLabel} — arrivée à renseigner
+              ensuite.
             </Text>
           ) : null}
 
           <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
+            <Pressable
+              onPress={() => setWantFlight((v) => !v)}
+              style={[styles.toggle, wantFlight && styles.toggleOn]}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.toggleTitle}>Vol</Text>
+                <Text style={styles.toggleHint}>Départ + dates, puis scan</Text>
+              </View>
+              <Text style={styles.toggleState}>{wantFlight ? 'ON' : 'OFF'}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setWantHotel((v) => !v)}
+              style={[styles.toggle, wantHotel && styles.toggleOn]}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.toggleTitle}>Hôtel</Text>
+                <Text style={styles.toggleHint}>Dates, puis offres près du Pop</Text>
+              </View>
+              <Text style={styles.toggleState}>{wantHotel ? 'ON' : 'OFF'}</Text>
+            </Pressable>
+            <Text style={styles.nudge}>
+              Tu viens d’une autre ville ? Active Vol et/ou Hôtel.
+            </Text>
+
             <Text style={styles.label}>Qui voyage ?</Text>
             <View style={styles.row}>
               {(
@@ -216,46 +278,60 @@ export function MakeTripSheet({
               </Pressable>
             </View>
 
-            <Text style={styles.label}>Départ (IATA)</Text>
-            <TextInput
-              value={departure}
-              onChangeText={setDeparture}
-              autoCapitalize="characters"
-              placeholder="CDG,ORY"
-              style={styles.input}
-            />
+            {needsDeparture ? (
+              <>
+                <Text style={styles.label}>Départ (IATA)</Text>
+                <TextInput
+                  value={departure}
+                  onChangeText={setDeparture}
+                  autoCapitalize="characters"
+                  placeholder="CDG,ORY"
+                  style={styles.input}
+                />
+              </>
+            ) : null}
 
-            <Text style={styles.label}>Aller</Text>
-            <TextInput
-              value={outbound}
-              onChangeText={setOutbound}
-              placeholder="YYYY-MM-DD"
-              style={styles.input}
-            />
-            <Text style={styles.label}>Retour</Text>
-            <TextInput
-              value={inbound}
-              onChangeText={setInbound}
-              placeholder="YYYY-MM-DD"
-              style={styles.input}
-            />
-            <Pressable
-              onPress={() => {
-                const d = generateDatesFromPreset('next-weekend')
-                if (d.dates_depart[0]?.date) setOutbound(d.dates_depart[0].date)
-                if (d.dates_retour[0]?.date) setInbound(d.dates_retour[0].date)
-              }}
-            >
-              <Text style={styles.link}>Week-end prochain</Text>
-            </Pressable>
+            {needsDates ? (
+              <>
+                <Text style={styles.label}>Aller</Text>
+                <TextInput
+                  value={outbound}
+                  onChangeText={setOutbound}
+                  placeholder="YYYY-MM-DD"
+                  style={styles.input}
+                />
+                <Text style={styles.label}>Retour</Text>
+                <TextInput
+                  value={inbound}
+                  onChangeText={setInbound}
+                  placeholder="YYYY-MM-DD"
+                  style={styles.input}
+                />
+                <Pressable
+                  onPress={() => {
+                    const d = generateDatesFromPreset('next-weekend')
+                    if (d.dates_depart[0]?.date)
+                      setOutbound(d.dates_depart[0].date)
+                    if (d.dates_retour[0]?.date)
+                      setInbound(d.dates_retour[0].date)
+                  }}
+                >
+                  <Text style={styles.link}>Week-end prochain</Text>
+                </Pressable>
+              </>
+            ) : null}
 
-            <Text style={styles.label}>Budget max / pers. (€)</Text>
-            <TextInput
-              value={budget}
-              onChangeText={setBudget}
-              keyboardType="number-pad"
-              style={styles.input}
-            />
+            {wantFlight ? (
+              <>
+                <Text style={styles.label}>Budget max / pers. (€)</Text>
+                <TextInput
+                  value={budget}
+                  onChangeText={setBudget}
+                  keyboardType="number-pad"
+                  style={styles.input}
+                />
+              </>
+            ) : null}
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>
@@ -299,6 +375,36 @@ const styles = StyleSheet.create({
     color: colors.primaryInk,
     lineHeight: 17,
     marginBottom: 10,
+  },
+  toggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 8,
+    backgroundColor: '#fff',
+  },
+  toggleOn: {
+    borderColor: 'rgba(255,107,53,0.35)',
+    backgroundColor: '#FFF7F2',
+  },
+  toggleTitle: { fontFamily: fonts.extrabold, fontSize: 15, color: colors.ink },
+  toggleHint: {
+    marginTop: 2,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  toggleState: { fontFamily: fonts.bold, fontSize: 12, color: colors.ink },
+  nudge: {
+    marginTop: 8,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    color: colors.muted,
   },
   label: {
     marginTop: 10,

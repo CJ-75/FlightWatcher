@@ -397,12 +397,15 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
         visible={makeTripOpen}
         itinerary={itin}
         onClose={() => setMakeTripOpen(false)}
-        onCreated={(tripId) => {
+        onCreated={({ tripId, wantFlight, wantHotel }) => {
           setMakeTripOpen(false)
           navigation.navigate('TripDetail', {
             tripId,
-            autoScan: true,
+            autoScan: wantFlight,
+            openHotel: wantHotel && !wantFlight,
             fromParcours: true,
+            wantFlight,
+            wantHotel,
           })
         }}
       />

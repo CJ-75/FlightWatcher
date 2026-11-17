@@ -416,9 +416,16 @@ export default function ParcoursPublicPage() {
         <MakeTripSheet
           itinerary={itin}
           onClose={() => setMakeTripOpen(false)}
-          onCreated={(tripId) => {
+          onCreated={({ tripId, wantFlight, wantHotel }) => {
             setMakeTripOpen(false)
-            navigate(`/planner/${tripId}`, { state: { autoScan: true } })
+            navigate(`/planner/${tripId}`, {
+              state: {
+                autoScan: wantFlight,
+                openHotel: wantHotel && !wantFlight,
+                wantFlight,
+                wantHotel,
+              },
+            })
           }}
         />
       ) : null}

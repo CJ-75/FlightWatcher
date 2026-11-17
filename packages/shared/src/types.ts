@@ -364,6 +364,14 @@ export type TripMemberStatus = 'joined' | 'guest'
 /** How the member entered the trip — traced in DB (`trip_members.joined_via`). */
 export type TripMemberJoinedVia = 'created' | 'invite' | 'manual'
 
+export interface PlannedTripMeta {
+  want_flight?: boolean
+  want_hotel?: boolean
+  source_itinerary_id?: string | null
+  source_city_slug?: string | null
+  [key: string]: unknown
+}
+
 export interface PlannedTrip {
   id: string
   organizer_id: string
@@ -400,6 +408,8 @@ export interface PlannedTrip {
     full_name?: string | null
     avatar_url?: string | null
   } | null
+  /** Soft Pop→Planner flags (want_flight, want_hotel, source_itinerary_id, …). */
+  meta?: PlannedTripMeta | null
 }
 
 export interface TripProposal {
@@ -493,6 +503,12 @@ export interface CreatePlannedTripRequest {
   dates_retour: DateAvecHoraire[]
   budget_max: number
   direct?: boolean
+  /** Pop → Planner: opt into flight scan (default true for classic create). */
+  want_flight?: boolean
+  /** Pop → Planner: opt into hotel compose (default true for classic create). */
+  want_hotel?: boolean
+  source_itinerary_id?: string | null
+  source_city_slug?: string | null
 }
 
 /** Search → Planner: create locked trip with this flight accepted. */
@@ -520,6 +536,10 @@ export interface UpdatePlannedTripRequest {
   direct?: boolean
   auto_scan_enabled?: boolean
   auto_scan_interval_seconds?: number
+  want_flight?: boolean
+  want_hotel?: boolean
+  source_itinerary_id?: string | null
+  source_city_slug?: string | null
 }
 
 export interface RelaunchPlannedTripRequest {

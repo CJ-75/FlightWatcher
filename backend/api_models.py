@@ -153,6 +153,11 @@ class CreatePlannedTripRequest(BaseModel):
     passengers: int = 1
     budget_max: int = 200
     direct: Optional[bool] = False
+    # Pop → Planner opt-ins (stored on planned_trips.meta)
+    want_flight: Optional[bool] = None
+    want_hotel: Optional[bool] = None
+    source_itinerary_id: Optional[str] = None
+    source_city_slug: Optional[str] = None
 
 
 class CreatePlannedTripFromFlightRequest(BaseModel):
@@ -182,6 +187,10 @@ class UpdatePlannedTripRequest(BaseModel):
     direct: Optional[bool] = None
     auto_scan_enabled: Optional[bool] = None
     auto_scan_interval_seconds: Optional[int] = None
+    want_flight: Optional[bool] = None
+    want_hotel: Optional[bool] = None
+    source_itinerary_id: Optional[str] = None
+    source_city_slug: Optional[str] = None
 
 
 class RelaunchPlannedTripRequest(BaseModel):

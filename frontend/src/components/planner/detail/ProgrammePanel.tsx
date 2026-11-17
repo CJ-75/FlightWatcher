@@ -59,6 +59,18 @@ function ItemRow({
 }) {
   const st = statusFr(item.status)
   const interactive = Boolean(onOpen && item.action)
+  const openMaps = () => {
+    if (!item.mapsUrl) return
+    window.open(item.mapsUrl, '_blank', 'noopener,noreferrer')
+  }
+  const openViator = () => {
+    if (!item.productCode) return
+    window.open(
+      `https://www.viator.com/tours/-/${encodeURIComponent(item.productCode)}`,
+      '_blank',
+      'noopener,noreferrer',
+    )
+  }
   const inner = (
     <>
       <div className="flex items-center gap-2">
@@ -70,6 +82,11 @@ function ItemRow({
             {st}
           </span>
         ) : null}
+        {item.productCode ? (
+          <span className="rounded-full bg-[#FFF3EC] px-2 py-0.5 text-[10px] font-semibold text-[#E85A28]">
+            Viator
+          </span>
+        ) : null}
       </div>
       <p className="mt-1 text-sm font-semibold text-[#1A120E] dark:text-[#FFF9F5]">
         {item.title}
@@ -79,6 +96,34 @@ function ItemRow({
       ) : null}
       {item.notes ? (
         <p className="mt-1.5 text-xs leading-relaxed text-[#6B5C50]">{item.notes}</p>
+      ) : null}
+      {item.mapsUrl || item.productCode ? (
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {item.mapsUrl ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                openMaps()
+              }}
+              className="rounded-xl border border-[#EDE4DC] bg-white px-2.5 py-1.5 text-[11px] font-bold text-[#1A120E]"
+            >
+              Itinéraire
+            </button>
+          ) : null}
+          {item.productCode ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                openViator()
+              }}
+              className="rounded-xl bg-[#FF6B35] px-2.5 py-1.5 text-[11px] font-bold text-white"
+            >
+              Voir sur Viator
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </>
   )
