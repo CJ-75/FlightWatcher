@@ -170,7 +170,7 @@ export default function ParcoursPublicPage() {
   }, [toast])
 
   // POP_PAGE_V2 on → hard redirect to Next /pop/{ville}/{slug} (301-equivalent client).
-  // Preview cookie pop_v=1 keeps SPA for A/B.
+  // Local Vite :5173 → :3001. Preview cookie pop_v=1 keeps SPA for A/B.
   useEffect(() => {
     if (!itin || loading) return
     if (popVPreviewForcedToSpa()) return
@@ -180,12 +180,18 @@ export default function ParcoursPublicPage() {
       .then(() => {
         if (cancelled) return
         if (!peekConfigFlag('pop_page_v2_enabled')) return
-        const city = String(itin.city_slug || '').trim().toLowerCase()
-        const slug = String(itin.slug || itineraryId || '').trim().toLowerCase()
-        if (!city || !slug) return
-        const target = `/pop/${encodeURIComponent(city)}/${encodeURIComponent(slug)}`
-        if (window.location.pathname === target) return
-        window.location.replace(target)
+        void import('../lib/popLinks').then(({ publicPopHref }) => {
+          if (cancelled) return
+          const target = publicPopHref({
+            citySlug: itin.city_slug,
+            slug: itin.slug || itineraryId,
+            id: itin.id,
+          })
+          if (!target || target.startsWith('/parcours')) return
+          const here = `${window.location.origin}${window.location.pathname}`
+          if (target === here || target === window.location.pathname) return
+          window.location.replace(target)
+        })
       })
       .catch(() => {})
     return () => {

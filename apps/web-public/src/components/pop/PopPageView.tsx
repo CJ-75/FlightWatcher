@@ -13,6 +13,7 @@ import { PopFooter } from '@/components/pop/PopFooter'
 import { PopJsonLd } from '@/components/pop/JsonLd'
 import { isPublicImageSrc, PopImage } from '@/components/pop/PopImage'
 import { KeepButton } from '@/components/pop/KeepButton'
+import { PopBackButton } from '@/components/pop/PopBackButton'
 import { ShareButton } from '@/components/pop/ShareButton'
 import { LaunchPopCta } from '@/components/pop/LaunchPopCta'
 import { PlannerAddCta } from '@/components/pop/PlannerAddCta'
@@ -175,23 +176,35 @@ export function PopPageView({
         <div className="wp-mesh absolute inset-0" />
 
         <div className="relative z-10 mx-auto flex max-w-pop flex-col justify-end px-5 pb-5 pt-14 sm:pb-12 sm:pt-24">
-          <nav className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-white/70 sm:mb-4 sm:text-[12px]">
-            <Link
-              href={`/pop/${city}`}
-              className="text-white/80 no-underline hover:text-white hover:underline"
+          <div className="mb-4 space-y-2.5 sm:mb-5">
+            <PopBackButton href={`/pop/${city}`} />
+            <nav
+              className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-white/70 sm:text-[12px]"
+              aria-label="Fil d’Ariane"
             >
-              Pops
-            </Link>
-            <span aria-hidden>/</span>
-            <Link
-              href={`/pop/${city}`}
-              className="text-white/80 no-underline hover:text-white hover:underline"
-            >
-              {cityLabel}
-            </Link>
-            <span aria-hidden>/</span>
-            <span className="line-clamp-1 text-white/90">{h1}</span>
-          </nav>
+              <Link
+                href={`/pop/${city}`}
+                className="text-white/80 no-underline hover:text-white hover:underline"
+              >
+                Pops
+              </Link>
+              <span className="text-white/40" aria-hidden>
+                /
+              </span>
+              <Link
+                href={`/pop/${city}`}
+                className="text-white/80 no-underline hover:text-white hover:underline"
+              >
+                {cityLabel}
+              </Link>
+              <span className="text-white/40" aria-hidden>
+                /
+              </span>
+              <span className="line-clamp-1 max-w-[min(100%,28rem)] text-white/90">
+                {h1}
+              </span>
+            </nav>
+          </div>
 
           <PopAuthor authorKind={itin.author_kind as string | undefined} />
           <h1 className="mt-1 max-w-3xl text-[1.35rem] font-extrabold leading-[1.18] tracking-tight text-white sm:mt-3 sm:text-4xl lg:text-[2.75rem]">
