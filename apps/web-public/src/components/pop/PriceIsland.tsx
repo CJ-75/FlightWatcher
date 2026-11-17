@@ -10,6 +10,7 @@ import {
 } from '@waypop/shared'
 import { PlannerAddCta } from '@/components/pop/PlannerAddCta'
 import { PopOriginSelect } from '@/components/pop/PopOriginSelect'
+import { PopShareChannels } from '@/components/pop/PopShareChannels'
 import { useAuthGateNavigate } from '@/components/auth/useAuthGateNavigate'
 
 type PricePayload = {
@@ -80,6 +81,8 @@ type Props = {
   className?: string
   shareUrl?: string
   shareTitle?: string
+  shareSubtitle?: string | null
+  shareImage?: string | null
 }
 
 export function PriceIsland({
@@ -91,6 +94,8 @@ export function PriceIsland({
   className = '',
   shareUrl,
   shareTitle,
+  shareSubtitle,
+  shareImage,
 }: Props) {
   const groups = useMemo(() => frenchOriginGroups(), [])
   const [origin, setOrigin] = useState(DEFAULT_ORIGIN)
@@ -184,9 +189,7 @@ export function PriceIsland({
 
   const plannerHref = `/sejours?origin=${encodeURIComponent(origin)}&dest=${encodeURIComponent(destCity)}`
   const alertHref = `/alertes?origin=${encodeURIComponent(origin)}&dest=${encodeURIComponent(destCity)}`
-  const waHref = `https://wa.me/?text=${encodeURIComponent(
-    `${shareTitle || `Pop ${cityLabel}`}\n${shareUrl || ''}`,
-  )}`
+  const resolvedShareTitle = shareTitle || `Pop ${cityLabel}`
 
   if (variant === 'bar') {
     return (
@@ -402,34 +405,16 @@ export function PriceIsland({
             ) : null}
           </div>
 
-          <a
-            href={waHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 flex w-full items-center gap-3 rounded-xl bg-[#E8F8EE] px-3.5 py-3 no-underline transition-colors hover:bg-[#DFF5E8]"
-          >
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#25D366] text-white [&>svg]:block">
-              <WhatsAppIcon />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-extrabold text-ink">
-                Partage le Pop
-              </span>
-              <span className="block text-[11px] leading-snug text-ink-muted">
-                Solo, à deux ou à plusieurs — même programme
-              </span>
-            </span>
-          </a>
+          {shareUrl ? (
+            <PopShareChannels
+              title={resolvedShareTitle}
+              url={shareUrl}
+              subtitle={shareSubtitle}
+              image={shareImage}
+            />
+          ) : null}
         </div>
       </aside>
     </div>
-  )
-}
-
-function WhatsAppIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12.04 2c-5.46 0-9.91 4.4-9.91 9.83 0 1.74.46 3.43 1.34 4.92L2 22l5.42-1.4a9.96 9.96 0 0 0 4.62 1.15h.01c5.46 0 9.9-4.4 9.9-9.83S17.5 2 12.04 2zm5.75 13.93c-.24.67-1.4 1.23-1.93 1.31-.5.07-1.13.1-1.82-.11-.42-.13-.96-.31-1.65-.61-2.9-1.26-4.79-4.18-4.93-4.37-.14-.2-1.16-1.54-1.16-2.94 0-1.4.73-2.09 1-2.36.24-.25.53-.32.71-.32h.51c.16 0 .38-.06.59.45.24.58.81 2 .88 2.14.07.14.12.3.02.48-.09.2-.14.31-.27.48-.14.16-.29.36-.41.48-.14.14-.28.29-.12.56.16.28.7 1.15 1.5 1.86 1.03.92 1.9 1.2 2.17 1.34.27.14.43.12.59-.07.17-.2.7-.8.89-1.08.19-.27.38-.23.64-.14.27.1 1.7.8 1.99.95.29.14.48.22.55.34.08.13.08.74-.16 1.41z" />
-    </svg>
   )
 }

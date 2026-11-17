@@ -262,6 +262,8 @@ export function PopPageView({
                     dayCount={dayCount}
                     shareUrl={shareUrl}
                     shareTitle={h1}
+                    shareSubtitle={promise}
+                    shareImage={itin.cover_image}
                   />
                 </Suspense>
               </div>
@@ -437,6 +439,8 @@ export function PopPageView({
                     dayCount={dayCount}
                     shareUrl={shareUrl}
                     shareTitle={h1}
+                    shareSubtitle={promise}
+                    shareImage={itin.cover_image}
                   />
                 </Suspense>
               ) : null}
