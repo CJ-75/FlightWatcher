@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -41,6 +41,7 @@ type StatusFilter = 'published' | 'draft' | 'retired' | 'all'
 type Props = {
   headerExtra?: React.ReactNode
   scrollRef?: React.RefObject<ScrollView | null>
+  active?: boolean
 }
 
 const STATUS_META: Record<
@@ -66,6 +67,7 @@ const STATUS_META: Record<
 
 /** Cache mémoire — bascule de filtre sans refetch lourd. */
 let listCache: { at: number; items: AdminItinerary[] } | null = null
+let listInflight: Promise<void> | null = null
 const CACHE_MS = 45_000
 
 function statusOf(it: AdminItinerary): string {
@@ -73,7 +75,11 @@ function statusOf(it: AdminItinerary): string {
   return STATUS_META[s] ? s : 'draft'
 }
 
-export function MesParcoursScreen({ headerExtra, scrollRef }: Props) {
+export function MesParcoursScreen({
+  headerExtra,
+  scrollRef,
+  active = true,
+}: Props) {
   const insets = useSafeAreaInsets()
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>()
@@ -98,7 +104,18 @@ export function MesParcoursScreen({ headerExtra, scrollRef }: Props) {
       if (fresh) {
         setAllItems(listCache!.items)
         setLoading(false)
-      } else if (refresh) {
+        return
+      }
+      if (listInflight && !refresh) {
+        if (hasCache) {
+          setAllItems(listCache!.items)
+          setLoading(false)
+        }
+        await listInflight
+        return
+      }
+
+      if (refresh) {
         setRefreshing(true)
       } else if (!hasCache) {
         setLoading(true)
@@ -109,31 +126,47 @@ export function MesParcoursScreen({ headerExtra, scrollRef }: Props) {
       }
 
       setError(null)
-      try {
-        // Liste légère (sans items) — filtre statut côté client = instantané
-        const res = await getApi().adminListParcours({
-          limit: 100,
-          include_items: false,
-        })
-        if (!res.ok) throw new Error(res.error || 'Liste indisponible')
-        applyItems((res.itineraries || []) as unknown as AdminItinerary[])
-      } catch (e) {
-        if (!listCache?.items.length) {
-          setError(e instanceof Error ? e.message : 'Erreur')
-          applyItems([])
+      const run = (async () => {
+        try {
+          // Liste légère (sans items) — filtre statut côté client = instantané
+          const res = await getApi().adminListParcours({
+            limit: 100,
+            include_items: false,
+          })
+          if (!res.ok) throw new Error(res.error || 'Liste indisponible')
+          applyItems((res.itineraries || []) as unknown as AdminItinerary[])
+        } catch (e) {
+          if (!listCache?.items.length) {
+            setError(e instanceof Error ? e.message : 'Erreur')
+            applyItems([])
+          }
+        } finally {
+          setLoading(false)
+          setRefreshing(false)
         }
+      })()
+      listInflight = run
+      try {
+        await run
       } finally {
-        setLoading(false)
-        setRefreshing(false)
+        if (listInflight === run) listInflight = null
       }
     },
     [applyItems],
   )
 
+  // Onglet Mes pops visible (hub déjà focus) → charger
+  useEffect(() => {
+    if (!active) return
+    void load()
+  }, [active, load])
+
+  // Retour sur le hub Parcours pendant que Mes est ouvert → soft refresh
   useFocusEffect(
     useCallback(() => {
+      if (!active) return
       void load()
-    }, [load]),
+    }, [load, active]),
   )
 
   const counts = useMemo(() => {

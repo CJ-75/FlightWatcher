@@ -195,6 +195,7 @@ export function ParcoursHubScreen() {
           <MesParcoursScreen
             headerExtra={header}
             scrollRef={mesScrollRef}
+            active={segment === 'mes'}
           />
         </View>
       ) : null}

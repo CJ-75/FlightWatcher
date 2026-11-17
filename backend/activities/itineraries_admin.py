@@ -19,6 +19,16 @@ ADMIN_COLS = (
     "indexable_override,canonical_itinerary_id,slug_history"
 )
 
+# Hub « Mes pops » — cards only (pas de FAQ/tips/stay/intro lourds).
+ADMIN_LIST_COLS = (
+    "id,slug,title,subtitle,cover_image,city_slug,served_city_id,"
+    "status,author_kind,duration_kind,occasions,featured_from,featured_to,"
+    "budget_estimate_eur,budget_basis,sort_weight,published_at,is_demo,"
+    "visibility,updated_at,created_at,"
+    "pace,transport_modes,ideal_for,color_key,featured,"
+    "indexable_override,canonical_itinerary_id"
+)
+
 VALID_STATUS = {"draft", "published", "retired"}
 VALID_DURATION = {"2h", "half_day", "day", "weekend"}
 VALID_BUDGET = {"for_two", "per_person"}
@@ -304,10 +314,11 @@ def list_admin_itineraries(
         return {"ok": False, "itineraries": [], "error": "no_supabase"}
     lim = max(1, min(int(limit or 100), 200))
     # items(*) sans places(*) — assez pour édition rapide mobile
+    # sinon liste légère (ADMIN_LIST_COLS) pour le hub Mes pops
     cols = (
         f"{ADMIN_COLS}, itinerary_items(*)"
         if include_items
-        else ADMIN_COLS
+        else ADMIN_LIST_COLS
     )
     try:
         q = (
