@@ -176,60 +176,66 @@ export function PopPageView({
         <div className="wp-mesh absolute inset-0" />
 
         <div className="relative z-10 mx-auto flex max-w-pop flex-col justify-end px-5 pb-5 pt-14 sm:pb-12 sm:pt-24">
-          <div className="mb-4 space-y-2.5 sm:mb-5">
+          {/* Hors H1 : sable chaud + ombre — lisible sur photos claires */}
+          <div className="mb-4 space-y-2.5 text-[#D4B8A3] [text-shadow:0_1px_3px_rgba(0,0,0,.7),0_2px_14px_rgba(0,0,0,.35)] sm:mb-5">
             <PopBackButton href={`/pop/${city}`} />
             <nav
-              className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium text-white/70 sm:text-[12px]"
+              className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-medium sm:text-[12px]"
               aria-label="Fil d’Ariane"
             >
               <Link
                 href={`/pop/${city}`}
-                className="text-white/80 no-underline hover:text-white hover:underline"
+                className="text-[#D4B8A3] no-underline hover:text-[#E8D0BE] hover:underline"
               >
                 Pops
               </Link>
-              <span className="text-white/40" aria-hidden>
+              <span className="text-[#D4B8A3]/50" aria-hidden>
                 /
               </span>
               <Link
                 href={`/pop/${city}`}
-                className="text-white/80 no-underline hover:text-white hover:underline"
+                className="text-[#D4B8A3] no-underline hover:text-[#E8D0BE] hover:underline"
               >
                 {cityLabel}
               </Link>
-              <span className="text-white/40" aria-hidden>
+              <span className="text-[#D4B8A3]/50" aria-hidden>
                 /
               </span>
-              <span className="line-clamp-1 max-w-[min(100%,28rem)] text-white/90">
+              <span className="line-clamp-1 max-w-[min(100%,28rem)] text-[#D4B8A3]">
                 {h1}
               </span>
             </nav>
           </div>
 
-          <PopAuthor authorKind={itin.author_kind as string | undefined} />
-          <h1 className="mt-1 max-w-3xl text-[1.35rem] font-extrabold leading-[1.18] tracking-tight text-white sm:mt-3 sm:text-4xl lg:text-[2.75rem]">
-            {h1}
-          </h1>
-          {promise ? (
-            <p className="mt-1.5 line-clamp-2 max-w-2xl text-sm font-semibold text-white/90 sm:mt-2 sm:line-clamp-none">
-              {promise}
-            </p>
-          ) : null}
+          <div className="text-[#D4B8A3] [text-shadow:0_1px_3px_rgba(0,0,0,.7),0_2px_14px_rgba(0,0,0,.35)]">
+            <PopAuthor
+              authorKind={itin.author_kind as string | undefined}
+              textClassName="text-[11px] font-bold uppercase tracking-brand text-[#D4B8A3]"
+            />
+            <h1 className="mt-1 max-w-3xl text-[1.35rem] font-extrabold leading-[1.18] tracking-tight text-[#D4B8A3] sm:mt-3 sm:text-4xl lg:text-[2.75rem]">
+              {h1}
+            </h1>
+            {promise ? (
+              <p className="mt-1.5 line-clamp-2 max-w-2xl text-sm font-semibold text-[#D4B8A3] sm:mt-2 sm:line-clamp-none">
+                {promise}
+              </p>
+            ) : null}
 
-          {metaBits.length > 0 ? (
-            <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[12px] font-bold text-white/90 sm:mt-4 sm:text-[13px]">
-              {metaBits.map((b, i) => (
-                <span key={`${b}-${i}`} className="inline-flex items-center gap-3">
-                  {i > 0 ? (
-                    <span className="text-white/55" aria-hidden>
-                      ·
-                    </span>
-                  ) : null}
-                  {b}
-                </span>
-              ))}
-            </p>
-          ) : null}
+            {metaBits.length > 0 ? (
+              <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[12px] font-bold text-[#D4B8A3] sm:mt-4 sm:text-[13px]">
+                {metaBits.map((b, i) => (
+                  <span key={`${b}-${i}`} className="inline-flex items-center gap-3">
+                    {i > 0 ? (
+                      <span className="text-[#D4B8A3]/55" aria-hidden>
+                        ·
+                      </span>
+                    ) : null}
+                    {b}
+                  </span>
+                ))}
+              </p>
+            ) : null}
+          </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-2.5 sm:mt-8 sm:gap-3">
             <PlannerAddCta
@@ -284,20 +290,20 @@ export function PopPageView({
             ) : null}
 
             {facts.length > 0 ? (
-              <dl className="grid grid-cols-2 gap-3 lg:flex lg:flex-wrap lg:gap-x-8 lg:gap-y-5 lg:pr-1">
-                {facts.slice(0, 4).map((f) => {
-                  const heroDup = f.label === 'Durée' || f.label === 'Idéal'
+              <dl className="flex w-full flex-wrap items-start justify-between gap-x-4 gap-y-4 pr-1 sm:flex-nowrap sm:gap-x-6 sm:pr-2">
+                {facts.slice(0, 4).map((f, i, arr) => {
+                  const last = i === arr.length - 1
                   return (
                     <div
                       key={f.label}
-                      className={`min-w-0 rounded-2xl bg-white px-3.5 py-3 ring-1 ring-line lg:max-w-[28%] lg:shrink-0 lg:overflow-visible lg:rounded-none lg:bg-transparent lg:px-0 lg:py-0 lg:ring-0 ${
-                        heroDup ? 'hidden lg:block' : ''
+                      className={`min-w-0 shrink-0 text-left ${
+                        last ? 'ml-auto sm:ml-0' : ''
                       }`}
                     >
                       <dt>
                         <WpTag>{f.label}</WpTag>
                       </dt>
-                      <dd className="mt-1.5 pr-1.5 text-sm font-bold text-ink">
+                      <dd className="mt-1.5 text-sm font-bold text-ink">
                         {f.value}
                       </dd>
                     </div>

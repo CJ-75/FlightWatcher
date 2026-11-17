@@ -23,7 +23,7 @@ export function PopBackButton({ href, className = '' }: Props) {
         }
         router.push(href)
       }}
-      className={`inline-flex items-center gap-1 text-[11px] font-semibold tracking-wide text-white/75 transition hover:text-white ${className}`}
+      className={`inline-flex items-center gap-1 text-[11px] font-semibold tracking-wide text-[#D4B8A3] transition hover:text-[#E8D0BE] ${className}`}
     >
       <BackIcon />
       <span>Retour</span>
