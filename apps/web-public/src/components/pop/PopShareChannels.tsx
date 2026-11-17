@@ -192,8 +192,8 @@ export function PopShareChannels({
           <span className="block text-[15px] font-extrabold leading-tight text-ink">
             Partager ce Pop
           </span>
-          <span className="mt-0.5 block text-[12px] leading-snug text-ink-muted whitespace-nowrap">
-            Organise à ton rythme, sans friction
+          <span className="mt-0.5 block text-[12px] leading-snug text-ink-muted">
+            Solo, à deux ou à plusieurs
           </span>
         </span>
         <span
