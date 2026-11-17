@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   buildParcoursFeed,
@@ -7,7 +7,6 @@ import {
   itineraryOccasionEmoji,
   loadOnboardingPrefs,
   PARCOURS_CITY_OPTIONS_FR,
-  setDepartureCity,
   type Itinerary,
   type ItineraryOccasion,
   type ParcoursFeedRow,
@@ -22,7 +21,6 @@ import {
 import { CountryFlag } from '../CountryFlag'
 import { FwKicker } from '../ui/FwKicker'
 import { ItineraryCard } from './ItineraryCard'
-import { CityBanner } from '../onboarding/CityBanner'
 import { AppPromoCard } from '../onboarding/AppPromoCard'
 
 const CITY_CHOICES = PARCOURS_CITY_OPTIONS_FR
@@ -46,6 +44,7 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
     }
   })
   const [cityOpen, setCityOpen] = useState(false)
+  const cityMenuRef = useRef<HTMLDivElement>(null)
   const [items, setItems] = useState<Itinerary[]>(() => {
     const hit =
       getParcoursCatalogMemory() || hydrateParcoursCatalogMemory() || []
@@ -120,6 +119,34 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
     }
   }, [city])
 
+  useEffect(() => {
+    if (!cityOpen) return
+    const onDoc = (e: MouseEvent) => {
+      if (!cityMenuRef.current?.contains(e.target as Node)) {
+        setCityOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCityOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [cityOpen])
+
+  const pickCity = (c: (typeof CITY_CHOICES)[number]) => {
+    setCity(c.slug)
+    setCityOpen(false)
+    try {
+      localStorage.setItem(CITY_LS, c.slug)
+    } catch {
+      /* ignore */
+    }
+  }
+
   const rows = useMemo(
     () => buildParcoursFeed(items, { citySlug: city, occasionFilter: occasion }),
     [items, city, occasion],
@@ -188,58 +215,51 @@ export function ParcoursCatalog({ active, embedded = false }: Props) {
           embedded ? 'mb-5 lg:mb-6' : 'mb-5 -mt-1 lg:mb-6'
         }`}
       >
-        <CityBanner
-          onCityChange={(_codes, label) => {
-            const hit =
-              CITY_CHOICES.find(
-                (c) => c.label.toLowerCase() === label.toLowerCase(),
-              ) || CITY_CHOICES.find((c) => c.slug === city)
-            const slug = hit?.slug || city
-            setCity(slug)
-            try {
-              localStorage.setItem(CITY_LS, slug)
-            } catch {
-              /* ignore */
-            }
-            void setDepartureCity({
-              slug,
-              label: hit?.label || label,
-              airportCodes: _codes,
-            })
-          }}
-        />
-      <div className="relative inline-block">
-        <button
-          type="button"
-          onClick={() => setCityOpen((v) => !v)}
-          className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3.5 py-2 lg:px-4 lg:py-2.5 text-sm lg:text-[15px] font-bold text-ink shadow-sm"
-        >
-          <CountryFlag iso={selectedCity?.iso || 'FR'} className="w-[18px] h-3" />
-          {cityLabel} ▾
-        </button>
-        {cityOpen ? (
-          <div className="absolute left-0 z-20 mt-2 max-h-72 w-60 overflow-auto rounded-2xl border border-line bg-white p-2 shadow-lg">
-            {CITY_CHOICES.map((c) => (
-              <button
-                key={c.slug}
-                type="button"
-                onClick={() => {
-                  setCity(c.slug)
-                  setCityOpen(false)
-                }}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold ${
-                  c.slug === city
-                    ? 'bg-[color:var(--fw-accent-soft)] text-ink'
-                    : 'text-muted hover:bg-canvas'
-                }`}
-              >
-                <CountryFlag iso={c.iso} className="w-[18px] h-3" />
-                {c.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </div>
+        <div className="relative inline-block" ref={cityMenuRef}>
+          <button
+            type="button"
+            onClick={() => setCityOpen((v) => !v)}
+            aria-haspopup="listbox"
+            aria-expanded={cityOpen}
+            className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3.5 py-2 lg:px-4 lg:py-2.5 text-sm lg:text-[15px] font-bold text-ink shadow-sm"
+          >
+            <CountryFlag
+              iso={selectedCity?.iso || 'FR'}
+              className="w-[18px] h-3"
+              title={selectedCity?.country || 'France'}
+            />
+            {cityLabel} ▾
+          </button>
+          {cityOpen ? (
+            <div
+              className="absolute left-0 z-20 mt-2 max-h-72 w-60 overflow-auto rounded-2xl border border-line bg-white p-2 shadow-lg"
+              role="listbox"
+              aria-label="Ville"
+            >
+              {CITY_CHOICES.map((c) => (
+                <button
+                  key={c.slug}
+                  type="button"
+                  role="option"
+                  aria-selected={c.slug === city}
+                  onClick={() => pickCity(c)}
+                  className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-semibold ${
+                    c.slug === city
+                      ? 'bg-[color:var(--fw-accent-soft)] text-ink'
+                      : 'text-muted hover:bg-canvas'
+                  }`}
+                >
+                  <CountryFlag
+                    iso={c.iso}
+                    className="w-[18px] h-3"
+                    title={c.country}
+                  />
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {occasion ? (

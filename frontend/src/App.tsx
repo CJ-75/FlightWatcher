@@ -129,6 +129,7 @@ function tabFromPath(pathname: string): Tab | null {
   return null
 }
 
+/** Icônes alignées sur mobile/src/components/TabIcons.tsx */
 function TabIcon({
   name,
 }: {
@@ -138,47 +139,71 @@ function TabIcon({
     width: 18,
     height: 18,
     viewBox: '0 0 24 24',
-    fill: 'none' as const,
-    stroke: 'currentColor',
-    strokeWidth: 2,
-    strokeLinecap: 'round' as const,
-    strokeLinejoin: 'round' as const,
     'aria-hidden': true as const,
   }
   switch (name) {
     case 'search':
       return (
-        <svg {...common}>
-          <circle cx="11" cy="11" r="6.5" />
-          <path d="M16.5 16.5 21 21" />
+        <svg {...common} fill="none">
+          <circle
+            cx="10.5"
+            cy="10.5"
+            r="6.25"
+            stroke="currentColor"
+            strokeWidth="2.2"
+          />
+          <path
+            d="M15.4 15.4 20 20"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
         </svg>
       )
     case 'activities':
+      /* Ticket / billet — expériences (stroke, encoches latérales) */
       return (
-        <svg {...common}>
-          <path d="M8 4h8v4H8z" />
-          <path d="M6 12h12v8H6z" />
-          <path d="M10 8v4M14 8v4" />
+        <svg
+          {...common}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h13A1.5 1.5 0 0 1 20 8.5v1.4a1.85 1.85 0 0 0 0 3.2v1.4a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 14.5v-1.4a1.85 1.85 0 0 0 0-3.2V8.5Z" />
+          <path d="M10 7.5v9" strokeDasharray="2.2 2.4" />
         </svg>
       )
     case 'parcours':
+      /* Boussole — icône d’origine (stroke) */
       return (
-        <svg {...common}>
+        <svg
+          {...common}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <circle cx="12" cy="12" r="9" />
-          <circle cx="12" cy="12" r="6.2" strokeWidth={1.5} />
+          <circle cx="12" cy="12" r="6.2" strokeWidth="1.5" />
           <path d="M15.6 8.4 13.7 13.7 8.4 15.6 10.3 10.3Z" />
         </svg>
       )
     case 'planner':
+      /* Calendrier — attaches + bandeau, sans pastilles blanches */
       return (
-        <svg {...common}>
-          <rect x="4" y="5" width="16" height="15" rx="2" />
-          <path d="M8 3v4M16 3v4M4 10h16" />
+        <svg {...common} fill="currentColor">
+          <path
+            fillRule="evenodd"
+            d="M8.25 3.25a.9.9 0 0 1 .9.9V5.5h5.7V4.15a.9.9 0 1 1 1.8 0V5.5h.6A2.75 2.75 0 0 1 20 8.25v10A2.75 2.75 0 0 1 17.25 21h-10.5A2.75 2.75 0 0 1 4 18.25v-10A2.75 2.75 0 0 1 6.75 5.5h.6V4.15a.9.9 0 0 1 .9-.9ZM5.8 10.4h12.4v7.85c0 .53-.43.95-.95.95H6.75a.95.95 0 0 1-.95-.95V10.4Z"
+          />
         </svg>
       )
     case 'saved':
       return (
-        <svg {...common}>
+        <svg {...common} fill="currentColor">
           <path d="M12 20.5 4.5 13A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7.5 6Z" />
         </svg>
       )
