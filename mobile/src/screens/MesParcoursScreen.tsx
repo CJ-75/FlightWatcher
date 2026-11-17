@@ -402,7 +402,9 @@ export function MesParcoursScreen({
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={{
-          paddingBottom: insets.bottom + 100,
+          // Même gutter horizontal que ParcoursCatalogScreen (Pops)
+          paddingHorizontal: spacing.xl,
+          paddingBottom: insets.bottom + 110,
         }}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -517,7 +519,6 @@ export function MesParcoursScreen({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   body: {
-    paddingHorizontal: spacing.xl,
     paddingTop: 4,
   },
   kicker: {
