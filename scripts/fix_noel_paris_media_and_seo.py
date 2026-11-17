@@ -172,13 +172,18 @@ def main() -> int:
         cur = str(row.get("photo") or "")
         old_photos = meta.get("photos") if isinstance(meta.get("photos"), list) else []
         print(f" Step {i}: {row.get('title')}")
-        if is_media(cur):
+        # Never keep a step photo identical to cover — Pop exclusive pick hides it.
+        if is_media(cur) and cur != cover_url:
             remote = cur
             print("  photo already media")
         else:
             src = STEP_SRCS[i % len(STEP_SRCS)]
             remote = rehost(src, "parcours-step", f"noel-paris-step-{i}.jpg")
             print("  →", remote)
+            if remote == cover_url:
+                src = STEP_SRCS[(i + 1) % len(STEP_SRCS)]
+                remote = rehost(src, "parcours-step", f"noel-paris-step-{i}-uniq.jpg")
+                print("  cover-collision →", remote)
 
         gallery = [remote]
         need_second = len(old_photos) >= 2 and not all(

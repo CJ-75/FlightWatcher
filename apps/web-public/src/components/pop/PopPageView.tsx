@@ -246,7 +246,8 @@ export function PopPageView({
       {/* Zone pêche sous le hero (prix + contenu) */}
       <main className="bg-[#FFF9F5] pb-36 lg:pb-16">
         <div className="mx-auto grid max-w-pop gap-12 px-5 py-8 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-14 lg:py-14">
-          <div className="min-w-0 space-y-12">
+          {/* flex+gap (not space-y): lg:hidden PriceIsland must not push intro below sidebar top */}
+          <div className="flex min-w-0 flex-col gap-12">
             {showPrice ? (
               <div className="lg:hidden">
                 <Suspense
