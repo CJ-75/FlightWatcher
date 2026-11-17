@@ -35,7 +35,7 @@ export default function NotFound() {
             Retour aux vols
           </Link>
           <Link
-            to="/sejours"
+            to="/pop"
             className="inline-flex min-h-[44px] items-center justify-center px-3 text-sm font-bold text-primary-700 hover:text-primary-600"
           >
             Voir les séjours

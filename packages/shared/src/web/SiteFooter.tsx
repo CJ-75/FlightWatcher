@@ -13,8 +13,8 @@ export type SiteFooterProps = {
 }
 
 export const SITE_FOOTER_LINKS: SiteFooterLink[] = [
+  { href: '/pop', label: 'Pops' },
   { href: '/sejours', label: 'Séjours' },
-  { href: '/parcours', label: 'Pops' },
   { href: '/vols', label: 'Vols' },
   { href: '/mentions-legales', label: 'Mentions' },
   { href: '/confidentialite', label: 'Confidentialité' },

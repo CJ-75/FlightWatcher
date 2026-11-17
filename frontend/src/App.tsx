@@ -105,7 +105,8 @@ type Tab = 'search' | 'deals' | 'planner' | 'alerts' | 'activities' | 'saved'
 
 const TAB_PATH: Record<Tab, string> = {
   search: '/vols',
-  deals: '/sejours',
+  /** Explorer land on Pops ; Séjours = /sejours */
+  deals: '/pop',
   planner: '/planner',
   alerts: '/alertes',
   activities: '/activites/paris',
@@ -115,7 +116,7 @@ const TAB_PATH: Record<Tab, string> = {
 function tabFromPath(pathname: string): Tab | null {
   const p = pathname.replace(/\/+$/, '') || '/'
   if (p === '/vols' || p === '/recherche' || p === '/search') return 'search'
-  if (p === '/sejours' || p === '/deals') return 'deals'
+  if (p === '/pop' || p === '/sejours' || p === '/deals') return 'deals'
   if (
     p === '/planner' ||
     (p.startsWith('/planner/') && !p.startsWith('/planner/invite'))
@@ -250,6 +251,7 @@ function Dashboard() {
     const fromPath = tabFromPath(location.pathname)
     if (fromPath === activeTab) return
     const onLegacyHome =
+      location.pathname === '/pop' ||
       location.pathname === '/sejours' ||
       location.pathname === '/vols' ||
       location.pathname === '/recherche' ||
@@ -636,7 +638,7 @@ function Dashboard() {
     if (alertsUiEnabled) return
     const p = location.pathname.replace(/\/+$/, '') || '/'
     if (p === '/alertes' || p === '/alerts') {
-      navigate('/sejours', { replace: true })
+      navigate('/pop', { replace: true })
       if (activeTab === 'alerts') setActiveTabState('deals')
     }
   }, [activeTab, alertsUiEnabled, location.pathname, navigate, uiFlagsReady])
@@ -647,7 +649,7 @@ function Dashboard() {
     if (activitiesUiEnabled) return
     const p = location.pathname.replace(/\/+$/, '') || '/'
     if (p === '/activites' || p.startsWith('/activites/')) {
-      navigate('/sejours', { replace: true })
+      navigate('/pop', { replace: true })
       if (activeTab === 'activities') setActiveTabState('deals')
     }
   }, [activeTab, activitiesUiEnabled, location.pathname, navigate, uiFlagsReady])
@@ -1382,13 +1384,13 @@ function Dashboard() {
           {/* Brand + compte : pleine largeur */}
           <header className="flex items-center justify-between gap-3">
             <Link
-              to="/sejours"
+              to="/pop"
               onClick={() => {
                 setActiveTabState('deals')
                 window.scrollTo({ top: 0, behavior: 'smooth' })
               }}
               className="min-w-0 text-left rounded-xl -ml-1 px-1 py-0.5 transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-300"
-              aria-label="WayPop, retour à Explorer"
+              aria-label="WayPop, retour aux Pops"
             >
               <p className="app-kicker mb-0.5">WayPop</p>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-ink tracking-tight truncate">
@@ -1420,11 +1422,16 @@ function Dashboard() {
                 return (
                   <Link
                     key={tab.id}
-                    to={
-                      tab.id === 'deals' && location.search
-                        ? { pathname: TAB_PATH[tab.id], search: location.search }
-                        : TAB_PATH[tab.id]
-                    }
+                    to={(() => {
+                      if (tab.id !== 'deals') return TAB_PATH[tab.id]
+                      // Explorer → /pop ; garder occasion/etc. si présent
+                      const q = new URLSearchParams(location.search)
+                      q.delete('vue')
+                      const s = q.toString()
+                      return s
+                        ? { pathname: '/pop', search: `?${s}` }
+                        : '/pop'
+                    })()}
                     onClick={() => {
                       if (active) {
                         window.scrollTo({ top: 0, behavior: 'smooth' })

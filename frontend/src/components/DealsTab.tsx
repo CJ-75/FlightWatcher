@@ -689,7 +689,7 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
       ) : null}
 
       {loading && deals.length === 0 ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 lg:gap-7">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
@@ -760,7 +760,7 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
           ) : null}
           <motion.div
             layout
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 lg:gap-7"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7"
           >
             {gridDeals.flatMap((deal, i) => {
               const card = (
@@ -799,7 +799,7 @@ export function DealsTab({ embedded = false }: { embedded?: boolean }) {
               </p>
               <motion.div
                 layout
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6 lg:gap-7"
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-7"
               >
                 {secondaryFillers.map((deal) => (
                   <DealCard

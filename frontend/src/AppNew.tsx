@@ -173,8 +173,9 @@ function App() {
         </Route>
         
         {/* App shell — onglets = vraies URLs (partage, retour navigateur, SEO) */}
-        <Route path="/" element={<Navigate to="/sejours" replace />} />
+        <Route path="/" element={<Navigate to="/pop" replace />} />
         <Route path="/vols" element={<Dashboard />} />
+        <Route path="/pop" element={<Dashboard />} />
         <Route path="/sejours" element={<Dashboard />} />
         <Route path="/planner" element={<Dashboard />} />
         <Route path="/planner/:tripId" element={<Dashboard />} />

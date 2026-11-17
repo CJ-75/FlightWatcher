@@ -207,10 +207,10 @@ export default function ParcoursPublicPage() {
         <p className="font-semibold text-ink">{error || 'Introuvable'}</p>
         <button
           type="button"
-          onClick={() => navigate('/sejours')}
+          onClick={() => navigate('/pop')}
           className="font-bold text-[color:var(--fw-accent)]"
         >
-          ← Parcours
+          ← Pops
         </button>
       </div>
     )
@@ -355,7 +355,7 @@ export default function ParcoursPublicPage() {
         }
         authorVerified={String(itin.author_kind || 'admin') !== 'user'}
         dateLabel={dateLabel}
-        onBack={() => navigate('/sejours')}
+        onBack={() => navigate('/pop')}
         liked={liked}
         onLike={() => void toggleLike()}
         onShare={() => {

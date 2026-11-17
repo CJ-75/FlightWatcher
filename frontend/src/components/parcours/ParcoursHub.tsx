@@ -1,38 +1,22 @@
-import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { DealsTab } from '../DealsTab'
 import { FwKicker } from '../ui/FwKicker'
 import { ParcoursCatalog } from './ParcoursCatalog'
 
-type Segment = 'parcours' | 'sejours'
+type Segment = 'pop' | 'sejours'
+
+/** /pop → Pops ; /sejours → Séjours */
+function segmentFromPath(pathname: string): Segment {
+  const p = pathname.replace(/\/+$/, '') || '/'
+  return p === '/sejours' || p === '/deals' ? 'sejours' : 'pop'
+}
 
 /**
- * Titre statique + tabs style TikTok sous le titre, puis contenu.
+ * Hub Explorer — tabs = vraies URLs (/pop | /sejours).
  */
 export function ParcoursHub() {
-  const [params, setParams] = useSearchParams()
-  const fromUrl = params.get('vue')
-  const [segment, setSegment] = useState<Segment>(() =>
-    fromUrl === 'sejours' ? 'sejours' : 'parcours',
-  )
-
-  useEffect(() => {
-    if (fromUrl === 'sejours' || fromUrl === 'parcours') {
-      setSegment(fromUrl)
-    }
-  }, [fromUrl])
-
-  const select = (next: Segment) => {
-    if (next === segment) {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-      return
-    }
-    setSegment(next)
-    const nextParams = new URLSearchParams(params)
-    if (next === 'parcours') nextParams.delete('vue')
-    else nextParams.set('vue', 'sejours')
-    setParams(nextParams, { replace: true })
-  }
+  const { pathname } = useLocation()
+  const segment = segmentFromPath(pathname)
 
   return (
     <div className="w-full">
@@ -52,24 +36,26 @@ export function ParcoursHub() {
 
       <div
         role="tablist"
-        aria-label="Parcours ou séjours"
+        aria-label="Pops ou séjours"
         className="mb-5 lg:mb-7 flex w-full gap-5 lg:gap-8 border-b border-line"
       >
         {(
           [
-            { id: 'parcours' as const, label: 'Parcours' },
-            { id: 'sejours' as const, label: 'Séjours' },
+            { id: 'pop' as const, label: 'Pops', to: '/pop' },
+            { id: 'sejours' as const, label: 'Séjours', to: '/sejours' },
           ] as const
         ).map((s) => {
           const on = segment === s.id
           return (
-            <button
+            <Link
               key={s.id}
-              type="button"
+              to={s.to}
               role="tab"
               aria-selected={on}
-              onClick={() => select(s.id)}
-              className={`relative pb-3 lg:pb-3.5 text-sm lg:text-[15px] font-bold tracking-tight transition-colors ${
+              onClick={() => {
+                if (on) window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+              className={`relative pb-3 lg:pb-3.5 text-sm lg:text-[15px] font-bold tracking-tight no-underline transition-colors ${
                 on ? 'text-ink' : 'text-muted hover:text-ink'
               }`}
             >
@@ -77,16 +63,21 @@ export function ParcoursHub() {
               {on ? (
                 <span className="absolute inset-x-0 -bottom-px h-[2.5px] rounded-full bg-ink" />
               ) : null}
-            </button>
+            </Link>
           )
         })}
       </div>
 
-      {/* Keep both mounted — instant tab switch + preload. */}
-      <div className={segment === 'parcours' ? 'block' : 'hidden'} aria-hidden={segment !== 'parcours'}>
-        <ParcoursCatalog active={segment === 'parcours'} embedded />
+      <div
+        className={segment === 'pop' ? 'block' : 'hidden'}
+        aria-hidden={segment !== 'pop'}
+      >
+        <ParcoursCatalog active={segment === 'pop'} embedded />
       </div>
-      <div className={segment === 'sejours' ? 'block' : 'hidden'} aria-hidden={segment !== 'sejours'}>
+      <div
+        className={segment === 'sejours' ? 'block' : 'hidden'}
+        aria-hidden={segment !== 'sejours'}
+      >
         <DealsTab embedded />
       </div>
     </div>
