@@ -261,7 +261,7 @@ export function PriceIsland({
           <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink">
             {localMode ? 'Week-end sur place' : 'Prix week-end'}
           </p>
-          <p className="text-[11px] font-semibold text-ink/70">
+          <p className="hidden text-[11px] font-semibold text-ink/70 lg:block">
             {stopCount} stops
           </p>
         </div>
@@ -290,7 +290,8 @@ export function PriceIsland({
                   quand tu veux, solo ou avec qui tu veux.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-px border-y border-line bg-line">
+              {/* Desktop sidebar only — mobile already has durée/stops in the hero */}
+              <div className="hidden grid-cols-2 gap-px border-y border-line bg-line lg:grid">
                 <div className="bg-white px-4 py-2.5 text-center">
                   <p className="text-[10px] font-bold uppercase tracking-wide text-ink-muted">
                     {Math.max(1, dayCount) === 1 ? 'Jour' : 'Jours'}

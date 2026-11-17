@@ -1,8 +1,7 @@
-import React from 'react'
-import { View, Text, StyleSheet } from 'react-native'
+import React, { useState } from 'react'
+import { View, Text, StyleSheet, Pressable } from 'react-native'
 import {
   buildItineraryPopFacts,
-  idealLabelFr,
   parseFaq,
   parseStay,
   parseTips,
@@ -33,6 +32,7 @@ function FactsRow({ facts }: { facts: ItineraryPopFact[] }) {
   )
 }
 
+/** Stay / tips / FAQ / facts — mobile-first cards (mirrors Next Pop mobile). */
 export function ItineraryEditorialSections({
   itinerary,
   cityLabel,
@@ -45,6 +45,7 @@ export function ItineraryEditorialSections({
   const stay = showBlocks ? parseStay(itinerary.stay) : null
   const tips = showBlocks ? parseTips(itinerary.tips) : []
   const faq = showBlocks ? parseFaq(itinerary.faq) : []
+  const [openFaq, setOpenFaq] = useState<Record<number, boolean>>({})
 
   const hasAny =
     facts.length > 0 || stay || tips.length > 0 || faq.length > 0
@@ -56,13 +57,16 @@ export function ItineraryEditorialSections({
 
       {stay ? (
         <View style={styles.section}>
-          <Text style={styles.eyebrow}>Hébergement</Text>
           <Text style={styles.h2}>
             {cityLabel ? `Où dormir à ${cityLabel}` : 'Où dormir'}
           </Text>
-          <View style={styles.stayBar}>
-            {stay.area ? <Text style={styles.stayArea}>{stay.area}</Text> : null}
-            {stay.vibe ? <Text style={styles.stayVibe}>{stay.vibe}</Text> : null}
+          <View style={styles.stayCard}>
+            {stay.area ? (
+              <Text style={styles.stayArea}>{stay.area}</Text>
+            ) : null}
+            {stay.vibe ? (
+              <Text style={styles.stayVibe}>{stay.vibe}</Text>
+            ) : null}
             {stay.note ? (
               <Text style={styles.body}>
                 {sanitizeUserFacingText(stay.note, { multiline: true })}
@@ -74,29 +78,57 @@ export function ItineraryEditorialSections({
 
       {tips.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.eyebrow}>Conseils</Text>
           <Text style={styles.h2}>Bon à savoir</Text>
-          {tips.map((t, i) => (
-            <View key={i} style={styles.tipRow}>
-              <View style={styles.dot} />
-              <Text style={styles.body}>{sanitizeUserFacingText(t)}</Text>
-            </View>
-          ))}
+          <View style={styles.tipsList}>
+            {tips.map((t, i) => (
+              <View key={i} style={styles.tipCard}>
+                <View style={styles.tipBadge}>
+                  <Text style={styles.tipBadgeText}>{i + 1}</Text>
+                </View>
+                <Text style={styles.tipBody}>
+                  {sanitizeUserFacingText(t)}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
       ) : null}
 
       {faq.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.eyebrow}>Questions</Text>
           <Text style={styles.h2}>Questions fréquentes</Text>
-          {faq.map((item, i) => (
-            <View key={i} style={styles.faqItem}>
-              <Text style={styles.faqQ}>{sanitizeUserFacingText(item.q)}</Text>
-              <Text style={styles.body}>
-                {sanitizeUserFacingText(item.a, { multiline: true })}
-              </Text>
-            </View>
-          ))}
+          <View style={styles.faqList}>
+            {faq.map((item, i) => {
+              const open = !!openFaq[i]
+              return (
+                <View
+                  key={i}
+                  style={[styles.faqCard, open && styles.faqCardOpen]}
+                >
+                  <Pressable
+                    onPress={() =>
+                      setOpenFaq((prev) => ({ ...prev, [i]: !prev[i] }))
+                    }
+                    style={styles.faqHeader}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: open }}
+                  >
+                    <Text style={styles.faqQ}>
+                      {sanitizeUserFacingText(item.q)}
+                    </Text>
+                    <View style={styles.faqPlus}>
+                      <Text style={styles.faqPlusText}>{open ? '×' : '+'}</Text>
+                    </View>
+                  </Pressable>
+                  {open ? (
+                    <Text style={styles.faqA}>
+                      {sanitizeUserFacingText(item.a, { multiline: true })}
+                    </Text>
+                  ) : null}
+                </View>
+              )
+            })}
+          </View>
         </View>
       ) : null}
     </View>
@@ -104,7 +136,7 @@ export function ItineraryEditorialSections({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 22 },
+  wrap: { gap: 28 },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   fact: {
     flexGrow: 1,
@@ -127,28 +159,25 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     color: colors.ink,
   },
-  section: { gap: 8 },
-  eyebrow: {
-    fontSize: 11,
-    fontFamily: fonts.bold,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    color: colors.muted,
-  },
+  section: { gap: 12 },
   h2: {
     fontSize: 18,
-    fontFamily: fonts.bold,
+    fontFamily: fonts.extrabold,
     color: colors.ink,
+    letterSpacing: -0.2,
   },
-  stayBar: {
-    borderLeftWidth: 2,
-    borderLeftColor: colors.primary,
-    paddingLeft: 14,
+  stayCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     gap: 4,
   },
   stayArea: {
     fontSize: 16,
-    fontFamily: fonts.bold,
+    fontFamily: fonts.extrabold,
     color: colors.ink,
   },
   stayVibe: {
@@ -157,29 +186,91 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   body: {
+    marginTop: 6,
     fontSize: 15,
     lineHeight: 22,
     fontFamily: fonts.regular,
     color: colors.inkSoft,
-    flex: 1,
   },
-  tipRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+  tipsList: { gap: 10 },
+  tipCard: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+    backgroundColor: '#FFF3EC',
+    borderRadius: radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  tipBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: colors.primary,
-    marginTop: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
   },
-  faqItem: {
-    paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.line,
-    gap: 6,
+  tipBadgeText: {
+    fontSize: 11,
+    fontFamily: fonts.extrabold,
+    color: colors.white,
+  },
+  tipBody: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 22,
+    fontFamily: fonts.regular,
+    color: colors.ink,
+  },
+  faqList: { gap: 10 },
+  faqCard: {
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    overflow: 'hidden',
+  },
+  faqCardOpen: {
+    borderColor: 'rgba(255, 107, 53, 0.35)',
+  },
+  faqHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   faqQ: {
+    flex: 1,
     fontSize: 15,
+    lineHeight: 21,
     fontFamily: fonts.bold,
     color: colors.ink,
+  },
+  faqPlus: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFF3EC',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  faqPlusText: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: colors.primary,
+    marginTop: -1,
+  },
+  faqA: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.line,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    lineHeight: 22,
+    fontFamily: fonts.regular,
+    color: colors.inkSoft,
   },
 })

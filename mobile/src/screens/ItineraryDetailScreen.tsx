@@ -17,12 +17,13 @@ import {
   citySlugDisplayNameFr,
   cityImageUrl,
   groupItemsByDay,
+  ITINERARY_DURATION_LABELS,
   itineraryDatedLabelFr,
-  itineraryInfoChips,
   itineraryOccasionPhaseLabel,
   momentLabelFr,
   travelMinutesFromMeta,
   type Itinerary,
+  type ItineraryDurationKind,
   type ItineraryItem,
 } from '@waypop/shared'
 import { getApi, getWebOrigin } from '../lib/client'
@@ -227,12 +228,18 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
     'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?auto=format&fit=crop&w=1920&q=90&fm=jpg'
   const cityLabel =
     citySlugDisplayNameFr(itin.city_slug) || itin.city_slug || ''
-  const chips = [cityLabel, ...itineraryInfoChips(itin)].filter(
-    Boolean,
-  ) as string[]
+  // Hero: ville + durée only — budget / idéal / rythme live in markers below.
+  const durationChip = itin.duration_kind
+    ? ITINERARY_DURATION_LABELS[
+        itin.duration_kind as ItineraryDurationKind
+      ] || String(itin.duration_kind)
+    : null
+  const chips = [cityLabel, durationChip].filter(Boolean) as string[]
   const phaseLabel = itineraryOccasionPhaseLabel(itin)
   const dateLabel = itineraryDatedLabelFr(itin)
-  const markers = buildItineraryMarkerTiles(itin)
+  const markers = buildItineraryMarkerTiles(itin).filter(
+    (m) => m.id !== 'duration',
+  )
   const items = (itin.itinerary_items || []) as ItineraryItem[]
   const days = groupItemsByDay(items)
   const shareUrl = `${getWebOrigin()}/parcours/${itin.slug || itin.id}`

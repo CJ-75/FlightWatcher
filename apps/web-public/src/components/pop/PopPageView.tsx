@@ -5,7 +5,6 @@ import {
   citySlugDisplayNameFr,
   idealLabelFr,
   sanitizeUserFacingText,
-  transportLabelFr,
   type PopIndexResult,
 } from '@waypop/shared'
 import type { PublicItinerary } from '@/lib/parcoursApi'
@@ -126,22 +125,15 @@ export function PopPageView({
   const faq = parseFaq(itin.faq)
 
   const launchHref = `/parcours/${encodeURIComponent(itin.slug || slug)}`
-  const transport = (itin.transport_modes as string[] | undefined) || []
-  const metaBits = [
-    durationLabel,
-    `${items.length} stops`,
-    ...transport.slice(0, 1).map((t) => transportLabelFr(t)),
-    idealOne,
-  ].filter(Boolean)
+  // Hero meta: ville + durée only (stops / idéal / budget live elsewhere).
+  const metaBits = [cityLabel, durationLabel].filter(Boolean)
 
   const dayCount = days.length || 1
   const h2Programme =
     dayCount === 1
       ? `Programme d’une journée à ${cityLabel}`
       : `Programme de ${dayCount} jours à ${cityLabel}`
-  const h2Stay = idealOne
-    ? `Où dormir à ${cityLabel} pour une ${idealOne.toLowerCase()}`
-    : `Où dormir à ${cityLabel}`
+  const h2Stay = `Où dormir à ${cityLabel}`
   const h2Faq = `Questions fréquentes sur un week-end à ${cityLabel}`
 
   const photoCheck = assertUniquePagePhotos([
@@ -247,7 +239,7 @@ export function PopPageView({
       <main className="bg-[#FFF9F5] pb-36 lg:pb-16">
         <div className="mx-auto grid max-w-pop gap-12 px-5 py-8 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-14 lg:py-14">
           {/* flex+gap (not space-y): lg:hidden PriceIsland must not push intro below sidebar top */}
-          <div className="flex min-w-0 flex-col gap-12">
+          <div className="flex min-w-0 flex-col gap-8 lg:gap-12">
             {showPrice ? (
               <div className="lg:hidden">
                 <Suspense
@@ -279,24 +271,29 @@ export function PopPageView({
             ) : null}
 
             {facts.length > 0 ? (
-              <dl className="flex flex-wrap gap-x-8 gap-y-5 pr-1 sm:flex-nowrap sm:justify-between sm:gap-x-6">
-                {facts.slice(0, 4).map((f) => (
-                  <div
-                    key={f.label}
-                    className="min-w-0 shrink-0 overflow-visible sm:max-w-[28%]"
-                  >
-                    <dt>
-                      <WpTag>{f.label}</WpTag>
-                    </dt>
-                    <dd className="mt-1.5 pr-1.5 text-sm font-bold text-ink">
-                      {f.value}
-                    </dd>
-                  </div>
-                ))}
+              <dl className="grid grid-cols-2 gap-3 lg:flex lg:flex-wrap lg:gap-x-8 lg:gap-y-5 lg:pr-1">
+                {facts.slice(0, 4).map((f) => {
+                  const heroDup = f.label === 'Durée' || f.label === 'Idéal'
+                  return (
+                    <div
+                      key={f.label}
+                      className={`min-w-0 rounded-2xl bg-white px-3.5 py-3 ring-1 ring-line lg:max-w-[28%] lg:shrink-0 lg:overflow-visible lg:rounded-none lg:bg-transparent lg:px-0 lg:py-0 lg:ring-0 ${
+                        heroDup ? 'hidden lg:block' : ''
+                      }`}
+                    >
+                      <dt>
+                        <WpTag>{f.label}</WpTag>
+                      </dt>
+                      <dd className="mt-1.5 pr-1.5 text-sm font-bold text-ink">
+                        {f.value}
+                      </dd>
+                    </div>
+                  )
+                })}
               </dl>
             ) : null}
 
-            <WpRule />
+            <WpRule className="hidden lg:block" />
 
             <DayProgramme
               days={days}
@@ -309,14 +306,18 @@ export function PopPageView({
             />
 
             {stay ? (
-              <section className="space-y-4">
-                <WpEyebrow>Hébergement</WpEyebrow>
-                <h2 className="text-2xl font-extrabold tracking-tight text-ink">
+              <section className="space-y-3 lg:space-y-4">
+                <div className="hidden lg:block">
+                  <WpEyebrow>Hébergement</WpEyebrow>
+                </div>
+                <h2 className="text-xl font-extrabold tracking-tight text-ink lg:text-2xl">
                   {h2Stay}
                 </h2>
-                <div className="border-l-2 border-primary-500/80 pl-5">
+                <div className="rounded-2xl bg-white px-4 py-3.5 ring-1 ring-line lg:rounded-none lg:bg-transparent lg:px-0 lg:py-0 lg:ring-0 lg:border-l-2 lg:border-primary-500/80 lg:pl-5">
                   {stay.area ? (
-                    <p className="text-lg font-extrabold text-ink">{stay.area}</p>
+                    <p className="text-base font-extrabold text-ink lg:text-lg">
+                      {stay.area}
+                    </p>
                   ) : null}
                   {stay.vibe ? (
                     <p className="mt-1 text-sm font-semibold text-primary-600">
@@ -324,7 +325,7 @@ export function PopPageView({
                     </p>
                   ) : null}
                   {stay.note ? (
-                    <p className="mt-3 text-[15px] leading-relaxed text-ink-soft whitespace-pre-line">
+                    <p className="mt-2 text-[15px] leading-relaxed text-ink-soft whitespace-pre-line lg:mt-3">
                       {sanitizeUserFacingText(stay.note, { multiline: true })}
                     </p>
                   ) : null}
@@ -333,21 +334,26 @@ export function PopPageView({
             ) : null}
 
             {tips.length > 0 ? (
-              <section className="space-y-4">
-                <WpEyebrow>Conseils</WpEyebrow>
-                <h2 className="text-2xl font-extrabold tracking-tight text-ink">
+              <section className="space-y-3 lg:space-y-4">
+                <div className="hidden lg:block">
+                  <WpEyebrow>Conseils</WpEyebrow>
+                </div>
+                <h2 className="text-xl font-extrabold tracking-tight text-ink lg:text-2xl">
                   Bon à savoir
                 </h2>
-                <ul className="space-y-3">
+                {/* Mobile: soft stacked cards · Desktop: classic bullets */}
+                <ul className="space-y-2.5 lg:space-y-3">
                   {tips.map((t, i) => (
                     <li
                       key={i}
-                      className="flex gap-3 text-[15px] leading-relaxed text-ink-soft"
+                      className="flex gap-3 rounded-2xl bg-[#FFF3EC] px-3.5 py-3.5 text-[15px] leading-relaxed text-ink lg:rounded-none lg:bg-transparent lg:px-0 lg:py-0 lg:text-ink-soft"
                     >
                       <span
-                        className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500"
+                        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-500 text-[11px] font-extrabold text-white lg:mt-2 lg:h-1.5 lg:w-1.5 lg:bg-primary-500 lg:text-[0px]"
                         aria-hidden
-                      />
+                      >
+                        {i + 1}
+                      </span>
                       <span>{sanitizeUserFacingText(t)}</span>
                     </li>
                   ))}
@@ -356,26 +362,34 @@ export function PopPageView({
             ) : null}
 
             {faq.length > 0 ? (
-              <section className="space-y-4">
-                <WpEyebrow>Questions</WpEyebrow>
-                <h2 className="text-2xl font-extrabold tracking-tight text-ink">
-                  {h2Faq}
+              <section className="space-y-3 lg:space-y-4">
+                <div className="hidden lg:block">
+                  <WpEyebrow>Questions</WpEyebrow>
+                </div>
+                <h2 className="text-xl font-extrabold tracking-tight text-ink lg:text-2xl">
+                  <span className="lg:hidden">Questions fréquentes</span>
+                  <span className="hidden lg:inline">{h2Faq}</span>
                 </h2>
-                <div className="divide-y divide-line border-y border-line">
+                <div className="space-y-2.5 lg:space-y-0 lg:divide-y lg:divide-line lg:border-y lg:border-line">
                   {faq.map((item, i) => (
-                    <details key={i} className="group py-4">
-                      <summary className="cursor-pointer list-none font-bold text-ink marker:content-none [&::-webkit-details-marker]:hidden">
-                        <span className="flex items-center justify-between gap-4">
-                          {sanitizeUserFacingText(item.q)}
+                    <details
+                      key={i}
+                      className="group overflow-hidden rounded-2xl bg-white ring-1 ring-line open:ring-primary-500/30 lg:rounded-none lg:bg-transparent lg:ring-0 lg:open:ring-0 lg:py-4"
+                    >
+                      <summary className="cursor-pointer list-none px-4 py-3.5 font-bold text-ink marker:content-none lg:px-0 lg:py-0 [&::-webkit-details-marker]:hidden">
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="text-[15px] leading-snug">
+                            {sanitizeUserFacingText(item.q)}
+                          </span>
                           <span
-                            className="text-muted transition-transform group-open:rotate-45"
+                            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FFF3EC] text-primary-600 transition-transform group-open:rotate-45 lg:h-auto lg:w-auto lg:bg-transparent lg:text-muted"
                             aria-hidden
                           >
                             +
                           </span>
                         </span>
                       </summary>
-                      <p className="mt-3 text-[15px] leading-relaxed text-ink-soft whitespace-pre-line">
+                      <p className="border-t border-line/80 px-4 py-3.5 text-[15px] leading-relaxed text-ink-soft whitespace-pre-line lg:mt-3 lg:border-0 lg:px-0 lg:py-0">
                         {sanitizeUserFacingText(item.a, { multiline: true })}
                       </p>
                     </details>
@@ -384,9 +398,11 @@ export function PopPageView({
               </section>
             ) : null}
 
-            <section className="space-y-5">
-              <WpEyebrow>Continuer</WpEyebrow>
-              <h2 className="text-2xl font-extrabold tracking-tight text-ink">
+            <section className="space-y-4 lg:space-y-5">
+              <div className="hidden lg:block">
+                <WpEyebrow>Continuer</WpEyebrow>
+              </div>
+              <h2 className="text-xl font-extrabold tracking-tight text-ink lg:text-2xl">
                 D’autres Pops à {cityLabel}
               </h2>
               {related.length > 0 ? (

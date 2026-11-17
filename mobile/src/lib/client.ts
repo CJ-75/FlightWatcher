@@ -254,20 +254,6 @@ async function openOAuthSession(
   })
 }
 
-export const auth = createSupabaseAuth({
-  apiBaseUrl: apiBase,
-  getRedirectTo,
-  openAuthSession: async (url, redirect) => openOAuthSession(url, redirect),
-  authOptions: {
-    detectSessionInUrl: false,
-    persistSession: true,
-    autoRefreshToken: true,
-    // PKCE verifier stays on device; Cloudflare callback 302s ?code= back to exp://
-    flowType: 'pkce',
-    storage: AsyncStorage,
-  },
-})
-
 /** iOS/RN default fetch ~60s — XHR timeout lets inspire/scan run up to 5 min. */
 function mobileFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url =
@@ -339,6 +325,24 @@ function mobileFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Resp
     xhr.send(typeof init?.body === 'string' ? init.body : init?.body ?? null)
   })
 }
+
+export const auth = createSupabaseAuth({
+  apiBaseUrl: apiBase,
+  // Bundled anon key so login works even if /api/config blips on LAN.
+  supabaseUrl: env('EXPO_PUBLIC_SUPABASE_URL'),
+  supabaseAnonKey: env('EXPO_PUBLIC_SUPABASE_ANON_KEY'),
+  fetchImpl: mobileFetch as typeof fetch,
+  getRedirectTo,
+  openAuthSession: async (url, redirect) => openOAuthSession(url, redirect),
+  authOptions: {
+    detectSessionInUrl: false,
+    persistSession: true,
+    autoRefreshToken: true,
+    // PKCE verifier stays on device; Cloudflare callback 302s ?code= back to exp://
+    flowType: 'pkce',
+    storage: AsyncStorage,
+  },
+})
 
 let api: ApiClient | null = null
 

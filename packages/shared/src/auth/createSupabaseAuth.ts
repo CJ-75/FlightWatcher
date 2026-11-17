@@ -3,6 +3,12 @@ import { createClient, type SupabaseClient, type User, type Session } from '@sup
 export interface SupabaseAuthOptions {
   /** Fetch /api/config from this base (absolute or empty for same-origin). */
   apiBaseUrl?: string
+  /**
+   * Optional bundled credentials (Expo: EXPO_PUBLIC_SUPABASE_*).
+   * Used when /api/config is unreachable (phone ↔ LAN blip) so login still works.
+   */
+  supabaseUrl?: string
+  supabaseAnonKey?: string
   /** Override redirect URL for OAuth (web origin or mobile deep link). */
   redirectTo?: string
   /**
@@ -206,34 +212,70 @@ async function signInWithOAuthProvider(
   }
 }
 
+function bundledSupabaseCreds(options: SupabaseAuthOptions): {
+  url?: string
+  key?: string
+} {
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env
+  const url =
+    options.supabaseUrl?.trim() ||
+    proc?.EXPO_PUBLIC_SUPABASE_URL?.trim() ||
+    proc?.VITE_SUPABASE_URL?.trim() ||
+    undefined
+  const key =
+    options.supabaseAnonKey?.trim() ||
+    proc?.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    proc?.VITE_SUPABASE_ANON_KEY?.trim() ||
+    undefined
+  return { url, key }
+}
+
 export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseAuth {
   const apiBase = options.apiBaseUrl ?? ''
   const fetchFn = options.fetchImpl ?? fetch.bind(globalThis)
+  const bundled = bundledSupabaseCreds(options)
 
   let client: SupabaseClient | null = null
   let configPromise: Promise<void> | null = null
   let loaded = false
-  let supabaseUrl: string | undefined
-  let supabaseAnonKey: string | undefined
+  let supabaseUrl: string | undefined = bundled.url
+  let supabaseAnonKey: string | undefined = bundled.key
+  if (supabaseUrl && supabaseAnonKey) loaded = true
 
   async function loadConfig(): Promise<void> {
-    if (loaded) return
+    if (loaded && supabaseUrl && supabaseAnonKey) return
     try {
       const res = await fetchFn(joinUrl(apiBase, '/api/config'))
-      if (!res.ok) return
+      if (!res.ok) {
+        console.warn('[auth] /api/config HTTP', res.status, apiBase || '(same-origin)')
+        return
+      }
       const config = await res.json()
       if (config.available && config.supabase_url && config.supabase_anon_key) {
         supabaseUrl = config.supabase_url
         supabaseAnonKey = config.supabase_anon_key
         loaded = true
+      } else {
+        console.warn('[auth] /api/config missing supabase credentials', {
+          available: config?.available,
+          hasUrl: !!config?.supabase_url,
+          hasKey: !!config?.supabase_anon_key,
+        })
       }
-    } catch {
-      // config unavailable
+    } catch (e) {
+      console.warn('[auth] /api/config failed', apiBase || '(same-origin)', e)
     }
   }
 
   function ensureConfig(): Promise<void> {
-    if (!configPromise) configPromise = loadConfig()
+    if (loaded && supabaseUrl && supabaseAnonKey) return Promise.resolve()
+    // Retry after a failed fetch — do not permanently cache a miss.
+    if (!configPromise) {
+      configPromise = loadConfig().finally(() => {
+        if (!loaded) configPromise = null
+      })
+    }
     return configPromise
   }
 
@@ -252,6 +294,14 @@ export function createSupabaseAuth(options: SupabaseAuthOptions = {}): SupabaseA
   async function getClient(): Promise<SupabaseClient | null> {
     if (client) return client
     await ensureConfig()
+    if (!supabaseUrl || !supabaseAnonKey) {
+      const again = bundledSupabaseCreds(options)
+      if (again.url && again.key) {
+        supabaseUrl = again.url
+        supabaseAnonKey = again.key
+        loaded = true
+      }
+    }
     if (!client) client = initClient()
     return client
   }
