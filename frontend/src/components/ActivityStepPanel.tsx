@@ -9,8 +9,14 @@ import {
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_BROWSE_CATALOG_FR,
   ACTIVITY_DELETE_LABEL_FR,
+  ACTIVITY_RESTORE_EMPTY_FR,
+  ACTIVITY_RESTORE_POP_FR,
+  ACTIVITY_SKIP_CONFIRM_FR,
+  ACTIVITY_SKIP_HINT_FR,
   ACTIVITY_SKIP_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
+  resolveSourceItineraryId,
+  tripItemsHavePopSource,
   AVAILABILITY_STATE_LABEL_FR,
   activitiesCityPath,
   canonicalViatorProductUrl,
@@ -269,6 +275,10 @@ export function ActivityStepPanel(props: {
   draftToken?: string | null
   plannedTripId?: string | null
   citySlug?: string | null
+  /** Source Pop itinerary — enables « Remettre le Pop » (planner trip_items only). */
+  sourceItineraryId?: string | null
+  /** Soft Pop flag when meta.source_itinerary_id may still be missing. */
+  fromPop?: boolean
   enabled?: boolean
   surface?: string
   /** Sync parcours pipeline when ideas are added / removed. */
@@ -291,6 +301,8 @@ export function ActivityStepPanel(props: {
   const {
     draftToken,
     plannedTripId,
+    sourceItineraryId,
+    fromPop = false,
     enabled = true,
     surface = 'my_trip',
     onItemsChange,
@@ -318,6 +330,10 @@ export function ActivityStepPanel(props: {
   const [signingIn, setSigningIn] = useState(false)
   const [hasAccount, setHasAccount] = useState(false)
   const [resuming, setResuming] = useState(false)
+  const [restoringPop, setRestoringPop] = useState(false)
+  const [resolvedSourceId, setResolvedSourceId] = useState<string | null>(
+    () => String(sourceItineraryId || '').trim() || null,
+  )
   const authRetryRef = useRef(false)
   /** Avoid pushing [] to parcours before the first successful list. */
   const parcoursReadyRef = useRef(false)
@@ -552,6 +568,12 @@ export function ActivityStepPanel(props: {
   }
 
   const skipAll = async () => {
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(ACTIVITY_SKIP_CONFIRM_FR)
+    ) {
+      return
+    }
     if (!items.length) {
       // Create a skipped placeholder via patch on a synthetic — use add with skip status if API allows
       track('skip')
@@ -577,6 +599,78 @@ export function ActivityStepPanel(props: {
       if (it.status !== 'skipped') await patch(it.id, { status: 'skipped' })
     }
     track('skip')
+  }
+
+  useEffect(() => {
+    const fromProp = String(sourceItineraryId || '').trim()
+    if (fromProp) {
+      setResolvedSourceId(fromProp)
+      return
+    }
+    const fromItems = resolveSourceItineraryId(null, items)
+    if (fromItems) {
+      setResolvedSourceId(fromItems)
+      return
+    }
+    const planned = String(plannedTripId || '').trim()
+    const needsResolve =
+      fromPop || tripItemsHavePopSource(items)
+    if (!planned || !needsResolve) return
+    let cancelled = false
+    void getApiClient()
+      .getPlannedTrip(planned)
+      .then((trip) => {
+        if (cancelled) return
+        const id = resolveSourceItineraryId(
+          (trip.meta || {}) as { source_itinerary_id?: string | null },
+          null,
+        )
+        if (id) setResolvedSourceId(id)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [sourceItineraryId, fromPop, plannedTripId, items])
+
+  const restorePopActivities = async () => {
+    let itinId =
+      String(resolvedSourceId || sourceItineraryId || '').trim() ||
+      resolveSourceItineraryId(null, items) ||
+      ''
+    if (!itinId && owner.planned_trip_id) {
+      try {
+        const trip = await getApiClient().getPlannedTrip(owner.planned_trip_id)
+        itinId =
+          resolveSourceItineraryId(
+            (trip.meta || {}) as { source_itinerary_id?: string | null },
+            null,
+          ) || ''
+        if (itinId) setResolvedSourceId(itinId)
+      } catch {
+        // fall through
+      }
+    }
+    if (!itinId || (!owner.planned_trip_id && !owner.draft_token)) {
+      setError('Pop source introuvable — recharge le séjour.')
+      return
+    }
+    setRestoringPop(true)
+    setError(null)
+    try {
+      await getApiClient().applyItinerary(itinId, {
+        planned_trip_id: owner.planned_trip_id || undefined,
+        draft_token: owner.draft_token || undefined,
+      })
+      track('restore_pop', { itinerary_id: itinId })
+      invalidateTripItemsCache(owner)
+      backfillDoneRef.current = ''
+      await load({ force: true })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Impossible de remettre le Pop')
+    } finally {
+      setRestoringPop(false)
+    }
   }
 
   const onBook = (it: ItemRow) => {
@@ -631,6 +725,11 @@ export function ActivityStepPanel(props: {
     draftToken: draftToken || undefined,
     plannedTripId: plannedTripId || undefined,
   })
+  const canRestorePop =
+    Boolean(String(resolvedSourceId || sourceItineraryId || '').trim()) ||
+    fromPop ||
+    tripItemsHavePopSource(items)
+  const activeItems = items.filter((it) => it.status !== 'skipped')
 
   if (needsAuth && !loading) {
     return (
@@ -712,11 +811,27 @@ export function ActivityStepPanel(props: {
         <button
           type="button"
           onClick={() => void skipAll()}
+          title={ACTIVITY_SKIP_HINT_FR}
           className="rounded-lg border border-slate-200 text-xs font-semibold px-3 py-2 min-h-[36px] text-slate-600"
         >
           {ACTIVITY_SKIP_LABEL_FR}
         </button>
+        {canRestorePop ? (
+          <button
+            type="button"
+            disabled={restoringPop}
+            onClick={() => void restorePopActivities()}
+            className="rounded-lg border border-orange-200 bg-[#FFF7F2] text-xs font-semibold px-3 py-2 min-h-[36px] text-[#E85A28] disabled:opacity-60"
+          >
+            {restoringPop ? '…' : ACTIVITY_RESTORE_POP_FR}
+          </button>
+        ) : null}
       </div>
+      ) : null}
+      {layout !== 'booking_cards' ? (
+        <p className="text-[11px] leading-snug text-slate-500 -mt-1">
+          {ACTIVITY_SKIP_HINT_FR}
+        </p>
       ) : null}
 
       {loading ? <p className="text-sm text-slate-500">Chargement…</p> : null}
@@ -828,7 +943,7 @@ export function ActivityStepPanel(props: {
         </ul>
       ) : (
       <ul className="space-y-2">
-        {items.map((it) => (
+        {activeItems.map((it) => (
           <li
             key={it.id}
             draggable={!it.inherited}
@@ -929,20 +1044,33 @@ export function ActivityStepPanel(props: {
         ))}
       </ul>
       )}
-      {!items.length && !loading ? (
-        <div className="flex flex-1 flex-col justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-3.5 py-3 space-y-1">
+      {!activeItems.length && !loading ? (
+        <div className="flex flex-1 flex-col justify-center rounded-xl border border-dashed border-orange-100 bg-[#FFF8F3] px-3.5 py-3 space-y-2">
           <p className="text-sm font-semibold text-slate-800">
             Aucune activité pour l’instant
           </p>
           <p className="text-xs text-slate-500 leading-snug">
-            Parcours le catalogue, ou ajoute une suggestion rapide.
+            {canRestorePop
+              ? ACTIVITY_RESTORE_EMPTY_FR
+              : 'Parcours le catalogue, ou ajoute une suggestion rapide.'}
           </p>
-          <Link
-            to={catalogHref}
-            className="inline-flex text-xs font-bold text-primary-700 hover:underline"
-          >
-            {ACTIVITY_BROWSE_CATALOG_FR} →
-          </Link>
+          {canRestorePop ? (
+            <button
+              type="button"
+              disabled={restoringPop}
+              onClick={() => void restorePopActivities()}
+              className="inline-flex w-fit rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs font-bold text-[#E85A28] disabled:opacity-60"
+            >
+              {restoringPop ? '…' : ACTIVITY_RESTORE_POP_FR}
+            </button>
+          ) : (
+            <Link
+              to={catalogHref}
+              className="inline-flex text-xs font-bold text-primary-700 hover:underline"
+            >
+              {ACTIVITY_BROWSE_CATALOG_FR} →
+            </Link>
+          )}
         </div>
       ) : null}
 

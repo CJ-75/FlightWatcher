@@ -3045,26 +3045,54 @@ async def get_trip(trip_id: str, request: Request):
     props.sort(key=_prop_sort_key)
     trip["proposals"] = props
     trip["members"] = members.data or []
-    # Soft Pop detection when meta.source_itinerary_id was not persisted
-    # (e.g. planned_trips.meta migration not applied yet).
+    # Soft Pop detection + recover source_itinerary_id when meta was not
+    # persisted (migration missing / older Pop→Planner creates).
     meta = trip.get("meta") if isinstance(trip.get("meta"), dict) else {}
-    if not meta.get("source_itinerary_id") and not meta.get("from_pop"):
+    if not meta.get("source_itinerary_id"):
         try:
             item_rows = (
                 supabase.table("trip_items")
                 .select("meta")
                 .eq("planned_trip_id", trip_id)
-                .limit(20)
+                .limit(40)
                 .execute()
             ).data or []
-            if any(
-                isinstance(r.get("meta"), dict)
-                and r["meta"].get("from_itinerary_item_id")
-                for r in item_rows
-            ):
-                trip["meta"] = {**meta, "from_pop": True}
+            src_item_ids: list[str] = []
+            for row in item_rows:
+                im = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+                fid = str(im.get("from_itinerary_item_id") or "").strip()
+                if fid:
+                    src_item_ids.append(fid)
+            if src_item_ids:
+                next_meta = {**meta, "from_pop": True}
+                ii_rows = (
+                    supabase.table("itinerary_items")
+                    .select("itinerary_id")
+                    .in_("id", src_item_ids[:10])
+                    .limit(1)
+                    .execute()
+                ).data or []
+                itin_id = (
+                    str(ii_rows[0].get("itinerary_id") or "").strip()
+                    if ii_rows
+                    else ""
+                )
+                if itin_id:
+                    next_meta["source_itinerary_id"] = itin_id
+                    try:
+                        supabase.table("planned_trips").update(
+                            {
+                                "meta": next_meta,
+                                "updated_at": datetime.utcnow().isoformat(),
+                            }
+                        ).eq("id", trip_id).execute()
+                    except Exception:
+                        pass
+                trip["meta"] = next_meta
         except Exception:
             pass
+    elif not meta.get("from_pop"):
+        trip["meta"] = {**meta, "from_pop": True}
     return trip
 
 

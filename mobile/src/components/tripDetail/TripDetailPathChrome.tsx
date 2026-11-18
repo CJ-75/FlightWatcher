@@ -34,6 +34,8 @@ type Props = {
   backAccessibilityLabel?: string
   onShare?: () => void
   onRename?: () => void
+  /** Pencil next to the dates chip (first meta chip). */
+  onEditDates?: () => void
   titleEditing?: boolean
   titleDraft?: string
   onTitleDraftChange?: (value: string) => void
@@ -87,6 +89,7 @@ export function TripDetailPathChrome({
   backAccessibilityLabel = 'Retour',
   onShare,
   onRename,
+  onEditDates,
   titleEditing,
   titleDraft,
   onTitleDraftChange,
@@ -195,14 +198,36 @@ export function TripDetailPathChrome({
           ) : null}
         </View>
       )}
-      {chips.length > 0 ? (
+      {chips.length > 0 || onEditDates ? (
         <View style={styles.chipRow}>
           {chips.map((c, i) => (
             <View key={`${c}-${i}`} style={styles.chipItem}>
               {i > 0 ? <Text style={styles.chipDot}> · </Text> : null}
               <Text style={styles.chipText}>{c}</Text>
+              {i === 0 && onEditDates ? (
+                <Pressable
+                  onPress={onEditDates}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Modifier les dates"
+                  style={styles.dateEditBtn}
+                >
+                  <PencilIcon size={13} color="#fff" />
+                </Pressable>
+              ) : null}
             </View>
           ))}
+          {!chips.length && onEditDates ? (
+            <Pressable
+              onPress={onEditDates}
+              accessibilityRole="button"
+              accessibilityLabel="Choisir les dates"
+              style={styles.dateEditChip}
+            >
+              <Text style={styles.chipText}>Dates</Text>
+              <PencilIcon size={12} color="#fff" />
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -494,8 +519,29 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 13,
   },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
-  chipItem: { flexDirection: 'row', alignItems: 'center' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 },
+  chipItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dateEditBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  dateEditChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
   chipDot: {
     color: 'rgba(255,255,255,0.35)',
     fontFamily: fonts.medium,

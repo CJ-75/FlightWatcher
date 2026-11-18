@@ -7,6 +7,7 @@ import {
   Pressable,
   Modal,
   ActivityIndicator,
+  Alert,
   AppState,
   type AppStateStatus,
   Platform,
@@ -19,7 +20,14 @@ import {
   ACTIVITY_BOOK_VIATOR_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_DELETE_LABEL_FR,
+  ACTIVITY_RESTORE_EMPTY_FR,
+  ACTIVITY_RESTORE_POP_FR,
+  ACTIVITY_SKIP_CONFIRM_FR,
+  ACTIVITY_SKIP_HINT_FR,
+  ACTIVITY_SKIP_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
+  resolveSourceItineraryId,
+  tripItemsHavePopSource,
   activityDestinationLabelFr,
   canonicalViatorProductUrl,
   formatActivityPrice,
@@ -227,6 +235,9 @@ export function ActivityStepPanel(props: {
   draftToken?: string | null
   plannedTripId?: string | null
   citySlug?: string | null
+  /** Source Pop itinerary — enables « Remettre le Pop » in planner. */
+  sourceItineraryId?: string | null
+  fromPop?: boolean
   enabled?: boolean
   surface?: string
   onItemsChange?: (
@@ -239,6 +250,7 @@ export function ActivityStepPanel(props: {
       moment?: string | null
       notes?: string | null
       status?: string | null
+      meta?: Record<string, unknown> | null
     }[],
   ) => void
   layout?: 'default' | 'booking_cards'
@@ -246,6 +258,8 @@ export function ActivityStepPanel(props: {
   const {
     draftToken,
     plannedTripId,
+    sourceItineraryId,
+    fromPop = false,
     enabled = true,
     surface = 'my_trip',
     onItemsChange,
@@ -272,6 +286,10 @@ export function ActivityStepPanel(props: {
   const [detailItem, setDetailItem] = useState<ItemRow | null>(null)
   const [signingIn, setSigningIn] = useState(false)
   const [resuming, setResuming] = useState(false)
+  const [restoringPop, setRestoringPop] = useState(false)
+  const [resolvedSourceId, setResolvedSourceId] = useState<string | null>(
+    () => String(sourceItineraryId || '').trim() || null,
+  )
   const pendingRef = useRef<ItemRow | null>(null)
   const authRetryRef = useRef(false)
   const parcoursReadyRef = useRef(false)
@@ -297,6 +315,7 @@ export function ActivityStepPanel(props: {
         moment: i.moment ?? null,
         notes: i.notes ?? null,
         status: i.status ?? null,
+        meta: (i.meta || null) as Record<string, unknown> | null,
       })),
     )
   }, [])
@@ -567,6 +586,115 @@ export function ActivityStepPanel(props: {
     await load()
   }
 
+  const skipAll = () => {
+    Alert.alert(ACTIVITY_SKIP_LABEL_FR, ACTIVITY_SKIP_CONFIRM_FR, [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Continuer',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            setError(null)
+            try {
+              if (!items.length) {
+                await getApi().addTripItem({
+                  product_code: `skip-${Date.now()}`,
+                  title: ACTIVITY_SKIP_LABEL_FR,
+                  ...owner,
+                  platform,
+                  surface,
+                })
+                const res = await getApi().listTripItems(owner)
+                const last = ((res.items || []) as ItemRow[]).slice(-1)[0]
+                if (last?.id) await patch(last.id, { status: 'skipped' })
+              } else {
+                for (const it of items) {
+                  if (it.status !== 'skipped') {
+                    await patch(it.id, { status: 'skipped' })
+                  }
+                }
+              }
+              track('skip')
+            } catch (e) {
+              setError(e instanceof Error ? e.message : 'Erreur')
+            }
+          })()
+        },
+      },
+    ])
+  }
+
+  useEffect(() => {
+    const fromProp = String(sourceItineraryId || '').trim()
+    if (fromProp) {
+      setResolvedSourceId(fromProp)
+      return
+    }
+    const fromItems = resolveSourceItineraryId(null, items)
+    if (fromItems) {
+      setResolvedSourceId(fromItems)
+      return
+    }
+    const planned = String(plannedTripId || '').trim()
+    const needsResolve = fromPop || tripItemsHavePopSource(items)
+    if (!planned || !needsResolve) return
+    let cancelled = false
+    void getApi()
+      .getPlannedTrip(planned)
+      .then((trip) => {
+        if (cancelled) return
+        const id = resolveSourceItineraryId(
+          (trip.meta || {}) as { source_itinerary_id?: string | null },
+          null,
+        )
+        if (id) setResolvedSourceId(id)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [sourceItineraryId, fromPop, plannedTripId, items])
+
+  const restorePopActivities = async () => {
+    let itinId =
+      String(resolvedSourceId || sourceItineraryId || '').trim() ||
+      resolveSourceItineraryId(null, items) ||
+      ''
+    if (!itinId && owner.planned_trip_id) {
+      try {
+        const trip = await getApi().getPlannedTrip(owner.planned_trip_id)
+        itinId =
+          resolveSourceItineraryId(
+            (trip.meta || {}) as { source_itinerary_id?: string | null },
+            null,
+          ) || ''
+        if (itinId) setResolvedSourceId(itinId)
+      } catch {
+        // fall through
+      }
+    }
+    if (!itinId || (!owner.planned_trip_id && !owner.draft_token)) {
+      setError('Pop source introuvable — recharge le séjour.')
+      return
+    }
+    setRestoringPop(true)
+    setError(null)
+    try {
+      await getApi().applyItinerary(itinId, {
+        planned_trip_id: owner.planned_trip_id || undefined,
+        draft_token: owner.draft_token || undefined,
+      })
+      track('restore_pop', { itinerary_id: itinId })
+      invalidateTripItemsCache(owner)
+      backfillDoneRef.current = ''
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Impossible de remettre le Pop')
+    } finally {
+      setRestoringPop(false)
+    }
+  }
+
   const openDetail = (it: ItemRow) => {
     const card = cardFromItem(it)
     if (!card) return
@@ -656,42 +784,80 @@ export function ActivityStepPanel(props: {
   }
 
   const cityLabel = activityDestinationLabelFr(city)
+  const canRestorePop =
+    Boolean(String(resolvedSourceId || sourceItineraryId || '').trim()) ||
+    fromPop ||
+    tripItemsHavePopSource(items)
+  const activeItems = items.filter((it) => it.status !== 'skipped')
 
   return (
     <View style={[styles.wrap, layout === 'booking_cards' && styles.wrapTight]}>
       {layout !== 'booking_cards' ? (
-      <Pressable
-        onPress={openActivitiesCatalog}
-        style={({ pressed }) => [
-          styles.catalogBtn,
-          shadow.soft,
-          pressed && {
-            backgroundColor: colors.primaryMuted,
-            transform: [{ scale: 0.985 }],
-          },
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel={`${ACTIVITY_ADD_LABEL_FR} · ${cityLabel}`}
-      >
-        <View style={styles.catalogIcon}>
-          <Text style={styles.catalogIconPlus}>+</Text>
-        </View>
-        <View style={styles.catalogCopy}>
-          <Text style={styles.catalogTitle}>{ACTIVITY_ADD_LABEL_FR}</Text>
-          <View style={styles.catalogMetaRow}>
-            <View style={styles.catalogCityPill}>
-              <Text style={styles.catalogCityText} numberOfLines={1}>
-                {cityLabel}
-              </Text>
+        <>
+          <Pressable
+            onPress={openActivitiesCatalog}
+            style={({ pressed }) => [
+              styles.catalogBtn,
+              shadow.soft,
+              pressed && {
+                backgroundColor: colors.primaryMuted,
+                transform: [{ scale: 0.985 }],
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`${ACTIVITY_ADD_LABEL_FR} · ${cityLabel}`}
+          >
+            <View style={styles.catalogIcon}>
+              <Text style={styles.catalogIconPlus}>+</Text>
             </View>
-            <Text style={styles.catalogMetaDot}>·</Text>
-            <Text style={styles.catalogMeta}>Catalogue</Text>
+            <View style={styles.catalogCopy}>
+              <Text style={styles.catalogTitle}>{ACTIVITY_ADD_LABEL_FR}</Text>
+              <View style={styles.catalogMetaRow}>
+                <View style={styles.catalogCityPill}>
+                  <Text style={styles.catalogCityText} numberOfLines={1}>
+                    {cityLabel}
+                  </Text>
+                </View>
+                <Text style={styles.catalogMetaDot}>·</Text>
+                <Text style={styles.catalogMeta}>Catalogue</Text>
+              </View>
+            </View>
+            <View style={styles.catalogChevron}>
+              <Text style={styles.catalogChevronText}>›</Text>
+            </View>
+          </Pressable>
+          <View style={styles.actionRow}>
+            <Pressable
+              onPress={skipAll}
+              style={({ pressed }) => [
+                styles.skipBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={ACTIVITY_SKIP_LABEL_FR}
+            >
+              <Text style={styles.skipBtnText}>{ACTIVITY_SKIP_LABEL_FR}</Text>
+            </Pressable>
+            {canRestorePop ? (
+              <Pressable
+                onPress={() => void restorePopActivities()}
+                disabled={restoringPop}
+                style={({ pressed }) => [
+                  styles.restoreBtn,
+                  pressed && { opacity: 0.85 },
+                  restoringPop && { opacity: 0.6 },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={ACTIVITY_RESTORE_POP_FR}
+              >
+                <Text style={styles.restoreBtnText}>
+                  {restoringPop ? '…' : ACTIVITY_RESTORE_POP_FR}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
-        </View>
-        <View style={styles.catalogChevron}>
-          <Text style={styles.catalogChevronText}>›</Text>
-        </View>
-      </Pressable>
+          <Text style={styles.skipHint}>{ACTIVITY_SKIP_HINT_FR}</Text>
+        </>
       ) : null}
 
       {loading ? (
@@ -699,6 +865,33 @@ export function ActivityStepPanel(props: {
       ) : null}
       {error ? (
         <Text style={styles.err}>{tripItemsErrorLabelFr(error)}</Text>
+      ) : null}
+
+      {!activeItems.length && !loading ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Aucune activité pour l’instant</Text>
+          <Text style={styles.emptyBody}>
+            {canRestorePop
+              ? ACTIVITY_RESTORE_EMPTY_FR
+              : 'Parcours le catalogue pour en ajouter.'}
+          </Text>
+          {canRestorePop ? (
+            <Pressable
+              onPress={() => void restorePopActivities()}
+              disabled={restoringPop}
+              style={({ pressed }) => [
+                styles.restoreBtn,
+                { alignSelf: 'flex-start', marginTop: 4 },
+                pressed && { opacity: 0.85 },
+                restoringPop && { opacity: 0.6 },
+              ]}
+            >
+              <Text style={styles.restoreBtnText}>
+                {restoringPop ? '…' : ACTIVITY_RESTORE_POP_FR}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
 
       {items.map((it) => {
@@ -909,6 +1102,68 @@ export function ActivityStepPanel(props: {
 const styles = StyleSheet.create({
   wrap: { gap: spacing.md },
   wrapTight: { gap: 8 },
+  actionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  skipBtn: {
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.white,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  skipBtnText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.inkSoft,
+  },
+  restoreBtn: {
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  restoreBtnText: {
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.primaryDeep,
+  },
+  skipHint: {
+    fontFamily: fonts.medium,
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.muted,
+    marginTop: -4,
+  },
+  emptyCard: {
+    gap: 6,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  emptyTitle: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: colors.ink,
+  },
+  emptyBody: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.muted,
+  },
   catalogBtn: {
     flexDirection: 'row',
     alignItems: 'center',

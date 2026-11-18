@@ -33,6 +33,8 @@ type Props = {
   onBack: () => void
   onShare?: () => void
   onRename?: () => void
+  /** Pencil next to the dates chip (first meta chip). */
+  onEditDates?: () => void
   titleEditing?: boolean
   titleDraft?: string
   onTitleDraftChange?: (value: string) => void
@@ -84,6 +86,7 @@ export function TripDetailPathChrome({
   onBack: _onBack,
   onShare,
   onRename,
+  onEditDates,
   titleEditing,
   titleDraft,
   onTitleDraftChange,
@@ -195,18 +198,41 @@ export function TripDetailPathChrome({
           ) : null}
         </div>
       )}
-      {chips.length > 0 ? (
+      {chips.length > 0 || onEditDates ? (
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-medium text-white/85 lg:text-sm">
           {chips.map((c, i) => (
-            <span key={`${c}-${i}`} className="inline-flex items-center gap-2">
+            <span key={`${c}-${i}`} className="inline-flex items-center gap-1.5">
               {i > 0 ? (
                 <span className="text-white/40" aria-hidden>
                   ·
                 </span>
               ) : null}
               <span>{c}</span>
+              {i === 0 && onEditDates ? (
+                <button
+                  type="button"
+                  onClick={onEditDates}
+                  aria-label="Modifier les dates"
+                  title="Modifier les dates"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/25 text-white ring-1 ring-white/35 backdrop-blur-xl hover:bg-white/35"
+                >
+                  <PencilIcon className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
             </span>
           ))}
+          {!chips.length && onEditDates ? (
+            <button
+              type="button"
+              onClick={onEditDates}
+              aria-label="Choisir les dates"
+              title="Choisir les dates"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-2.5 py-1 text-white ring-1 ring-white/30 backdrop-blur-xl hover:bg-white/30"
+            >
+              <span>Dates</span>
+              <PencilIcon className="h-3 w-3" />
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

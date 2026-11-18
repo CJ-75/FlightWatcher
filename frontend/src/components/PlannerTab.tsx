@@ -18,7 +18,10 @@ import {
   openHotelInvoicePdf,
 } from '../utils/hotelInvoice'
 import { getAppConfig } from '../utils/configCache'
-import { listTripItemsCached } from '../utils/tripItemsCache'
+import {
+  invalidateTripItemsCache,
+  listTripItemsCached,
+} from '../utils/tripItemsCache'
 import {
   invalidateTravelWorkspacesCache,
   listTravelWorkspacesCached,
@@ -78,6 +81,8 @@ import {
   PLANNER_HUB_TABS,
   PLANNER_HUB_EMPTY_FR,
   plannedTripIsFromPop,
+  resolveSourceItineraryId,
+  ACTIVITY_RESTORE_POP_FR,
   tripItemsToItineraryItems,
   arrivalCodesForCitySlug,
   PLANNER_PHASE_LABEL_FR,
@@ -1510,6 +1515,10 @@ function TripDetailView({
   const [editDatesRetour, setEditDatesRetour] = useState<DateAvecHoraire[]>([])
   const [editPreset, setEditPreset] = useState<DatePreset>('next-weekend')
   const [showEditFlexible, setShowEditFlexible] = useState(false)
+  /** draft = modalities calendar; commit = hero pencil saves on OK */
+  const [datesPickerMode, setDatesPickerMode] = useState<'draft' | 'commit'>(
+    'draft',
+  )
   const [showRelaunch, setShowRelaunch] = useState(false)
   const [relaunching, setRelaunching] = useState(false)
   const [relaunchPreset, setRelaunchPreset] = useState<DatePreset>('next-weekend')
@@ -1550,6 +1559,7 @@ function TripDetailView({
     name: string
     avatarUrl?: string
   } | null>(null)
+  const [restoringPopActivities, setRestoringPopActivities] = useState(false)
   const [activityItems, setActivityItems] = useState<
     {
       id?: string
@@ -2379,6 +2389,7 @@ function TripDetailView({
   const onEditPreset = (p: DatePreset) => {
     setEditPreset(p)
     if (p === 'flexible') {
+      setDatesPickerMode('draft')
       setShowEditFlexible(true)
       return
     }
@@ -2399,6 +2410,67 @@ function TripDetailView({
         d.heure_min !== b[i]?.heure_min ||
         d.heure_max !== b[i]?.heure_max,
     )
+  }
+
+  const openEditDates = () => {
+    if (!trip) return
+    const withHours = (dates: DateAvecHoraire[]) =>
+      dates.map((x) => ({
+        ...x,
+        heure_min: x.heure_min || '00:00',
+        heure_max: x.heure_max || '23:59',
+      }))
+    setEditDatesDepart(withHours(trip.dates_depart || []))
+    setEditDatesRetour(withHours(trip.dates_retour || []))
+    setEditPreset('flexible')
+    setDatesPickerMode('commit')
+    setShowEditFlexible(true)
+  }
+
+  const saveEditedDates = async () => {
+    if (!trip) return
+    if (!editDatesDepart.length || !editDatesRetour.length) {
+      setError('Dates requises')
+      return
+    }
+    const patch: UpdatePlannedTripRequest = {}
+    if (datesChanged(editDatesDepart, trip.dates_depart || [])) {
+      patch.dates_depart = editDatesDepart
+    }
+    if (datesChanged(editDatesRetour, trip.dates_retour || [])) {
+      patch.dates_retour = editDatesRetour
+    }
+    setSavingCriteria(true)
+    setError(null)
+    try {
+      if (Object.keys(patch).length > 0) {
+        const updated = await getApiClient().updatePlannedTrip(tripId, patch)
+        setTrip((prev) =>
+          prev
+            ? {
+                ...prev,
+                ...updated,
+                dates_depart: editDatesDepart,
+                dates_retour: editDatesRetour,
+                proposals: prev.proposals,
+                members: prev.members,
+              }
+            : prev,
+        )
+      }
+      setShowEditFlexible(false)
+      setDatesPickerMode('draft')
+      const shouldScan =
+        Boolean(wantFlightOpt) &&
+        !hidePopFlightChrome &&
+        popFlightLinkOk !== false
+      if (shouldScan) await scan()
+      else onToast('Dates mises à jour')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('app.error'))
+    } finally {
+      setSavingCriteria(false)
+    }
   }
 
   const scan = useCallback(async () => {
@@ -2737,6 +2809,59 @@ function TripDetailView({
         : !(externalHotel || hotelBooked)
   /** Pop sans vol (gate routes / toggle off) : pas d’aéroports ni hint « Finalise… ». */
   const hidePopFlightChrome = fromPopSource && !wantFlightOpt
+  /** Lancer ce Pop seulement s’il reste des activités actives sur ce séjour. */
+  const canLaunchPop =
+    fromPopSource &&
+    activityItems.some(
+      (i) => Boolean(i.id) && String(i.status || '') !== 'skipped',
+    )
+
+  const restorePopFromPlanner = async () => {
+    let itinId =
+      resolveSourceItineraryId(tripMeta, activityItems) ||
+      String(tripMeta.source_itinerary_id || '').trim()
+    if (!itinId) {
+      try {
+        const fresh = await getApiClient().getPlannedTrip(tripId)
+        itinId =
+          resolveSourceItineraryId(
+            (fresh.meta || {}) as { source_itinerary_id?: string | null },
+            null,
+          ) || ''
+        if (fresh.meta) {
+          setTrip((prev) =>
+            prev ? { ...prev, meta: { ...(prev.meta || {}), ...fresh.meta } } : prev,
+          )
+        }
+      } catch {
+        // fall through
+      }
+    }
+    if (!itinId) {
+      onToast('Pop source introuvable')
+      stayExtrasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      return
+    }
+    setRestoringPopActivities(true)
+    try {
+      await getApiClient().applyItinerary(itinId, {
+        planned_trip_id: tripId,
+      })
+      invalidateTripItemsCache({ planned_trip_id: tripId })
+      onToast('Activités du Pop remises')
+      stayExtrasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      const res = await listTripItemsCached(
+        { planned_trip_id: tripId },
+        { force: true },
+      )
+      const rows = (res.items || []) as typeof activityItems
+      onActivityItemsChange(rows)
+    } catch (e) {
+      onToast(e instanceof Error ? e.message : 'Impossible de remettre le Pop')
+    } finally {
+      setRestoringPopActivities(false)
+    }
+  }
 
   // Création → scan immédiat (ne pas attendre le getTrip / isOrganizer)
   useEffect(() => {
@@ -3267,6 +3392,11 @@ function TripDetailView({
     flightDraft?.ret_date ||
     (draftPayload.dates as { inbound?: string } | undefined)?.inbound ||
     trip.dates_retour[trip.dates_retour.length - 1]?.date
+  /** Dates éditables tant qu’aucun vrai booking WayPop (externe / Pop sans vol OK). */
+  const canEditDates =
+    Boolean(isOrganizer) &&
+    !(flightBooked && !externalFlight) &&
+    !(hotelBooked && !externalHotel)
   const dateLine =
     outDate && retDate
       ? formatTripDateRangeFr(outDate, retDate)
@@ -3565,10 +3695,27 @@ function TripDetailView({
                 {trip.direct ? ' · directs' : ''}
               </p>
             ) : null}
-            {dateLine ? (
-              <p className={`${hidePopFlightChrome ? 'mt-3' : 'mt-1'} text-sm text-white/65`}>
-                {dateLine}
-              </p>
+            {dateLine || canEditDates ? (
+              <div
+                className={`${hidePopFlightChrome ? 'mt-3' : 'mt-1'} flex flex-wrap items-center gap-2`}
+              >
+                {dateLine ? (
+                  <p className="text-sm font-semibold text-white/80">{dateLine}</p>
+                ) : (
+                  <p className="text-sm font-semibold text-white/70">Dates à choisir</p>
+                )}
+                {canEditDates ? (
+                  <button
+                    type="button"
+                    onClick={openEditDates}
+                    aria-label="Modifier les dates"
+                    title="Modifier les dates"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/35 bg-white/20 text-white backdrop-blur-md hover:bg-white/30"
+                  >
+                    <PencilIcon className="w-3.5 h-3.5" />
+                  </button>
+                ) : null}
+              </div>
             ) : null}
             {workspace?.phase && !hidePopFlightChrome ? (
               <p className="mt-2 text-sm text-white/55">
@@ -3588,7 +3735,7 @@ function TripDetailView({
                     : PLANNER_RELAUNCH_ACTION_FR}
                 </button>
               ) : isOrganizer && trip.status !== 'locked' ? (
-                fromPopSource ? (
+                canLaunchPop ? (
                   <button
                     type="button"
                     onClick={() => setLaunchPopOpen(true)}
@@ -3597,7 +3744,7 @@ function TripDetailView({
                     <LaunchPopPlayIcon />
                     Lancer ce Pop
                   </button>
-                ) : (
+                ) : !fromPopSource ? (
                   <button
                     type="button"
                     disabled={scanning}
@@ -3606,7 +3753,7 @@ function TripDetailView({
                   >
                     {scanning ? t('planner.scanning') : t('planner.scan')}
                   </button>
-                )
+                ) : null
               ) : null}
               {reservationToken && hotelBooked ? (
                 <button
@@ -3661,6 +3808,7 @@ function TripDetailView({
               }
             : undefined
         }
+        onEditDates={canEditDates ? openEditDates : undefined}
         apercu={
           <div className="space-y-7" ref={stayExtrasRef}>
             {fromPopSource ? (
@@ -3697,6 +3845,32 @@ function TripDetailView({
                 }
               }}
             />
+            {canEditDates ? (
+              <button
+                type="button"
+                onClick={openEditDates}
+                aria-label="Modifier les dates"
+                title="Modifier les dates"
+                className="inline-flex w-full items-center gap-3 rounded-2xl border border-[#EDE4DC] bg-white px-4 py-3 text-sm font-semibold text-[#1A120E] hover:bg-[#F7F2ED] min-h-[44px]"
+              >
+                <span className="truncate min-w-0 flex-1 text-left">
+                  {dateLine ? `Dates · ${dateLine}` : 'Choisir les dates'}
+                </span>
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FFF7F2] text-[#E85A28] ring-1 ring-orange-200">
+                  <PencilIcon className="w-3.5 h-3.5" />
+                </span>
+              </button>
+            ) : null}
+            {fromPopSource && plannerActivitiesEnabled && !canLaunchPop ? (
+              <button
+                type="button"
+                disabled={restoringPopActivities}
+                onClick={() => void restorePopFromPlanner()}
+                className="inline-flex w-full items-center justify-center rounded-2xl border border-orange-200 bg-[#FFF7F2] px-4 py-3 text-sm font-bold text-[#E85A28] hover:bg-[#FFEEE4] disabled:opacity-60 min-h-[44px]"
+              >
+                {restoringPopActivities ? '…' : ACTIVITY_RESTORE_POP_FR}
+              </button>
+            ) : null}
             {!fromPopSource &&
             (tripMeta.want_flight != null || tripMeta.want_hotel != null) ? (
               <TripOptInToggles
@@ -3879,6 +4053,11 @@ function TripDetailView({
                     cityLabel: destinationName,
                     destIata: destinationCode,
                   })}
+                  sourceItineraryId={
+                    tripMeta.source_itinerary_id ||
+                    resolveSourceItineraryId(tripMeta, activityItems)
+                  }
+                  fromPop={fromPopSource}
                   onItemsChange={onActivityItemsChange}
                 />
               </div>
@@ -4222,12 +4401,27 @@ function TripDetailView({
                 {trip.direct ? ' · directs' : ''}
               </p>
             ) : null}
-            {dateLine ? (
-              <p
-                className={`${hidePopFlightChrome ? 'mt-3' : 'mt-1'} text-sm text-white/65`}
+            {dateLine || canEditDates ? (
+              <div
+                className={`${hidePopFlightChrome ? 'mt-3' : 'mt-1'} flex flex-wrap items-center gap-2`}
               >
-                {dateLine}
-              </p>
+                {dateLine ? (
+                  <p className="text-sm font-semibold text-white/80">{dateLine}</p>
+                ) : (
+                  <p className="text-sm font-semibold text-white/70">Dates à choisir</p>
+                )}
+                {canEditDates ? (
+                  <button
+                    type="button"
+                    onClick={openEditDates}
+                    aria-label="Modifier les dates"
+                    title="Modifier les dates"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/35 bg-white/20 text-white backdrop-blur-md hover:bg-white/30"
+                  >
+                    <PencilIcon className="w-3.5 h-3.5" />
+                  </button>
+                ) : null}
+              </div>
             ) : null}
             {workspace?.phase && !hidePopFlightChrome ? (
               <p className="mt-2 text-sm text-white/55">
@@ -4247,7 +4441,7 @@ function TripDetailView({
                     : PLANNER_RELAUNCH_ACTION_FR}
                 </button>
               ) : isOrganizer && trip.status !== 'locked' ? (
-                fromPopSource ? (
+                canLaunchPop ? (
                   <button
                     type="button"
                     onClick={() => setLaunchPopOpen(true)}
@@ -4256,7 +4450,7 @@ function TripDetailView({
                     <LaunchPopPlayIcon />
                     Lancer ce Pop
                   </button>
-                ) : (
+                ) : !fromPopSource ? (
                   <button
                     type="button"
                     disabled={scanning}
@@ -4265,7 +4459,7 @@ function TripDetailView({
                   >
                     {scanning ? t('planner.scanning') : t('planner.scan')}
                   </button>
-                )
+                ) : null
               ) : null}
               {reservationToken && hotelBooked ? (
                 <button
@@ -4626,6 +4820,7 @@ function TripDetailView({
                     onChange={onEditPreset}
                     onFlexibleClick={() => {
                       setEditPreset('flexible')
+                      setDatesPickerMode('draft')
                       setShowEditFlexible(true)
                     }}
                   />
@@ -4834,6 +5029,7 @@ function TripDetailView({
                     onChange={onEditPreset}
                     onFlexibleClick={() => {
                       setEditPreset('flexible')
+                      setDatesPickerMode('draft')
                       setShowEditFlexible(true)
                     }}
                   />
@@ -4880,7 +5076,7 @@ function TripDetailView({
           <p className="text-[11px] font-black uppercase tracking-[0.16em] text-muted mb-2">
             Étape 1
           </p>
-          {fromPopSource && !showPopFlightToggle ? (
+          {fromPopSource && !showPopFlightToggle && canLaunchPop ? (
             <>
               <h3 className="font-extrabold text-2xl text-ink tracking-tight">
                 Lancer ce Pop
@@ -4920,7 +5116,7 @@ function TripDetailView({
                     {scanning ? t('planner.scanning') : t('planner.scan')}
                   </button>
                 ) : null}
-                {fromPopSource ? (
+                {canLaunchPop ? (
                   <button
                     type="button"
                     onClick={() => setLaunchPopOpen(true)}
@@ -5243,17 +5439,31 @@ function TripDetailView({
             type="button"
             aria-label="Fermer"
             className="app-dialog-backdrop"
-            onClick={() => setShowEditFlexible(false)}
+            onClick={() => {
+              setShowEditFlexible(false)
+              setDatesPickerMode('draft')
+            }}
           />
           <div className="app-dialog-panel app-dialog-xl p-5 sm:p-8">
             <div className="flex items-center justify-between mb-4">
               <h4 className="font-extrabold text-lg text-ink">{t('planner.scan.editDates')}</h4>
               <button
                 type="button"
-                onClick={() => setShowEditFlexible(false)}
-                className="font-bold text-primary-600 px-3 py-1.5 rounded-xl hover:bg-primary-50"
+                disabled={savingCriteria}
+                onClick={() => {
+                  if (datesPickerMode === 'commit') void saveEditedDates()
+                  else {
+                    setShowEditFlexible(false)
+                    setDatesPickerMode('draft')
+                  }
+                }}
+                className="font-bold text-primary-600 px-3 py-1.5 rounded-xl hover:bg-primary-50 disabled:opacity-60"
               >
-                OK
+                {savingCriteria
+                  ? '…'
+                  : datesPickerMode === 'commit'
+                    ? 'Enregistrer'
+                    : 'OK'}
               </button>
             </div>
             <FlexibleDatesSelector
@@ -5304,6 +5514,12 @@ function PlannerStayExtras({
     destIata: arrivalCode || null,
   })
   const cityImage = cityImageUrl(cityLabel, arrivalCode || undefined)
+  const tripMetaLocal = (trip.meta || {}) as {
+    source_itinerary_id?: string | null
+    from_pop?: boolean
+  }
+  const sourceItineraryId = resolveSourceItineraryId(tripMetaLocal, null)
+  const fromPopStay = plannedTripIsFromPop(trip)
 
   if (!activitiesEnabled) return null
 
@@ -5335,6 +5551,8 @@ function PlannerStayExtras({
             draftToken={draftToken}
             plannedTripId={tripId}
             citySlug={citySlug}
+            sourceItineraryId={sourceItineraryId}
+            fromPop={fromPopStay}
             enabled={activitiesEnabled}
             surface="planner"
             onItemsChange={onActivityItemsChange}

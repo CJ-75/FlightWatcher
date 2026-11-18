@@ -110,7 +110,27 @@ def apply_itinerary_to_trip(
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
+    # Existing planner rows keyed by source itinerary_item id (idempotent restore).
+    existing_by_src: Dict[str, Dict[str, Any]] = {}
+    try:
+        q = (
+            supabase.table("trip_items")
+            .select("id,status,meta,item_type")
+        )
+        if planned_trip_id:
+            q = q.eq("planned_trip_id", planned_trip_id)
+        else:
+            q = q.eq("draft_id", draft_id)
+        for row in list(q.execute().data or []):
+            m = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+            src = str(m.get("from_itinerary_item_id") or "").strip()
+            if src:
+                existing_by_src[src] = row
+    except Exception as e:
+        logger.debug("apply existing lookup: %s", e)
+
     created = 0
+    restored = 0
     skipped = 0
     for idx, it in enumerate(items):
         kind = str(it.get("kind") or it.get("item_type") or "place").lower()
@@ -122,6 +142,7 @@ def apply_itinerary_to_trip(
         sort_key = it.get("sort_key") or f"a{idx:02d}"
         meta: Dict[str, Any] = {
             "from_itinerary_item_id": it.get("id"),
+            "source_itinerary_id": itinerary_id,
             "itinerary_kind": kind,
         }
         if it.get("viator_product_code"):
@@ -165,6 +186,25 @@ def apply_itinerary_to_trip(
         has_viator = bool(viator_code) and not viator_code.startswith("skip-")
         # Hors catalogue Viator → validée d’office (stops Pop place/free).
         item_status = "idea" if has_viator else "validated"
+
+        src_id = str(it.get("id") or "").strip()
+        if src_id and src_id in existing_by_src:
+            ex = existing_by_src[src_id]
+            if str(ex.get("status") or "") == "skipped":
+                try:
+                    supabase.table("trip_items").update(
+                        {
+                            "status": item_status,
+                            "updated_at": _now_iso(),
+                        }
+                    ).eq("id", ex["id"]).execute()
+                    restored += 1
+                except Exception as e:
+                    logger.debug("apply restore: %s", e)
+                    skipped += 1
+            else:
+                skipped += 1
+            continue
 
         try:
             if kind == "free" or (not place_id and kind != "activity"):
@@ -267,4 +307,9 @@ def apply_itinerary_to_trip(
         except Exception as e:
             logger.debug("apply meta source: %s", e)
 
-    return {"ok": True, "created": created, "skipped": skipped}
+    return {
+        "ok": True,
+        "created": created,
+        "restored": restored,
+        "skipped": skipped,
+    }

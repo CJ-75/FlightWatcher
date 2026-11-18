@@ -6,6 +6,42 @@ export const ACTIVITY_BOOKED_PROMPT_FR = (title: string) =>
   `Tu as réservé ${title} ?`
 
 export const ACTIVITY_SKIP_LABEL_FR = 'Pas d’activité'
+export const ACTIVITY_SKIP_CONFIRM_FR =
+  'Ça retire toutes les activités du programme (et de Lancer ce Pop). Continuer ?'
+export const ACTIVITY_SKIP_HINT_FR =
+  'Retire les activités du programme — tu pourras les remettre ici avec Remettre le Pop.'
+export const ACTIVITY_RESTORE_POP_FR = 'Remettre le Pop'
+export const ACTIVITY_RESTORE_EMPTY_FR =
+  'Les activités du Pop ont été retirées. Remets-les dans ce séjour.'
+
+/** Resolve Pop itinerary id from trip meta and/or trip_item meta. */
+export function resolveSourceItineraryId(
+  meta?: { source_itinerary_id?: string | null } | null,
+  items?: { meta?: Record<string, unknown> | null }[] | null,
+): string | null {
+  const fromMeta = String(meta?.source_itinerary_id || '').trim()
+  if (fromMeta) return fromMeta
+  for (const it of items || []) {
+    const m = (it?.meta || {}) as Record<string, unknown>
+    const id = String(
+      m.source_itinerary_id || m.itinerary_id || '',
+    ).trim()
+    if (id) return id
+  }
+  return null
+}
+
+/** True when an activity row still points back to a Pop itinerary item. */
+export function tripItemsHavePopSource(
+  items?: { meta?: Record<string, unknown> | null }[] | null,
+): boolean {
+  return (items || []).some((it) => {
+    const m = (it?.meta || {}) as Record<string, unknown>
+    return Boolean(
+      String(m.from_itinerary_item_id || m.source_itinerary_id || m.itinerary_id || '').trim(),
+    )
+  })
+}
 export const ACTIVITY_DELETE_LABEL_FR = 'Supprimer'
 export const ACTIVITY_ADD_LABEL_FR = 'Ajouter une activité'
 export const ACTIVITY_VALIDATE_LABEL_FR = 'Valider'

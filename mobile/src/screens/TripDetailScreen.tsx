@@ -56,6 +56,8 @@ import {
   trackTripDetailViewed,
   plannedTripIsFromPop,
   arrivalCodesForCitySlug,
+  ACTIVITY_RESTORE_POP_FR,
+  resolveSourceItineraryId,
   PLANNER_RELAUNCH_ACTION_FR,
   PLANNER_RELAUNCH_CARD_FR,
   PLANNER_RELAUNCH_KICKER_FR,
@@ -66,6 +68,7 @@ import {
   type StayStepId,
 } from '@waypop/shared'
 import { RelaunchDatesSheet } from '../components/RelaunchDatesSheet'
+import { FlexibleDatesModal } from '../components/FlexibleDatesModal'
 import { TripDetailPathChrome } from '../components/tripDetail/TripDetailPathChrome'
 import { PathStepsTiles } from '../components/tripDetail/PathStepsTiles'
 import { TripOptInToggles } from '../components/tripDetail/TripOptInToggles'
@@ -97,6 +100,7 @@ import {
 import { getHotelGalleryCached } from '../lib/hotelGalleryCache'
 import {
   hydrateTripItems,
+  invalidateTripItemsCache,
   listTripItemsCached,
 } from '../lib/tripItemsCache'
 import {
@@ -249,6 +253,14 @@ export function TripDetailScreen() {
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [showModalities, setShowModalities] = useState(false)
+  const [editDates, setEditDates] = useState<FlexibleDates>({
+    dates_depart: [],
+    dates_retour: [],
+  })
+  const [datesPickerOpen, setDatesPickerOpen] = useState(false)
+  const [datesPickerMode, setDatesPickerMode] = useState<'draft' | 'commit'>(
+    'commit',
+  )
   const [plannerActivitiesEnabled, setPlannerActivitiesEnabled] = useState(
     () => peekAppConfig()?.planner_activities_enabled === true,
   )
@@ -292,6 +304,7 @@ export function TripDetailScreen() {
     meta?: Record<string, unknown> | null
   }
   const [activityItems, setActivityItems] = useState<ActivityRow[]>([])
+  const [restoringPopActivities, setRestoringPopActivities] = useState(false)
   const onActivityItemsChange = useCallback((items: ActivityRow[]) => {
     setActivityItems((prev) => {
       if (items.length === 0 && prev.length > 0) return prev
@@ -377,6 +390,10 @@ export function TripDetailScreen() {
         if (!detail) throw new Error('Voyage introuvable')
         setTrip(detail)
         setEditBudget(detail.budget_max || 150)
+        setEditDates({
+          dates_depart: detail.dates_depart || [],
+          dates_retour: detail.dates_retour || [],
+        })
         setWatchInterval(Math.max(900, detail.auto_scan_interval_seconds || 3600))
         navigation.setOptions({ title: detail.name || 'Voyage' })
         setWorkspace(null)
@@ -486,6 +503,10 @@ export function TripDetailScreen() {
       if (warm && !silent) {
         setTrip(warm)
         setEditBudget(warm.budget_max || 150)
+        setEditDates({
+          dates_depart: warm.dates_depart || [],
+          dates_retour: warm.dates_retour || [],
+        })
         setWatchInterval(
           Math.max(900, warm.auto_scan_interval_seconds || 3600),
         )
@@ -503,6 +524,10 @@ export function TripDetailScreen() {
         .then((detail) => {
           setTrip(detail)
           setEditBudget(detail.budget_max || 150)
+          setEditDates({
+            dates_depart: detail.dates_depart || [],
+            dates_retour: detail.dates_retour || [],
+          })
           setWatchInterval(
             Math.max(900, detail.auto_scan_interval_seconds || 3600),
           )
@@ -701,6 +726,10 @@ export function TripDetailScreen() {
               }
             : prev,
         )
+        setEditDates({
+          dates_depart: dates.dates_depart,
+          dates_retour: dates.dates_retour,
+        })
         invalidateTravelWorkspacesCache()
         await load({ silent: true })
         if (proposals.length === 0) {
@@ -722,6 +751,16 @@ export function TripDetailScreen() {
     },
     [tripId, load, trip?.budget_max],
   )
+
+  const openEditDates = useCallback(() => {
+    if (!trip) return
+    setEditDates({
+      dates_depart: trip.dates_depart || [],
+      dates_retour: trip.dates_retour || [],
+    })
+    setDatesPickerMode('commit')
+    setDatesPickerOpen(true)
+  }, [trip])
 
   const scan = useCallback(async () => {
     const meta = (trip?.meta || {}) as {
@@ -805,6 +844,58 @@ export function TripDetailScreen() {
       setScanning(false)
     }
   }, [tripId, trip, popFlightLinkOk, useGuestPreview, load, navigation])
+
+  const saveEditedDates = useCallback(
+    async (dates: FlexibleDates) => {
+      if (!trip || !dates.dates_depart.length || !dates.dates_retour.length) {
+        Alert.alert('Dates', 'Choisis aller et retour.')
+        return
+      }
+      setSavingCriteria(true)
+      setError(null)
+      try {
+        if (!useGuestPreview) {
+          await getApi().updatePlannedTrip(tripId, {
+            dates_depart: dates.dates_depart,
+            dates_retour: dates.dates_retour,
+          })
+        }
+        setTrip((prev) =>
+          prev
+            ? {
+                ...prev,
+                dates_depart: dates.dates_depart,
+                dates_retour: dates.dates_retour,
+              }
+            : prev,
+        )
+        setEditDates(dates)
+        setDatesPickerOpen(false)
+        setDatesPickerMode('draft')
+        const meta = (trip.meta || {}) as {
+          want_flight?: boolean
+          from_pop?: boolean
+        }
+        const fromPop = plannedTripIsFromPop(trip) || Boolean(meta.from_pop)
+        const wantFlight =
+          meta.want_flight != null ? Boolean(meta.want_flight) : !fromPop
+        const shouldScan =
+          wantFlight &&
+          !(fromPop && popFlightLinkOk === false) &&
+          !useGuestPreview
+        if (shouldScan) await scan()
+        else Alert.alert('Dates', 'Dates mises à jour')
+      } catch (e) {
+        Alert.alert(
+          'Erreur',
+          e instanceof Error ? e.message : 'Mise à jour échouée',
+        )
+      } finally {
+        setSavingCriteria(false)
+      }
+    },
+    [trip, tripId, useGuestPreview, popFlightLinkOk, scan],
+  )
 
   const bumpBudgetAndScan = async () => {
     if (!trip) return
@@ -1372,12 +1463,27 @@ export function TripDetailScreen() {
     const next = Math.min(1000, Math.max(20, Math.round(editBudget / 10) * 10))
     setSavingCriteria(true)
     try {
+      const patch: Record<string, unknown> = { budget_max: next }
+      if (editDates.dates_depart.length && editDates.dates_retour.length) {
+        patch.dates_depart = editDates.dates_depart
+        patch.dates_retour = editDates.dates_retour
+      }
       if (!useGuestPreview) {
-        await getApi().updatePlannedTrip(tripId, { budget_max: next })
+        await getApi().updatePlannedTrip(tripId, patch)
       }
       setTrip((prev) =>
         prev
-          ? { ...prev, budget_max: next, status: 'planning' }
+          ? {
+              ...prev,
+              budget_max: next,
+              status: 'planning',
+              dates_depart: editDates.dates_depart.length
+                ? editDates.dates_depart
+                : prev.dates_depart,
+              dates_retour: editDates.dates_retour.length
+                ? editDates.dates_retour
+                : prev.dates_retour,
+            }
           : prev,
       )
       setShowModalities(false)
@@ -2396,6 +2502,11 @@ export function TripDetailScreen() {
     outDateMobile && retDateMobile
       ? formatTripDateRangeFr(outDateMobile, retDateMobile)
       : null
+  /** Dates OK si pas de vrai booking WayPop (externe / Pop sans vol autorisé). */
+  const canEditDates =
+    Boolean(isOrganizer) &&
+    !(reservationFlags.flightBooked && !reservationFlags.externalFlight) &&
+    !(reservationFlags.hotelBooked && !reservationFlags.externalHotel)
   const tripDataMobile = accepted?.trip_data as EnrichedTripResponse | undefined
   const programmeMobile = buildProgrammeTimeline({
     outDate: outDateMobile,
@@ -2425,6 +2536,10 @@ export function TripDetailScreen() {
         meta: i.meta || null,
       })),
   })
+  const resolvedPopItineraryId =
+    resolveSourceItineraryId(tripMeta, activityItems) ||
+    String(tripMeta.source_itinerary_id || '').trim() ||
+    null
   const popProgrammeItems = fromPopSource
     ? tripItemsToItineraryItems(
         activityItems
@@ -2440,12 +2555,58 @@ export function TripDetailScreen() {
             status: i.status,
             meta: i.meta || null,
           })),
-        { itineraryId: tripMeta.source_itinerary_id },
+        { itineraryId: resolvedPopItineraryId },
       )
     : []
   const popProgrammeDays = fromPopSource
     ? groupItemsByDay(popProgrammeItems)
     : []
+  const canLaunchPop = fromPopSource && popProgrammeItems.length > 0
+
+  const restorePopFromPlanner = async () => {
+    let itinId = resolvedPopItineraryId || ''
+    if (!itinId) {
+      try {
+        const fresh = await getApi().getPlannedTrip(tripId)
+        itinId =
+          resolveSourceItineraryId(
+            (fresh.meta || {}) as { source_itinerary_id?: string | null },
+            null,
+          ) || ''
+        if (fresh.meta) {
+          setTrip((prev) =>
+            prev
+              ? { ...prev, meta: { ...(prev.meta || {}), ...fresh.meta } }
+              : prev,
+          )
+        }
+      } catch {
+        // fall through
+      }
+    }
+    if (!itinId) {
+      Alert.alert('Pop', 'Pop source introuvable — recharge le séjour.')
+      return
+    }
+    setRestoringPopActivities(true)
+    try {
+      await getApi().applyItinerary(itinId, { planned_trip_id: tripId })
+      invalidateTripItemsCache({ planned_trip_id: tripId })
+      const res = await listTripItemsCached(
+        { planned_trip_id: tripId },
+        { force: true },
+      )
+      onActivityItemsChange((res.items || []) as ActivityRow[])
+      Alert.alert('Pop', 'Activités du Pop remises')
+    } catch (e) {
+      Alert.alert(
+        'Erreur',
+        e instanceof Error ? e.message : 'Impossible de remettre le Pop',
+      )
+    } finally {
+      setRestoringPopActivities(false)
+    }
+  }
   const orgaDisplayMobile =
     authName || trip.organizer?.full_name || trip.member_names?.[0] || null
   const orgaFirstMobile =
@@ -2496,11 +2657,18 @@ export function TripDetailScreen() {
                 }
               : undefined
           }
-          stickyCta={fromPopSource ? 'Lancer ce Pop' : undefined}
+          stickyCta={
+            fromPopSource && popProgrammeItems.length
+              ? 'Lancer ce Pop'
+              : undefined
+          }
           onStickyCta={
-            fromPopSource ? () => setLaunchPopOpen(true) : undefined
+            fromPopSource && popProgrammeItems.length
+              ? () => setLaunchPopOpen(true)
+              : undefined
           }
           onRename={isOrganizer ? startRename : undefined}
+          onEditDates={canEditDates ? openEditDates : undefined}
           titleEditing={editingName}
           titleDraft={nameDraft}
           onTitleDraftChange={setNameDraft}
@@ -2532,6 +2700,44 @@ export function TripDetailScreen() {
                 steps={pathSteps}
                 onStepPress={(id) => onPipelineStep(id)}
               />
+              {canEditDates ? (
+                <Pressable
+                  onPress={openEditDates}
+                  style={({ pressed }) => [
+                    styles.editDatesBtn,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Modifier les dates"
+                >
+                  <Text style={styles.editDatesBtnText}>
+                    {dateLineMobile
+                      ? `Dates · ${dateLineMobile}`
+                      : 'Choisir les dates'}
+                  </Text>
+                  <View style={styles.editDatesBtnIcon}>
+                    <PencilIcon size={14} color={colors.primaryDeep} />
+                  </View>
+                </Pressable>
+              ) : null}
+              {fromPopSource &&
+              plannerActivitiesEnabled &&
+              !canLaunchPop ? (
+                <Pressable
+                  onPress={() => void restorePopFromPlanner()}
+                  disabled={restoringPopActivities}
+                  style={({ pressed }) => [
+                    styles.restorePopBtn,
+                    (pressed || restoringPopActivities) && { opacity: 0.7 },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={ACTIVITY_RESTORE_POP_FR}
+                >
+                  <Text style={styles.restorePopBtnText}>
+                    {restoringPopActivities ? '…' : ACTIVITY_RESTORE_POP_FR}
+                  </Text>
+                </Pressable>
+              ) : null}
               {wantFlightOpt && scanning ? (
                 <PlannerScanPanel
                   fromLabel={
@@ -2852,6 +3058,8 @@ export function TripDetailScreen() {
                         null
                       }
                       citySlug={citySlug}
+                      sourceItineraryId={resolvedPopItineraryId}
+                      fromPop={fromPopSource}
                       enabled={plannerActivitiesEnabled}
                       surface="planner"
                       onItemsChange={onActivityItemsChange}
@@ -3089,6 +3297,20 @@ export function TripDetailScreen() {
           onClose={() => !relaunching && setRelaunchOpen(false)}
           onConfirm={(dates) => void relaunchWithDates(dates)}
         />
+        <FlexibleDatesModal
+          visible={datesPickerOpen}
+          value={editDates}
+          onChange={setEditDates}
+          onClose={() => {
+            if (savingCriteria) return
+            if (datesPickerMode === 'commit') {
+              void saveEditedDates(editDates)
+            } else {
+              setDatesPickerOpen(false)
+              setDatesPickerMode('draft')
+            }
+          }}
+        />
         <LaunchPopSheet
           visible={launchPopOpen}
           title={trip.name}
@@ -3176,12 +3398,38 @@ export function TripDetailScreen() {
             </View>
           ) : null}
           {trip.dates_depart[0] && trip.dates_retour[0] ? (
-            <Text style={styles.meta}>
-              {formatTripDateRangeFr(
-                trip.dates_depart[0].date,
-                trip.dates_retour[trip.dates_retour.length - 1].date,
-              )}
-            </Text>
+            <View style={styles.metaRow}>
+              <Text style={styles.meta}>
+                {formatTripDateRangeFr(
+                  trip.dates_depart[0].date,
+                  trip.dates_retour[trip.dates_retour.length - 1].date,
+                )}
+              </Text>
+              {canEditDates ? (
+                <Pressable
+                  onPress={openEditDates}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="Modifier les dates"
+                  style={({ pressed }) => [
+                    styles.dateEditChipHero,
+                    pressed && { opacity: 0.85 },
+                  ]}
+                >
+                  <PencilIcon size={14} color={colors.white} />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : canEditDates ? (
+            <Pressable
+              onPress={openEditDates}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Choisir les dates"
+              style={styles.dateEditChipHero}
+            >
+              <PencilIcon size={14} color={colors.white} />
+            </Pressable>
           ) : null}
         </View>
       </ImageBackground>
@@ -3259,13 +3507,13 @@ export function TripDetailScreen() {
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {isOrganizer && trip.status !== 'locked' ? (
-        fromPopSource ? (
+        fromPopSource && popProgrammeItems.length ? (
           <Button
             label="Lancer ce Pop"
             left={<LaunchPopPlayMark />}
             onPress={() => setLaunchPopOpen(true)}
           />
-        ) : (
+        ) : fromPopSource ? null : (
           <Button
             label={scanning ? 'Scan en cours…' : 'Scanner les prix'}
             onPress={() => void scan()}
@@ -3336,6 +3584,30 @@ export function TripDetailScreen() {
           showModalities ? (
             <View style={[styles.modalitiesCard, shadow.soft]}>
               <View style={styles.modalitiesEditor}>
+                <Text style={styles.modalitiesLabel}>Dates</Text>
+                <Pressable
+                  onPress={() => {
+                    setDatesPickerMode('draft')
+                    setDatesPickerOpen(true)
+                  }}
+                  style={styles.changeFlightBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Modifier les dates"
+                >
+                  <View style={styles.datesEditRow}>
+                    <Text style={styles.changeFlightText}>
+                      {editDates.dates_depart[0] && editDates.dates_retour[0]
+                        ? formatTripDateRangeFr(
+                            editDates.dates_depart[0].date,
+                            editDates.dates_retour[
+                              editDates.dates_retour.length - 1
+                            ].date,
+                          )
+                        : 'Choisir les dates'}
+                    </Text>
+                    <PencilIcon size={14} color={colors.inkSoft} />
+                  </View>
+                </Pressable>
                 <Text style={styles.modalitiesLabel}>
                   Budget max · {editBudget} €/pers
                 </Text>
@@ -3623,6 +3895,8 @@ export function TripDetailScreen() {
                 }
                 plannedTripId={tripId}
                 citySlug={citySlug}
+                sourceItineraryId={resolvedPopItineraryId}
+                fromPop={fromPopSource}
                 enabled={plannerActivitiesEnabled}
                 surface="planner"
                 onItemsChange={onActivityItemsChange}
@@ -3912,6 +4186,20 @@ export function TripDetailScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      <FlexibleDatesModal
+        visible={datesPickerOpen}
+        value={editDates}
+        onChange={setEditDates}
+        onClose={() => {
+          if (savingCriteria) return
+          if (datesPickerMode === 'commit') {
+            void saveEditedDates(editDates)
+          } else {
+            setDatesPickerOpen(false)
+            setDatesPickerMode('draft')
+          }
+        }}
+      />
       <LaunchPopSheet
         visible={launchPopOpen}
         title={trip.name}
@@ -4472,6 +4760,70 @@ const styles = StyleSheet.create({
   },
   heroChipText: { fontFamily: fonts.bold, fontSize: 11, color: colors.white },
   meta: { fontFamily: fonts.medium, fontSize: 12, color: 'rgba(255,255,255,0.74)', lineHeight: 18 },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  dateEditChipHero: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  datesEditRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  editDatesBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.lineStrong,
+    backgroundColor: colors.white,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 48,
+  },
+  editDatesBtnText: {
+    flex: 1,
+    fontFamily: fonts.semibold,
+    fontSize: 13,
+    color: colors.ink,
+  },
+  editDatesBtnIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+  },
+  restorePopBtn: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.primaryMuted,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  restorePopBtnText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: colors.primaryDeep,
+  },
   pipelineCard: {
     backgroundColor: colors.white,
     borderRadius: 22,
