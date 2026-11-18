@@ -2586,10 +2586,7 @@ export function TripDetailScreen() {
           heroUrl={destinationImage}
           city={cityLabel || trip.name}
           scrollLocked={gallerySwipeActive}
-          metaChips={[
-            dateLineMobile,
-            `${pax} voyageur${pax > 1 ? 's' : ''}`,
-          ].filter(Boolean) as string[]}
+          metaChips={[dateLineMobile].filter(Boolean) as string[]}
           phaseLabel={
             hidePopFlightChrome && detailPhase === 'composing'
               ? 'En cours'

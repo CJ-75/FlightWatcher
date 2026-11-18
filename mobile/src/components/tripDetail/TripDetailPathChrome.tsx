@@ -199,38 +199,43 @@ export function TripDetailPathChrome({
         </View>
       )}
       {chips.length > 0 || onEditDates ? (
-        <View style={styles.chipRow}>
-          {chips.map((c, i) => (
-            <View key={`${c}-${i}`} style={styles.chipItem}>
-              {i > 0 ? <Text style={styles.chipDot}> · </Text> : null}
-              <Text style={styles.chipText}>{c}</Text>
-              {i === 0 && onEditDates ? (
-                <Pressable
-                  onPress={(e) => {
-                    e?.stopPropagation?.()
-                    onEditDates()
-                  }}
-                  hitSlop={12}
-                  accessibilityRole="button"
-                  accessibilityLabel="Modifier les dates"
-                  style={styles.dateEditBtn}
-                >
-                  <PencilIcon size={13} color="#fff" />
-                </Pressable>
-              ) : null}
-            </View>
+        <View style={styles.chipStack}>
+          <View style={styles.chipRow}>
+            {chips[0] ? (
+              <View style={styles.chipItem}>
+                <Text style={styles.chipText}>{chips[0]}</Text>
+                {onEditDates ? (
+                  <Pressable
+                    onPress={(e) => {
+                      e?.stopPropagation?.()
+                      onEditDates()
+                    }}
+                    hitSlop={12}
+                    accessibilityRole="button"
+                    accessibilityLabel="Modifier les dates"
+                    style={styles.dateEditBtn}
+                  >
+                    <PencilIcon size={13} color="#fff" />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : onEditDates ? (
+              <Pressable
+                onPress={onEditDates}
+                accessibilityRole="button"
+                accessibilityLabel="Choisir les dates"
+                style={styles.dateEditChip}
+              >
+                <Text style={styles.chipText}>Dates</Text>
+                <PencilIcon size={12} color="#fff" />
+              </Pressable>
+            ) : null}
+          </View>
+          {chips.slice(1).map((c, i) => (
+            <Text key={`${c}-${i + 1}`} style={styles.chipText}>
+              {c}
+            </Text>
           ))}
-          {!chips.length && onEditDates ? (
-            <Pressable
-              onPress={onEditDates}
-              accessibilityRole="button"
-              accessibilityLabel="Choisir les dates"
-              style={styles.dateEditChip}
-            >
-              <Text style={styles.chipText}>Dates</Text>
-              <PencilIcon size={12} color="#fff" />
-            </Pressable>
-          ) : null}
         </View>
       ) : null}
     </View>
@@ -523,6 +528,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 13,
   },
+  chipStack: { gap: 2 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 },
   chipItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dateEditBtn: {
@@ -546,11 +552,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.28)',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'rgba(255,255,255,0.4)',
-  },
-  chipDot: {
-    color: 'rgba(255,255,255,0.35)',
-    fontFamily: fonts.medium,
-    fontSize: 12,
   },
   chipText: {
     color: 'rgba(255,255,255,0.78)',
