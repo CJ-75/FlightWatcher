@@ -642,19 +642,95 @@ export function ActivityStepPanel(props: {
     setRestoringPop(true)
     setError(null)
     try {
-      if (plannedId) {
-        const res = await getApiClient().restorePopPlannedTrip(plannedId)
-        const sid = String(res.source_itinerary_id || '').trim()
-        if (sid) setResolvedSourceId(sid)
-        track('restore_pop', {
-          itinerary_id: sid || undefined,
-          mode: res.mode,
-        })
-      } else {
+      const resolveItinId = async (): Promise<string> => {
         let itinId =
           String(resolvedSourceId || sourceItineraryId || '').trim() ||
           resolveSourceItineraryId(null, items) ||
           ''
+        if (!itinId && plannedId) {
+          try {
+            const trip = await getApiClient().getPlannedTrip(plannedId)
+            itinId =
+              resolveSourceItineraryId(
+                (trip.meta || {}) as { source_itinerary_id?: string | null },
+                null,
+              ) || ''
+          } catch {
+            /* ignore */
+          }
+        }
+        if (itinId) setResolvedSourceId(itinId)
+        return itinId
+      }
+
+      const unskipLocalPopItems = async () => {
+        const skipped = items.filter((it) => {
+          if (it.status !== 'skipped') return false
+          const m = (it.meta || {}) as Record<string, unknown>
+          return Boolean(
+            String(
+              m.from_itinerary_item_id ||
+                m.source_itinerary_id ||
+                m.itinerary_id ||
+                '',
+            ).trim(),
+          )
+        })
+        for (const it of skipped) {
+          const m = (it.meta || {}) as Record<string, unknown>
+          const code = String(
+            m.product_code || m.viator_product_code || '',
+          ).trim()
+          const hasViator = Boolean(code) && !code.startsWith('skip-')
+          await patch(it.id, {
+            status: (hasViator ? 'idea' : 'validated') as TripItemStatus,
+          })
+        }
+        return skipped.length
+      }
+
+      if (plannedId) {
+        try {
+          const res = await getApiClient().restorePopPlannedTrip(plannedId)
+          const sid = String(res.source_itinerary_id || '').trim()
+          if (sid) setResolvedSourceId(sid)
+          track('restore_pop', {
+            itinerary_id: sid || undefined,
+            mode: res.mode,
+          })
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          const routeMissing =
+            /not found/i.test(msg) &&
+            !/pop source|voyage introuvable/i.test(msg)
+          if (!routeMissing && /pop source introuvable/i.test(msg)) {
+            const n = await unskipLocalPopItems()
+            if (n > 0) {
+              track('restore_pop', { mode: 'unskip_client' })
+            } else {
+              throw e
+            }
+          } else if (routeMissing || /not found/i.test(msg)) {
+            const itinId = await resolveItinId()
+            if (itinId) {
+              await getApiClient().applyItinerary(itinId, {
+                planned_trip_id: plannedId,
+              })
+              track('restore_pop', { itinerary_id: itinId, mode: 'apply_fallback' })
+            } else {
+              const n = await unskipLocalPopItems()
+              if (n > 0) {
+                track('restore_pop', { mode: 'unskip_client' })
+              } else {
+                throw e
+              }
+            }
+          } else {
+            throw e
+          }
+        }
+      } else {
+        const itinId = await resolveItinId()
         if (!itinId) {
           setError('Pop source introuvable — recharge le séjour.')
           return
