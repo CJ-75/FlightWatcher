@@ -99,6 +99,7 @@ describe('buildItinerarySticky', () => {
       originCityLabel: 'Lyon',
     })
     expect(elsew.nudge).toContain('Lyon')
+    expect(elsew.nudge).toMatch(/vol et à l’hôtel/i)
     expect(elsew.ctaAction).toBe('make_trip')
   })
 })

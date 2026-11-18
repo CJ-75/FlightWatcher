@@ -8,6 +8,10 @@ interface CalendarProps {
   minDate?: string; // Format YYYY-MM-DD
   maxDate?: string; // Format YYYY-MM-DD
   className?: string;
+  /** long = « 18 novembre 2026 » ; slash = JJ/MM/AAAA */
+  displayFormat?: 'long' | 'slash'
+  /** Sheet-friendly denser trigger */
+  compact?: boolean
 }
 
 const springConfig = {
@@ -32,7 +36,15 @@ type CalendarPlacement = {
   maxHeight?: number;
 };
 
-export function Calendar({ value, onChange, minDate, maxDate, className = '' }: CalendarProps) {
+export function Calendar({
+  value,
+  onChange,
+  minDate,
+  maxDate,
+  className = '',
+  displayFormat = 'long',
+  compact = false,
+}: CalendarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState<CalendarPlacement>({
     top: 0,
@@ -148,6 +160,11 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
   const formatDateDisplay = (dateStr: string | null): string => {
     if (!dateStr) return '';
     const date = new Date(dateStr + 'T00:00:00');
+    if (displayFormat === 'slash') {
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      return `${day}/${month}/${date.getFullYear()}`;
+    }
     const day = date.getDate();
     const month = monthNames[date.getMonth()];
     const year = date.getFullYear();
@@ -253,12 +270,42 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
           }}
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.99 }}
-          className="w-full px-3 sm:px-4 md:px-5 py-3 sm:py-4 bg-white rounded-xl border-2 border-slate-300 text-left font-bold text-sm sm:text-base md:text-lg text-slate-900 hover:border-primary-500 focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-200 transition-all flex items-center justify-between shadow-sm min-h-[48px] sm:min-h-[52px] active:scale-95"
+          className={
+            compact
+              ? 'flex w-full min-h-[44px] items-center justify-between rounded-xl border border-line bg-white px-3 py-2.5 text-left text-sm font-semibold text-ink shadow-sm'
+              : 'w-full px-3 sm:px-4 md:px-5 py-3 sm:py-4 bg-white rounded-xl border-2 border-slate-300 text-left font-bold text-sm sm:text-base md:text-lg text-slate-900 hover:border-primary-500 focus:border-primary-500 focus:outline-none focus:ring-4 focus:ring-primary-200 transition-all flex items-center justify-between shadow-sm min-h-[48px] sm:min-h-[52px] active:scale-95'
+          }
         >
-          <span className={value ? 'text-slate-900' : 'text-slate-400 font-normal'}>
-            {value ? formatDateDisplay(value) : 'Sélectionner une date'}
+          <span
+            className={
+              value
+                ? compact
+                  ? 'text-ink'
+                  : 'text-slate-900'
+                : compact
+                  ? 'font-medium text-muted'
+                  : 'text-slate-400 font-normal'
+            }
+          >
+            {value
+              ? formatDateDisplay(value)
+              : compact
+                ? 'JJ/MM/AAAA'
+                : 'Sélectionner une date'}
           </span>
-          <span className="text-2xl">📅</span>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+            className={compact ? 'text-muted' : 'text-slate-500'}
+          >
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M8 3v4M16 3v4M3 11h18" />
+          </svg>
         </motion.button>
       </div>
 
@@ -293,10 +340,16 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                   overflowY: position.maxHeight ? 'auto' : undefined,
                   zIndex: 9999,
                 }}
-                className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border-2 border-slate-200 p-3 sm:p-4 min-w-[280px] max-w-[calc(100vw-24px)]"
+                className={`bg-white rounded-xl sm:rounded-2xl shadow-2xl border-2 border-slate-200 min-w-[280px] max-w-[calc(100vw-24px)] ${
+                  compact ? 'p-3 pb-2' : 'p-3 sm:p-4'
+                }`}
               >
               {/* Header avec navigation */}
-              <div className="flex items-center justify-between mb-4">
+              <div
+                className={`flex items-center justify-between ${
+                  compact ? 'mb-2' : 'mb-4'
+                }`}
+              >
                 <motion.button
                   onClick={goToPreviousMonth}
                   whileHover={{ scale: 1.1 }}
@@ -310,14 +363,16 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                   <div className="text-base sm:text-lg font-bold text-slate-900">
                     {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
                   </div>
-                  <motion.button
-                    onClick={goToToday}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    className="text-xs sm:text-sm text-primary-500 hover:text-primary-600 font-semibold mt-1 px-2 py-1 rounded-lg hover:bg-primary-50 min-h-[32px] active:scale-95"
-                  >
-                    Aujourd'hui
-                  </motion.button>
+                  {!compact ? (
+                    <motion.button
+                      onClick={goToToday}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="text-xs sm:text-sm text-primary-500 hover:text-primary-600 font-semibold mt-1 px-2 py-1 rounded-lg hover:bg-primary-50 min-h-[32px] active:scale-95"
+                    >
+                      Aujourd'hui
+                    </motion.button>
+                  ) : null}
                 </div>
                 
                 <motion.button
@@ -331,11 +386,13 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
               </div>
 
               {/* Jours de la semaine */}
-              <div className="grid grid-cols-7 gap-1 mb-2">
+              <div className={`grid grid-cols-7 gap-1 ${compact ? 'mb-1' : 'mb-2'}`}>
                 {dayNames.map((day) => (
                   <div
                     key={day}
-                    className="text-center text-xs font-bold text-slate-500 py-2"
+                    className={`text-center text-xs font-bold text-slate-500 ${
+                      compact ? 'py-0.5' : 'py-2'
+                    }`}
                   >
                     {day}
                   </div>
@@ -346,7 +403,12 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
               <div className="grid grid-cols-7 gap-1">
                 {days.map((day, index) => {
                   if (day === null) {
-                    return <div key={`empty-${index}`} className="aspect-square" />;
+                    return (
+                      <div
+                        key={`empty-${index}`}
+                        className={compact ? 'h-9' : 'aspect-square'}
+                      />
+                    );
                   }
 
                   const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
@@ -363,7 +425,11 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                       whileHover={!disabled ? { scale: 1.1 } : {}}
                       whileTap={!disabled ? { scale: 0.9 } : {}}
                       className={`
-                        aspect-square rounded-lg text-xs sm:text-sm font-semibold transition-all min-h-[36px] sm:min-h-[40px] min-w-[36px] sm:min-w-[40px]
+                        rounded-lg text-xs sm:text-sm font-semibold transition-all
+                        ${compact
+                          ? 'flex h-9 items-center justify-center'
+                          : 'aspect-square min-h-[36px] sm:min-h-[40px] min-w-[36px] sm:min-w-[40px]'
+                        }
                         ${disabled
                           ? 'text-slate-300 cursor-not-allowed'
                           : selected
@@ -380,17 +446,18 @@ export function Calendar({ value, onChange, minDate, maxDate, className = '' }: 
                 })}
               </div>
 
-              {/* Bouton fermer */}
-              <div className="mt-4 pt-4 border-t border-slate-200">
-                <motion.button
-                  onClick={() => setIsOpen(false)}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="w-full px-4 py-2.5 sm:py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors min-h-[44px] text-sm sm:text-base active:scale-95"
-                >
-                  Fermer
-                </motion.button>
-              </div>
+              {!compact ? (
+                <div className="mt-4 pt-4 border-t border-slate-200">
+                  <motion.button
+                    onClick={() => setIsOpen(false)}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full px-4 py-2.5 sm:py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors min-h-[44px] text-sm sm:text-base active:scale-95"
+                  >
+                    Fermer
+                  </motion.button>
+                </div>
+              ) : null}
               </motion.div>
             </>
           )}

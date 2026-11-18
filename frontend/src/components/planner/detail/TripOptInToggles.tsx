@@ -72,7 +72,8 @@ export function TripOptInToggles({
       />
       {!wantFlight && !wantHotel ? (
         <p className="px-0.5 text-[12px] font-medium text-[#8A7B6E]">
-          Tu viens d’ailleurs ? Active Vol et/ou Hôtel quand le groupe est prêt.
+          Tu n’es pas sur place ? Pense au vol et à l’hôtel quand le groupe est
+          prêt.
         </p>
       ) : null}
     </div>

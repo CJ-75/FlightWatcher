@@ -14,11 +14,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   arrivalCodesForCitySlug,
   citySlugDisplayNameFr,
+  defaultAirportCodesForCity,
   encodeAirportCodes,
+  filterDepartureCityGroups,
+  findCityGroupByCodes,
+  formatDateLocal,
   generateDatesFromPreset,
+  groupAirportsByCity,
   isParcoursCityWithoutFlightHub,
   parseAirportCodes,
   partyModeDefaultPassengers,
+  partyModeFromCount,
+  seedPopularAirports,
   suggestedParcoursDates,
   loadOnboardingPrefs,
   type Itinerary,
@@ -27,6 +34,8 @@ import {
 import { getApi } from '../../lib/client'
 import { useAuth } from '../../context/AuthContext'
 import { useAuthSheet } from '../onboarding/AuthSheetHost'
+import { CityAirportPicker } from '../CityAirportPicker'
+import { DateField } from './DateField'
 import { fonts, colors, spacing } from '../../theme'
 
 export type MakeTripCreated = {
@@ -42,6 +51,12 @@ type Props = {
   onCreated: (result: MakeTripCreated) => void
   nudge?: string | null
 }
+
+const PARTY_PILLS: { id: PartyMode; label: string }[] = [
+  { id: 'solo', label: 'Solo' },
+  { id: 'duo', label: 'Duo' },
+  { id: 'groupe', label: 'Groupe' },
+]
 
 export function MakeTripSheet({
   visible,
@@ -68,10 +83,7 @@ export function MakeTripSheet({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const needsDeparture = wantFlight
-
-  useEffect(() => {
-    setPassengers(partyModeDefaultPassengers(partyMode))
-  }, [partyMode])
+  const todayIso = useMemo(() => formatDateLocal(new Date()), [])
 
   useEffect(() => {
     setOutbound(suggested.outbound)
@@ -84,11 +96,41 @@ export function MakeTripSheet({
     })
   }, [])
 
+  useEffect(() => {
+    if (!wantFlight) return
+    const groups = filterDepartureCityGroups(
+      groupAirportsByCity(seedPopularAirports()),
+      { excludeCitySlug: itinerary.city_slug },
+    )
+    const selected = findCityGroupByCodes(
+      groups,
+      parseAirportCodes(departure),
+    )
+    if (selected) return
+    const fallback = groups[0]
+    if (!fallback) return
+    const encoded = encodeAirportCodes(
+      defaultAirportCodesForCity(fallback.airports.map((a) => a.code)),
+    )
+    if (encoded) setDeparture(encoded)
+  }, [wantFlight, itinerary.city_slug, departure])
+
   const cityLabel =
     citySlugDisplayNameFr(itinerary.city_slug) ||
     itinerary.city_slug ||
     ''
   const noFlightHub = isParcoursCityWithoutFlightHub(itinerary.city_slug)
+
+  const selectParty = (mode: PartyMode) => {
+    setPartyMode(mode)
+    setPassengers(partyModeDefaultPassengers(mode))
+  }
+
+  const changePassengers = (n: number) => {
+    const pax = Math.min(9, Math.max(1, n))
+    setPassengers(pax)
+    setPartyMode(partyModeFromCount(pax))
+  }
 
   const createTrip = async () => {
     const dep = encodeAirportCodes(parseAirportCodes(departure))
@@ -96,14 +138,10 @@ export function MakeTripSheet({
       setError('Indique un aéroport de départ (ex. CDG,ORY)')
       return
     }
-    if (!outbound || !inbound) {
-      setError('Choisis des dates')
-      return
-    }
     const out = outbound || suggested.outbound
     const ret = inbound || suggested.inbound
     if (!out || !ret) {
-      setError('Dates indisponibles pour ce Pop')
+      setError('Choisis des dates')
       return
     }
     setSaving(true)
@@ -202,8 +240,8 @@ export function MakeTripSheet({
             {cityLabel ? ` · ${cityLabel}` : ''}
           </Text>
           <Text style={styles.hubHint}>
-            Le programme est ajouté tout de suite. Active Vol et/ou Hôtel si
-            besoin — aussi plus tard dans le Planner.
+            On garde ce Pop dans ton Planner. Vol et hôtel, seulement si tu en
+            as besoin.
           </Text>
           {noFlightHub && wantFlight ? (
             <Text style={styles.hubHint}>
@@ -216,40 +254,53 @@ export function MakeTripSheet({
             {nudge ? <Text style={styles.nudgeAccent}>{nudge}</Text> : null}
             <Pressable
               onPress={() => setWantFlight((v) => !v)}
-              style={[styles.toggle, wantFlight && styles.toggleOn]}
+              style={styles.toggle}
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.toggleTitle}>Trouver un vol</Text>
                 <Text style={styles.toggleHint}>Départ + scan des prix</Text>
               </View>
-              <Text style={styles.toggleState}>{wantFlight ? 'ON' : 'OFF'}</Text>
+              <View
+                style={[styles.switchTrack, wantFlight && styles.switchTrackOn]}
+              >
+                <View
+                  style={[
+                    styles.switchThumb,
+                    wantFlight && styles.switchThumbOn,
+                  ]}
+                />
+              </View>
             </Pressable>
             <Pressable
               onPress={() => setWantHotel((v) => !v)}
-              style={[styles.toggle, wantHotel && styles.toggleOn]}
+              style={styles.toggle}
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.toggleTitle}>Trouver un hôtel</Text>
                 <Text style={styles.toggleHint}>Offres près du Pop</Text>
               </View>
-              <Text style={styles.toggleState}>{wantHotel ? 'ON' : 'OFF'}</Text>
+              <View
+                style={[styles.switchTrack, wantHotel && styles.switchTrackOn]}
+              >
+                <View
+                  style={[
+                    styles.switchThumb,
+                    wantHotel && styles.switchThumbOn,
+                  ]}
+                />
+              </View>
             </Pressable>
 
             <Text style={styles.label}>Qui voyage ?</Text>
             <View style={styles.row}>
-              {(
-                [
-                  { id: 'solo' as const, label: 'Solo' },
-                  { id: 'duo' as const, label: 'Duo' },
-                  { id: 'groupe' as const, label: 'Groupe' },
-                ] as const
-              ).map((p) => (
+              {PARTY_PILLS.map((p) => (
                 <Pressable
                   key={p.id}
-                  onPress={() => setPartyMode(p.id)}
+                  onPress={() => selectParty(p.id)}
                   style={[styles.pill, partyMode === p.id && styles.pillOn]}
                 >
                   <Text
+                    numberOfLines={1}
                     style={[
                       styles.pillText,
                       partyMode === p.id && styles.pillTextOn,
@@ -265,13 +316,13 @@ export function MakeTripSheet({
             <View style={styles.row}>
               <Pressable
                 style={styles.stepBtn}
-                onPress={() => setPassengers((n) => Math.max(1, n - 1))}
+                onPress={() => changePassengers(passengers - 1)}
               >
                 <Text style={styles.stepBtnText}>−</Text>
               </Pressable>
               <Pressable
                 style={styles.stepBtn}
-                onPress={() => setPassengers((n) => Math.min(9, n + 1))}
+                onPress={() => changePassengers(passengers + 1)}
               >
                 <Text style={styles.stepBtnText}>+</Text>
               </Pressable>
@@ -279,38 +330,38 @@ export function MakeTripSheet({
 
             {needsDeparture ? (
               <>
-                <Text style={styles.label}>Départ (IATA)</Text>
-                <TextInput
-                  value={departure}
-                  onChangeText={setDeparture}
-                  autoCapitalize="characters"
-                  placeholder="CDG,ORY"
-                  style={styles.input}
-                />
+                <Text style={styles.label}>Départ</Text>
+                <View style={{ marginTop: 6 }}>
+                  <CityAirportPicker
+                    airports={seedPopularAirports()}
+                    value={departure}
+                    onChange={setDeparture}
+                    excludeCitySlug={itinerary.city_slug}
+                  />
+                </View>
               </>
             ) : null}
 
             <Text style={styles.label}>Aller</Text>
-            <TextInput
+            <DateField
               value={outbound}
-              onChangeText={setOutbound}
-              placeholder="YYYY-MM-DD"
-              style={styles.input}
+              minDate={todayIso}
+              onChange={(d) => {
+                setOutbound(d)
+                if (inbound && inbound < d) setInbound(d)
+              }}
             />
             <Text style={styles.label}>Retour</Text>
-            <TextInput
+            <DateField
               value={inbound}
-              onChangeText={setInbound}
-              placeholder="YYYY-MM-DD"
-              style={styles.input}
+              minDate={outbound || todayIso}
+              onChange={setInbound}
             />
             <Pressable
               onPress={() => {
                 const d = generateDatesFromPreset('next-weekend')
-                if (d.dates_depart[0]?.date)
-                  setOutbound(d.dates_depart[0].date)
-                if (d.dates_retour[0]?.date)
-                  setInbound(d.dates_retour[0].date)
+                if (d.dates_depart[0]?.date) setOutbound(d.dates_depart[0].date)
+                if (d.dates_retour[0]?.date) setInbound(d.dates_retour[0].date)
               }}
             >
               <Text style={styles.link}>Week-end prochain</Text>
@@ -383,10 +434,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     backgroundColor: '#fff',
   },
-  toggleOn: {
-    borderColor: 'rgba(255,107,53,0.35)',
-    backgroundColor: '#FFF7F2',
-  },
   toggleTitle: { fontFamily: fonts.extrabold, fontSize: 15, color: colors.ink },
   toggleHint: {
     marginTop: 2,
@@ -394,12 +441,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
   },
-  toggleState: { fontFamily: fonts.bold, fontSize: 12, color: colors.ink },
-  nudge: {
-    marginTop: 8,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    color: colors.muted,
+  switchTrack: {
+    width: 48,
+    height: 28,
+    borderRadius: 999,
+    backgroundColor: '#EDE8E1',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  switchTrackOn: {
+    backgroundColor: '#2F9E5C',
+  },
+  switchThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    alignSelf: 'flex-start',
+  },
+  switchThumbOn: {
+    alignSelf: 'flex-end',
   },
   nudgeAccent: {
     marginTop: 8,
@@ -418,15 +479,25 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 8, marginTop: 8 },
   pill: {
     flex: 1,
+    minWidth: 0,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.line,
     paddingVertical: 10,
+    paddingHorizontal: 8,
     alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: '#fff',
   },
   pillOn: { backgroundColor: colors.ink, borderColor: colors.ink },
-  pillText: { fontFamily: fonts.bold, fontSize: 13, color: colors.muted },
-  pillTextOn: { color: '#F5EFEA' },
+  pillText: {
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    color: colors.muted,
+    textAlign: 'center',
+  },
+  pillTextOn: { color: '#fff' },
   stepBtn: {
     width: 44,
     height: 44,

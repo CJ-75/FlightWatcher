@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom'
 import {
   defaultAirportCodesForCity,
   encodeAirportCodes,
+  filterDepartureCityGroups,
   findCityGroupByCodes,
   groupAirportsByCity,
   parseAirportCodes,
@@ -23,6 +24,8 @@ type Props = {
   value: string
   onChange: (codes: string) => void
   className?: string
+  /** Ville du Pop à exclure de la liste de départ. */
+  excludeCitySlug?: string | null
 }
 
 type MenuPos = { top: number; left: number; width: number; maxHeight: number }
@@ -39,6 +42,7 @@ export function PopOriginSelect({
   value,
   onChange,
   className = '',
+  excludeCitySlug = null,
 }: Props) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -49,10 +53,13 @@ export function PopOriginSelect({
 
   const groups = useMemo(
     () =>
-      groupAirportsByCity(seedPopularAirports()).filter(
-        (g) => cityKey(g.country) === 'france',
+      filterDepartureCityGroups(
+        groupAirportsByCity(seedPopularAirports()).filter(
+          (g) => cityKey(g.country) === 'france',
+        ),
+        { excludeCitySlug },
       ),
-    [],
+    [excludeCitySlug],
   )
 
   const selectedCodes = useMemo(() => parseAirportCodes(value), [value])

@@ -43,14 +43,14 @@ export function distanceKmForIata(iata?: string | null): number | null {
 export const CITY_AIRPORT_DEFAULT_MAX_KM = 150
 
 /**
- * Always opt-in only — never in « Tous » / city default (even if km missing).
- * Paris → Vatry XCR.
+ * Always opt-in only — never in city default (even if km missing).
+ * Explicit « Tous » may still include these. Paris → Vatry XCR.
  */
 export const CITY_AIRPORT_OPT_IN_ONLY = new Set(['XCR'])
 
 /**
- * Default IATA list when the user picks a city / taps « Tous ».
- * Paris → CDG, ORY, BVA (XCR stays opt-in).
+ * Default IATA list when the user picks a city.
+ * Paris → CDG, ORY, BVA (XCR stays opt-in until « Tous » or chip).
  */
 export function defaultAirportCodesForCity(codes: string[]): string[] {
   const unique = [

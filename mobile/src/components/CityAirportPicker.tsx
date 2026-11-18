@@ -22,6 +22,7 @@ import {
   countryToFlagIso,
   defaultAirportCodesForCity,
   encodeAirportCodes,
+  filterDepartureCityGroups,
   findCityGroupByCodes,
   groupAirportsByCity,
   parseAirportCodes,
@@ -42,6 +43,8 @@ type Props = {
   /** Encoded selection: "BVA" or "CDG,ORY,BVA". */
   value: string
   onChange: (encoded: string) => void
+  /** Ville du Pop à exclure de la liste de départ. */
+  excludeCitySlug?: string | null
 }
 
 const PLACEHOLDER_CITIES = [
@@ -53,7 +56,12 @@ const PLACEHOLDER_CITIES = [
 const SEED = seedPopularAirports()
 const MIN_FULL = 80
 
-export function CityAirportPicker({ airports, value, onChange }: Props) {
+export function CityAirportPicker({
+  airports,
+  value,
+  onChange,
+  excludeCitySlug = null,
+}: Props) {
   const insets = useSafeAreaInsets()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -89,8 +97,11 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
   const effectiveAirports = catalog.length > 0 ? catalog : SEED
   const isFull = effectiveAirports.length >= MIN_FULL
   const groups = useMemo(
-    () => groupAirportsByCity(effectiveAirports),
-    [effectiveAirports],
+    () =>
+      filterDepartureCityGroups(groupAirportsByCity(effectiveAirports), {
+        excludeCitySlug,
+      }),
+    [effectiveAirports, excludeCitySlug],
   )
   const selectedCodes = useMemo(() => parseAirportCodes(value), [value])
   const selectedGroup = useMemo(
@@ -203,27 +214,24 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
 
   const selectAllInGroup = () => {
     if (!selectedGroup) return
+    // « Tous » = tous les aéroports de la ville (XCR inclus). Défaut ville = hubs seuls.
     const encoded = encodeAirportCodes(
-      defaultAirportCodesForCity(selectedGroup.airports.map((a) => a.code)),
+      selectedGroup.airports.map((a) => a.code.toUpperCase()),
     )
     if (encoded) onChange(encoded)
   }
 
   const placeholder = PLACEHOLDER_CITIES[placeholderIndex]
 
-  const defaultCodes = useMemo(
-    () =>
-      selectedGroup
-        ? defaultAirportCodesForCity(selectedGroup.airports.map((a) => a.code))
-        : [],
-    [selectedGroup],
-  )
-
-  // « Tous » = hubs par défaut (CDG/ORY/BVA), pas XCR.
   const allSelected =
-    defaultCodes.length > 0 &&
-    defaultCodes.every((c) => selectedCodes.includes(c)) &&
-    selectedCodes.every((c) => defaultCodes.includes(c))
+    selectedGroup != null &&
+    selectedGroup.airports.length > 0 &&
+    selectedGroup.airports.every((a) =>
+      selectedCodes.includes(a.code.toUpperCase()),
+    ) &&
+    selectedCodes.every((c) =>
+      selectedGroup.airports.some((a) => a.code.toUpperCase() === c),
+    )
 
   const triggerSub = (() => {
     if (!selectedCodes.length) return 'Choisis une ville'
@@ -338,7 +346,7 @@ export function CityAirportPicker({ airports, value, onChange }: Props) {
           </View>
           <View style={styles.subRow}>
             {selectedGroup.airports.map((a) => {
-              const on = selectedCodes.includes(a.code)
+              const on = selectedCodes.includes(a.code.toUpperCase())
               return (
                 <Pressable
                   key={a.code}

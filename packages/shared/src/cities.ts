@@ -1061,6 +1061,48 @@ export function ensureHubAirports(airports: Airport[]): Airport[] {
   return [...byCode.values()]
 }
 
+/** Slug comparable to `city_slug` (ex. Paris → paris). */
+export function cityGroupToSlug(group: Pick<CityAirportGroup, 'city'>): string {
+  return cityImageKey(group.city)
+}
+
+/**
+ * Départ picker: retire la ville du Pop ; réinjecte Paris si absente
+ * (sauf si Paris est la ville exclue).
+ */
+export function filterDepartureCityGroups(
+  groups: CityAirportGroup[],
+  opts?: { excludeCitySlug?: string | null },
+): CityAirportGroup[] {
+  const ex = String(opts?.excludeCitySlug || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+
+  let out = Array.isArray(groups) ? [...groups] : []
+  if (ex) {
+    out = out.filter((g) => cityGroupToSlug(g) !== ex)
+  }
+
+  const hasParis = out.some((g) => normalizeCityKey(g.city) === 'paris')
+  if (!hasParis && ex !== 'paris') {
+    const fromInput = (groups || []).find(
+      (g) => normalizeCityKey(g.city) === 'paris',
+    )
+    const paris =
+      fromInput ||
+      groupAirportsByCity(seedPopularAirports()).find(
+        (g) => normalizeCityKey(g.city) === 'paris',
+      )
+    if (paris) {
+      out = [paris, ...out.filter((g) => g.key !== paris.key)]
+    }
+  }
+  return out
+}
+
 export function groupAirportsByCity(airports: Airport[]): CityAirportGroup[] {
   const map = new Map<string, CityAirportGroup>()
   for (const a of filterSearchAirports(ensureHubAirports(airports))) {

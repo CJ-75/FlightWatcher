@@ -2,15 +2,23 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   arrivalCodesForCitySlug,
   citySlugDisplayNameFr,
+  defaultAirportCodesForCity,
   encodeAirportCodes,
+  filterDepartureCityGroups,
+  findCityGroupByCodes,
+  formatDateLocal,
   generateDatesFromPreset,
+  groupAirportsByCity,
   parseAirportCodes,
   partyModeDefaultPassengers,
+  partyModeFromCount,
+  seedPopularAirports,
   suggestedParcoursDates,
   type Itinerary,
   type PartyMode,
 } from '@waypop/shared'
 import { getApiClient } from '../../utils/apiClient'
+import { Calendar } from '../Calendar'
 import { CityAirportSelect } from '../CityAirportSelect'
 import { PassengerStepper } from '../PassengerStepper'
 import { getCurrentUser } from '../../lib/supabase'
@@ -30,6 +38,12 @@ type Props = {
   /** Elsewhere nudge above toggles. */
   nudge?: string | null
 }
+
+const PARTY_PILLS: { id: PartyMode; label: string }[] = [
+  { id: 'solo', label: 'Solo' },
+  { id: 'duo', label: 'Duo' },
+  { id: 'groupe', label: 'Groupe' },
+]
 
 /**
  * Feuille Pop → Planner : programme toujours ; Vol / Hôtel opt-in séparés.
@@ -51,6 +65,7 @@ export function MakeTripSheet({
   const [outbound, setOutbound] = useState(suggested.outbound)
   const [inbound, setInbound] = useState(suggested.inbound)
   const [budget, setBudget] = useState(200)
+  const todayIso = useMemo(() => formatDateLocal(new Date()), [])
   const [wantFlight, setWantFlight] = useState(false)
   const [wantHotel, setWantHotel] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -63,8 +78,28 @@ export function MakeTripSheet({
   }, [])
 
   useEffect(() => {
-    setPassengers(partyModeDefaultPassengers(partyMode))
-  }, [partyMode])
+    if (!wantFlight) return
+    const groups = filterDepartureCityGroups(
+      groupAirportsByCity(seedPopularAirports()),
+      { excludeCitySlug: itinerary.city_slug },
+    )
+    const selected = findCityGroupByCodes(
+      groups,
+      parseAirportCodes(departure),
+    )
+    if (selected) return
+    const fallback = groups[0]
+    if (!fallback) return
+    const encoded = encodeAirportCodes(
+      defaultAirportCodesForCity(fallback.airports.map((a) => a.code)),
+    )
+    if (encoded) setDeparture(encoded)
+  }, [wantFlight, itinerary.city_slug, departure])
+
+  useEffect(() => {
+    setOutbound(suggested.outbound)
+    setInbound(suggested.inbound)
+  }, [suggested])
 
   const cityLabel =
     citySlugDisplayNameFr(itinerary.city_slug) ||
@@ -74,20 +109,27 @@ export function MakeTripSheet({
     arrivalCodesForCitySlug(itinerary.city_slug) || undefined
   const needsDeparture = wantFlight
 
+  const selectParty = (mode: PartyMode) => {
+    setPartyMode(mode)
+    setPassengers(partyModeDefaultPassengers(mode))
+  }
+
+  const changePassengers = (n: number) => {
+    const pax = Math.min(9, Math.max(1, n))
+    setPassengers(pax)
+    setPartyMode(partyModeFromCount(pax))
+  }
+
   const createTrip = async () => {
     const dep = encodeAirportCodes(parseAirportCodes(departure))
     if (needsDeparture && !dep) {
       setError('Choisis une ville de départ')
       return
     }
-    if (!outbound || !inbound) {
-      setError('Choisis des dates')
-      return
-    }
     const out = outbound || suggested.outbound
     const ret = inbound || suggested.inbound
     if (!out || !ret) {
-      setError('Dates indisponibles pour ce Pop')
+      setError('Choisis des dates')
       return
     }
     setSaving(true)
@@ -208,8 +250,8 @@ export function MakeTripSheet({
             {cityLabel ? ` · ${cityLabel}` : ''}
           </p>
           <p className="rounded-2xl bg-[#FFF7F2] px-3.5 py-3 text-[13px] leading-snug text-[#5C4F44]">
-            Le programme du Pop est ajouté tout de suite. Active Vol et/ou Hôtel
-            si tu en as besoin — tu pourras aussi le faire plus tard.
+            On garde ce Pop dans ton Planner. Vol et hôtel, seulement si tu en
+            as besoin.
           </p>
 
           <div className="space-y-2">
@@ -237,34 +279,32 @@ export function MakeTripSheet({
               Qui voyage ?
             </p>
             <div className="flex gap-2">
-              {(
-                [
-                  { id: 'solo' as const, label: 'Solo' },
-                  { id: 'duo' as const, label: 'Duo' },
-                  { id: 'groupe' as const, label: 'À plusieurs' },
-                ] as const
-              ).map((p) => (
+              {PARTY_PILLS.map((p) => (
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => setPartyMode(p.id)}
-                  className={`flex-1 rounded-full px-3 py-2 text-sm font-bold border ${
+                  onClick={() => selectParty(p.id)}
+                  className={`min-w-0 flex-1 truncate rounded-full border px-2.5 py-2 text-center text-sm font-bold ${
                     partyMode === p.id
-                      ? 'bg-ink text-white border-ink'
-                      : 'bg-white text-muted border-line'
+                      ? 'border-ink bg-ink text-white'
+                      : 'border-line bg-white text-muted'
                   }`}
                 >
                   {p.label}
                 </button>
               ))}
             </div>
-          </div>
-
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
-              Voyageurs
-            </p>
-            <PassengerStepper value={passengers} onChange={setPassengers} min={1} max={9} />
+            <div className="mt-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted mb-2">
+                Voyageurs · {passengers}
+              </p>
+              <PassengerStepper
+                value={passengers}
+                onChange={changePassengers}
+                min={1}
+                max={9}
+              />
+            </div>
           </div>
 
           {needsDeparture ? (
@@ -275,30 +315,39 @@ export function MakeTripSheet({
               <CityAirportSelect
                 value={departure}
                 onChange={setDeparture}
-                placeholder="Ville / aéroport"
+                excludeCitySlug={itinerary.city_slug}
               />
             </div>
           ) : null}
 
           <div className="grid grid-cols-2 gap-3">
-            <label className="text-xs font-bold uppercase tracking-wide text-muted space-y-1">
-              Aller
-              <input
-                type="date"
+            <div className="space-y-1">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted">
+                Aller
+              </p>
+              <Calendar
                 value={outbound}
-                onChange={(e) => setOutbound(e.target.value)}
-                className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
+                onChange={(d) => {
+                  setOutbound(d)
+                  if (inbound && inbound < d) setInbound(d)
+                }}
+                minDate={todayIso}
+                displayFormat="slash"
+                compact
               />
-            </label>
-            <label className="text-xs font-bold uppercase tracking-wide text-muted space-y-1">
-              Retour
-              <input
-                type="date"
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted">
+                Retour
+              </p>
+              <Calendar
                 value={inbound}
-                onChange={(e) => setInbound(e.target.value)}
-                className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
+                onChange={setInbound}
+                minDate={outbound || todayIso}
+                displayFormat="slash"
+                compact
               />
-            </label>
+            </div>
           </div>
           <button
             type="button"
@@ -355,11 +404,7 @@ function ToggleRow({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left transition ${
-        checked
-          ? 'border-[rgba(255,107,53,0.35)] bg-[#FFF7F2]'
-          : 'border-line bg-white'
-      }`}
+      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-line bg-white px-4 py-3.5 text-left transition"
     >
       <span>
         <span className="block text-sm font-extrabold text-ink">{label}</span>
@@ -369,7 +414,7 @@ function ToggleRow({
       </span>
       <span
         className={`relative h-7 w-12 shrink-0 rounded-full transition ${
-          checked ? 'bg-[#FF6B35]' : 'bg-[#E8DFD6]'
+          checked ? 'bg-[#2F9E5C]' : 'bg-[#EDE8E1]'
         }`}
         aria-hidden
       >

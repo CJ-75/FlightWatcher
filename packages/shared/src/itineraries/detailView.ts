@@ -384,9 +384,9 @@ export function buildItinerarySticky(opts: {
   const originLabel = String(opts.originCityLabel || '').trim()
   const nudge =
     !isLocal && originLabel
-      ? `Tu viens de ${originLabel} ? Ajoute le vol et l’hôtel`
+      ? `Tu viens de ${originLabel} ? Pense au vol et à l’hôtel.`
       : !isLocal
-        ? 'Tu viens d’une autre ville ? Ajoute le vol et l’hôtel'
+        ? 'Tu n’es pas sur place ? Pense au vol et à l’hôtel.'
         : null
 
   const leftLabel = opts.dealPriceLabel

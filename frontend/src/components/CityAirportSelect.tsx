@@ -7,6 +7,7 @@ import {
   encodeAirportCodes,
   findCityGroupByCodes,
   defaultAirportCodesForCity,
+  filterDepartureCityGroups,
   groupAirportsByCity,
   parseAirportCodes,
   resolvePopularCityGroups,
@@ -19,6 +20,9 @@ import { CountryFlag } from './CountryFlag'
 type Props = {
   value: string
   onChange: (encoded: string) => void
+  /** Ville du Pop à exclure de la liste de départ. */
+  excludeCitySlug?: string | null
+  placeholder?: string
 }
 
 const PLACEHOLDER_CITIES = [
@@ -32,7 +36,11 @@ const SEED = seedPopularAirports()
 
 type MenuPos = { top: number; left: number; width: number; maxHeight: number }
 
-export function CityAirportSelect({ value, onChange }: Props) {
+export function CityAirportSelect({
+  value,
+  onChange,
+  excludeCitySlug = null,
+}: Props) {
   const peeked = peekAirports()
   const [airports, setAirports] = useState<Airport[]>(() =>
     peeked.length ? peeked : SEED,
@@ -91,7 +99,13 @@ export function CityAirportSelect({ value, onChange }: Props) {
     }
   }, [])
 
-  const groups = useMemo(() => groupAirportsByCity(airports), [airports])
+  const groups = useMemo(
+    () =>
+      filterDepartureCityGroups(groupAirportsByCity(airports), {
+        excludeCitySlug,
+      }),
+    [airports, excludeCitySlug],
+  )
   const selectedCodes = useMemo(() => parseAirportCodes(value), [value])
   const selectedGroup = useMemo(
     () => findCityGroupByCodes(groups, selectedCodes),
@@ -215,9 +229,9 @@ export function CityAirportSelect({ value, onChange }: Props) {
 
   const selectAllInGroup = () => {
     if (!selectedGroup) return
-    // « Tout sélectionner » = hubs proches ; aéroports lointains (ex. Vatry) restent opt-in.
+    // « Tous » = tous les aéroports de la ville. Défaut ville = hubs seuls.
     const encoded = encodeAirportCodes(
-      defaultAirportCodesForCity(selectedGroup.airports.map((a) => a.code)),
+      selectedGroup.airports.map((a) => a.code.toUpperCase()),
     )
     if (encoded) onChange(encoded)
   }
@@ -375,7 +389,7 @@ export function CityAirportSelect({ value, onChange }: Props) {
           </div>
           <div className="flex flex-wrap gap-1.5">
             {selectedGroup.airports.map((a) => {
-              const on = selectedCodes.includes(a.code)
+              const on = selectedCodes.includes(a.code.toUpperCase())
               return (
                 <motion.button
                   key={a.code}

@@ -4,13 +4,24 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   arrivalCodesForCitySlug,
   citySlugDisplayNameFr,
+  defaultAirportCodesForCity,
   encodeAirportCodes,
+  filterDepartureCityGroups,
+  findCityGroupByCodes,
+  formatDateLocal,
   generateDatesFromPreset,
+  groupAirportsByCity,
   parseAirportCodes,
+  partyModeDefaultPassengers,
+  partyModeFromCount,
+  seedPopularAirports,
   suggestedParcoursDates,
   type Itinerary,
+  type PartyMode,
 } from '@waypop/shared'
 import { useAuthSheet } from '@/components/auth/AuthHost'
+import { DateField } from '@/components/pop/DateField'
+import { PopOriginSelect } from '@/components/pop/PopOriginSelect'
 import { auth } from '@/lib/auth'
 import { getPlannerApi, plannerTripHref } from '@/lib/plannerApi'
 
@@ -25,6 +36,12 @@ type Props = {
   }
 }
 
+const PARTY_PILLS: { id: PartyMode; label: string }[] = [
+  { id: 'solo', label: 'Solo' },
+  { id: 'duo', label: 'Duo' },
+  { id: 'groupe', label: 'Groupe' },
+]
+
 export function PopAddPlannerSheet({ open, onClose, itinerary }: Props) {
   const { openAuthSheet, signedIn } = useAuthSheet()
   const suggested = useMemo(
@@ -33,17 +50,38 @@ export function PopAddPlannerSheet({ open, onClose, itinerary }: Props) {
   )
   const [departure, setDeparture] = useState('CDG,ORY')
   const [passengers, setPassengers] = useState(2)
+  const [partyMode, setPartyMode] = useState<PartyMode>('duo')
   const [outbound, setOutbound] = useState(suggested.outbound)
   const [inbound, setInbound] = useState(suggested.inbound)
   const [wantFlight, setWantFlight] = useState(false)
   const [wantHotel, setWantHotel] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const todayIso = useMemo(() => formatDateLocal(new Date()), [])
 
   useEffect(() => {
     setOutbound(suggested.outbound)
     setInbound(suggested.inbound)
   }, [suggested])
+
+  useEffect(() => {
+    if (!open || !wantFlight) return
+    const groups = filterDepartureCityGroups(
+      groupAirportsByCity(seedPopularAirports()),
+      { excludeCitySlug: itinerary.city_slug },
+    )
+    const selected = findCityGroupByCodes(
+      groups,
+      parseAirportCodes(departure),
+    )
+    if (selected) return
+    const fallback = groups[0]
+    if (!fallback) return
+    const encoded = encodeAirportCodes(
+      defaultAirportCodesForCity(fallback.airports.map((a) => a.code)),
+    )
+    if (encoded) setDeparture(encoded)
+  }, [open, wantFlight, itinerary.city_slug, departure])
 
   if (!open) return null
 
@@ -51,8 +89,18 @@ export function PopAddPlannerSheet({ open, onClose, itinerary }: Props) {
     citySlugDisplayNameFr(itinerary.city_slug) ||
     itinerary.city_slug ||
     ''
-  const needsDates = wantFlight || wantHotel
   const needsDeparture = wantFlight
+
+  const selectParty = (mode: PartyMode) => {
+    setPartyMode(mode)
+    setPassengers(partyModeDefaultPassengers(mode))
+  }
+
+  const changePassengers = (n: number) => {
+    const pax = Math.min(9, Math.max(1, n))
+    setPassengers(pax)
+    setPartyMode(partyModeFromCount(pax))
+  }
 
   const createTrip = async () => {
     const dep = encodeAirportCodes(parseAirportCodes(departure))
@@ -60,14 +108,10 @@ export function PopAddPlannerSheet({ open, onClose, itinerary }: Props) {
       setError('Choisis une ville de départ')
       return
     }
-    if (needsDates && (!outbound || !inbound)) {
-      setError('Choisis des dates')
-      return
-    }
     const out = outbound || suggested.outbound
     const ret = inbound || suggested.inbound
     if (!out || !ret) {
-      setError('Dates indisponibles pour ce Pop')
+      setError('Choisis des dates')
       return
     }
     setSaving(true)
@@ -155,85 +199,110 @@ export function PopAddPlannerSheet({ open, onClose, itinerary }: Props) {
             {cityLabel ? ` · ${cityLabel}` : ''}
           </p>
           <p className="rounded-2xl bg-accent-soft/60 px-3.5 py-3 text-[13px] leading-snug text-ink">
-            Le programme du Pop est ajouté tout de suite. Active Vol et/ou Hôtel
-            si tu en as besoin — tu pourras aussi le faire plus tard.
+            On garde ce Pop dans ton Planner. Vol et hôtel, seulement si tu en
+            as besoin.
           </p>
 
+          <p className="text-[12px] font-semibold text-accent">
+            Tu n’es pas sur place ? Pense au vol et à l’hôtel.
+          </p>
           <ToggleRow
-            label="Vol"
-            hint="Départ + dates, puis scan des prix"
+            label="Trouver un vol"
+            hint="Départ + scan des prix"
             checked={wantFlight}
             onChange={setWantFlight}
           />
           <ToggleRow
-            label="Hôtel"
-            hint="Dates, puis offres près du Pop"
+            label="Trouver un hôtel"
+            hint="Offres près du Pop"
             checked={wantHotel}
             onChange={setWantHotel}
           />
-          <p className="text-[12px] font-medium text-ink-muted">
-            Tu viens d’une autre ville ? Active Vol et/ou Hôtel.
-          </p>
 
-          <label className="block text-[11px] font-bold uppercase tracking-wide text-ink-muted">
-            Voyageurs
-            <input
-              type="number"
-              min={1}
-              max={9}
-              value={passengers}
-              onChange={(e) =>
-                setPassengers(Math.min(9, Math.max(1, Number(e.target.value) || 1)))
-              }
-              className="mt-2 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink"
-            />
-          </label>
-
-          {needsDeparture ? (
-            <label className="block text-[11px] font-bold uppercase tracking-wide text-ink-muted">
-              Départ (IATA)
+          <div>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+              Qui voyage ?
+            </p>
+            <div className="flex gap-2">
+              {PARTY_PILLS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => selectParty(p.id)}
+                  className={`min-w-0 flex-1 truncate rounded-full border px-2.5 py-2 text-center text-sm font-bold ${
+                    partyMode === p.id
+                      ? 'border-ink bg-ink text-cream'
+                      : 'border-line bg-white text-ink-muted'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <label className="mt-3 block text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+              Voyageurs · {passengers}
               <input
-                value={departure}
-                onChange={(e) => setDeparture(e.target.value.toUpperCase())}
-                placeholder="CDG,ORY"
+                type="number"
+                min={1}
+                max={9}
+                value={passengers}
+                onChange={(e) =>
+                  changePassengers(Number(e.target.value) || 1)
+                }
                 className="mt-2 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink"
               />
             </label>
-          ) : null}
+          </div>
 
-          {needsDates ? (
-            <div className="grid grid-cols-2 gap-3">
-              <label className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">
-                Aller
-                <input
-                  type="date"
-                  value={outbound}
-                  onChange={(e) => setOutbound(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink"
-                />
-              </label>
-              <label className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">
-                Retour
-                <input
-                  type="date"
-                  value={inbound}
-                  onChange={(e) => setInbound(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-semibold text-ink"
-                />
-              </label>
-              <button
-                type="button"
-                className="col-span-2 text-left text-xs font-bold text-accent"
-                onClick={() => {
-                  const d = generateDatesFromPreset('next-weekend')
-                  if (d.dates_depart[0]?.date) setOutbound(d.dates_depart[0].date)
-                  if (d.dates_retour[0]?.date) setInbound(d.dates_retour[0].date)
-                }}
-              >
-                Utiliser le week-end prochain
-              </button>
+          {needsDeparture ? (
+            <div>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+                Départ
+              </p>
+              <PopOriginSelect
+                value={departure}
+                onChange={setDeparture}
+                excludeCitySlug={itinerary.city_slug}
+              />
             </div>
           ) : null}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+                Aller
+              </p>
+              <DateField
+                value={outbound}
+                minDate={todayIso}
+                onChange={(d) => {
+                  setOutbound(d)
+                  if (inbound && inbound < d) setInbound(d)
+                }}
+              />
+            </div>
+            <div>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+                Retour
+              </p>
+              <DateField
+                value={inbound}
+                minDate={outbound || todayIso}
+                onChange={setInbound}
+              />
+            </div>
+            <button
+              type="button"
+              className="col-span-2 text-left text-xs font-bold text-accent"
+              onClick={() => {
+                const d = generateDatesFromPreset('next-weekend')
+                if (d.dates_depart[0]?.date) setOutbound(d.dates_depart[0].date)
+                if (d.dates_retour[0]?.date) setInbound(d.dates_retour[0].date)
+              }}
+            >
+              Utiliser le week-end prochain
+            </button>
+          </div>
 
           {error ? (
             <p className="text-sm font-semibold text-red-600">{error}</p>
@@ -270,11 +339,7 @@ function ToggleRow({
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3.5 text-left ${
-        checked
-          ? 'border-[rgba(255,107,53,0.35)] bg-[#FFF7F2]'
-          : 'border-line bg-white'
-      }`}
+      className="flex w-full items-center justify-between gap-3 rounded-2xl border border-line bg-white px-4 py-3.5 text-left"
     >
       <span>
         <span className="block text-sm font-extrabold text-ink">{label}</span>
@@ -284,7 +349,7 @@ function ToggleRow({
       </span>
       <span
         className={`relative h-7 w-12 shrink-0 rounded-full ${
-          checked ? 'bg-[#FF6B35]' : 'bg-[#E8DFD6]'
+          checked ? 'bg-[#2F9E5C]' : 'bg-[#EDE8E1]'
         }`}
         aria-hidden
       >

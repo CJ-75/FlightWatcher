@@ -16,6 +16,38 @@ export function formatDateLocal(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
+/** Affichage JJ/MM/AAAA depuis un ISO YYYY-MM-DD. */
+export function formatIsoDateFrSlash(iso: string | null | undefined): string {
+  const s = String(iso || '').slice(0, 10)
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (!m) return ''
+  return `${m[3]}/${m[2]}/${m[1]}`
+}
+
+/** Parse JJ/MM/AAAA (ou JJ.MM.AAAA) → YYYY-MM-DD, sinon null. */
+export function parseFrSlashDateToIso(fr: string | null | undefined): string | null {
+  const t = String(fr || '').trim()
+  const m = /^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})$/.exec(t)
+  if (!m) return null
+  const day = Number(m[1])
+  const month = Number(m[2])
+  const year = Number(m[3])
+  if (
+    !Number.isFinite(day) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(year) ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > 31 ||
+    year < 2000 ||
+    year > 2100
+  ) {
+    return null
+  }
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
 /** 1=lundi … 7=dimanche */
 export function getDayOfWeekMondayBased(date: Date): number {
   const jsDay = date.getDay()
