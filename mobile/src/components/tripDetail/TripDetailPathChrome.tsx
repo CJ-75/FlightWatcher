@@ -9,6 +9,7 @@ import {
   StyleSheet,
   TextInput,
   Platform,
+  type LayoutChangeEvent,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Path } from 'react-native-svg'
@@ -49,6 +50,10 @@ type Props = {
   onTabChange?: (tab: TripDetailTabId) => void
   /** Lock vertical scroll while hotel gallery is swiped */
   scrollLocked?: boolean
+  /** Bottom sticky CTA (ex. Lancer ce Pop) — same pattern as Parcours. */
+  stickyCta?: string
+  onStickyCta?: () => void
+  stickyLeft?: string
 }
 
 function PencilIcon({ color = '#fff', size = 13 }: { color?: string; size?: number }) {
@@ -97,13 +102,21 @@ export function TripDetailPathChrome({
   activeTab,
   onTabChange,
   scrollLocked = false,
+  stickyCta,
+  onStickyCta,
+  stickyLeft,
 }: Props) {
   const insets = useSafeAreaInsets()
   const [tabInternal, setTabInternal] = useState<TripDetailTabId>('apercu')
+  const [stickyH, setStickyH] = useState(72)
   const tab = activeTab ?? tabInternal
   const setTab = (next: TripDetailTabId) => {
     onTabChange?.(next)
     if (activeTab == null) setTabInternal(next)
+  }
+  const onStickyLayout = (e: LayoutChangeEvent) => {
+    const h = e.nativeEvent.layout.height
+    if (h > 0 && Math.abs(h - stickyH) > 1) setStickyH(h)
   }
 
   useEffect(() => {
@@ -213,7 +226,9 @@ export function TripDetailPathChrome({
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 28 + insets.bottom }}
+        contentContainerStyle={{
+          paddingBottom: stickyCta ? stickyH + 16 : 28 + insets.bottom,
+        }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         scrollEnabled={!scrollLocked}
@@ -285,12 +300,96 @@ export function TripDetailPathChrome({
           <View style={styles.panel}>{body}</View>
         </View>
       </ScrollView>
+
+      {stickyCta ? (
+        <View
+          onLayout={onStickyLayout}
+          style={[
+            styles.sticky,
+            { paddingBottom: Math.max(insets.bottom, 12) },
+          ]}
+        >
+          {stickyLeft ? (
+            <View style={styles.stickyLeft}>
+              <Text style={styles.stickyLeftText} numberOfLines={2}>
+                {stickyLeft}
+              </Text>
+            </View>
+          ) : null}
+          <Pressable
+            style={[
+              styles.stickyCta,
+              !stickyLeft ? styles.stickyCtaAlone : null,
+            ]}
+            onPress={onStickyCta}
+          >
+            <View style={styles.stickyCtaInner}>
+              {/lancer/i.test(stickyCta || '') ? (
+                <View style={styles.playMarkOnDark} />
+              ) : null}
+              <Text style={styles.stickyCtaText}>{stickyCta}</Text>
+            </View>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#FFFBF8' },
+  sticky: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#EDE8E1',
+  },
+  stickyLeft: { flex: 1 },
+  stickyLeftText: {
+    fontFamily: fonts.semibold,
+    fontSize: 14,
+    color: '#1A120E',
+  },
+  stickyCta: {
+    backgroundColor: '#1A120E',
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  stickyCtaAlone: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  stickyCtaInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  playMarkOnDark: {
+    width: 0,
+    height: 0,
+    marginLeft: 1,
+    borderTopWidth: 5,
+    borderBottomWidth: 5,
+    borderLeftWidth: 8,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: '#fff',
+  },
+  stickyCtaText: {
+    color: '#fff',
+    fontFamily: fonts.bold,
+    fontSize: 14,
+  },
   fixedHeader: {
     position: 'absolute',
     top: 0,

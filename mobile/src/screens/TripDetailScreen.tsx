@@ -2496,6 +2496,10 @@ export function TripDetailScreen() {
                 }
               : undefined
           }
+          stickyCta={fromPopSource ? 'Lancer ce Pop' : undefined}
+          onStickyCta={
+            fromPopSource ? () => setLaunchPopOpen(true) : undefined
+          }
           onRename={isOrganizer ? startRename : undefined}
           titleEditing={editingName}
           titleDraft={nameDraft}
@@ -2528,13 +2532,6 @@ export function TripDetailScreen() {
                 steps={pathSteps}
                 onStepPress={(id) => onPipelineStep(id)}
               />
-              {fromPopSource ? (
-                <Button
-                  label="Lancer ce Pop"
-                  left={<LaunchPopPlayMark />}
-                  onPress={() => setLaunchPopOpen(true)}
-                />
-              ) : null}
               {wantFlightOpt && scanning ? (
                 <PlannerScanPanel
                   fromLabel={
