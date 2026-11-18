@@ -313,3 +313,214 @@ def apply_itinerary_to_trip(
         "restored": restored,
         "skipped": skipped,
     }
+
+
+def resolve_source_itinerary_id_for_trip(
+    supabase,
+    planned_trip_id: str,
+    trip_meta: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """Find Pop itinerary id from trip.meta and/or trip_items provenance."""
+    tid = str(planned_trip_id or "").strip()
+    if not tid or not supabase:
+        return None
+    meta = dict(trip_meta or {}) if isinstance(trip_meta, dict) else {}
+    if not meta:
+        try:
+            cur = (
+                supabase.table("planned_trips")
+                .select("meta")
+                .eq("id", tid)
+                .limit(1)
+                .execute()
+            )
+            row = (cur.data or [None])[0] or {}
+            raw = row.get("meta")
+            meta = dict(raw) if isinstance(raw, dict) else {}
+        except Exception as e:
+            logger.debug("resolve source trip meta: %s", e)
+            meta = {}
+    from_meta = str(meta.get("source_itinerary_id") or "").strip()
+    if from_meta:
+        return from_meta
+
+    src_item_ids: List[str] = []
+    try:
+        item_rows = (
+            supabase.table("trip_items")
+            .select("meta")
+            .eq("planned_trip_id", tid)
+            .limit(60)
+            .execute()
+        ).data or []
+        for row in item_rows:
+            im = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+            sid = str(
+                im.get("source_itinerary_id") or im.get("itinerary_id") or ""
+            ).strip()
+            if sid:
+                return sid
+            fid = str(im.get("from_itinerary_item_id") or "").strip()
+            if fid:
+                src_item_ids.append(fid)
+    except Exception as e:
+        logger.debug("resolve source trip_items: %s", e)
+        return None
+
+    for fid in src_item_ids[:12]:
+        try:
+            ii_rows = (
+                supabase.table("itinerary_items")
+                .select("itinerary_id")
+                .eq("id", fid)
+                .limit(1)
+                .execute()
+            ).data or []
+            itin_id = (
+                str(ii_rows[0].get("itinerary_id") or "").strip()
+                if ii_rows
+                else ""
+            )
+            if itin_id:
+                return itin_id
+        except Exception as e:
+            logger.debug("resolve itinerary_item %s: %s", fid, e)
+            continue
+    return None
+
+
+def unskip_pop_items_on_trip(supabase, planned_trip_id: str) -> Dict[str, Any]:
+    """Re-activate skipped trip_items that still point at a Pop source item."""
+    tid = str(planned_trip_id or "").strip()
+    if not tid or not supabase:
+        return {"ok": False, "error": "missing_trip", "restored": 0}
+    restored = 0
+    try:
+        rows = (
+            supabase.table("trip_items")
+            .select("id,status,meta,item_type")
+            .eq("planned_trip_id", tid)
+            .eq("status", "skipped")
+            .limit(80)
+            .execute()
+        ).data or []
+    except Exception as e:
+        return {"ok": False, "error": str(e), "restored": 0}
+
+    for row in rows:
+        m = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+        has_src = bool(
+            str(
+                m.get("from_itinerary_item_id")
+                or m.get("source_itinerary_id")
+                or m.get("itinerary_id")
+                or ""
+            ).strip()
+        )
+        if not has_src:
+            continue
+        viator_code = str(
+            m.get("product_code") or m.get("viator_product_code") or ""
+        ).strip()
+        has_viator = bool(viator_code) and not viator_code.startswith("skip-")
+        item_status = "idea" if has_viator else "validated"
+        try:
+            supabase.table("trip_items").update(
+                {"status": item_status, "updated_at": _now_iso()}
+            ).eq("id", row["id"]).execute()
+            restored += 1
+        except Exception as e:
+            logger.debug("unskip pop item: %s", e)
+    return {"ok": True, "restored": restored, "mode": "unskip"}
+
+
+def restore_pop_on_trip(supabase, planned_trip_id: str) -> Dict[str, Any]:
+    """
+    Remettre les activités Pop sur un séjour :
+    1) résoudre source_itinerary_id puis apply_itinerary_to_trip
+    2) sinon unskip des trip_items encore liés au Pop
+    """
+    tid = str(planned_trip_id or "").strip()
+    if not tid or not supabase:
+        return {"ok": False, "error": "missing_trip"}
+
+    try:
+        cur = (
+            supabase.table("planned_trips")
+            .select("id,meta")
+            .eq("id", tid)
+            .limit(1)
+            .execute()
+        )
+        trip_row = (cur.data or [None])[0]
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+    if not trip_row:
+        return {"ok": False, "error": "trip_not_found"}
+
+    meta = (
+        dict(trip_row.get("meta") or {})
+        if isinstance(trip_row.get("meta"), dict)
+        else {}
+    )
+    itin_id = resolve_source_itinerary_id_for_trip(supabase, tid, meta)
+    applied: Dict[str, Any] = {}
+    if itin_id:
+        next_meta = {
+            **meta,
+            "from_pop": True,
+            "source_itinerary_id": itin_id,
+        }
+        if next_meta != meta:
+            try:
+                supabase.table("planned_trips").update(
+                    {"meta": next_meta, "updated_at": _now_iso()}
+                ).eq("id", tid).execute()
+            except Exception as e:
+                logger.debug("restore persist source: %s", e)
+        applied = apply_itinerary_to_trip(
+            supabase,
+            itinerary_id=itin_id,
+            planned_trip_id=tid,
+            draft_id=None,
+        )
+        if applied.get("ok"):
+            return {
+                "ok": True,
+                "mode": "apply",
+                "source_itinerary_id": itin_id,
+                "created": int(applied.get("created") or 0),
+                "restored": int(applied.get("restored") or 0),
+                "skipped": int(applied.get("skipped") or 0),
+            }
+        # Fall through to unskip if apply failed (deleted itinerary, etc.)
+
+    unskipped = unskip_pop_items_on_trip(supabase, tid)
+    if unskipped.get("ok") and int(unskipped.get("restored") or 0) > 0:
+        if not meta.get("from_pop"):
+            try:
+                supabase.table("planned_trips").update(
+                    {
+                        "meta": {**meta, "from_pop": True},
+                        "updated_at": _now_iso(),
+                    }
+                ).eq("id", tid).execute()
+            except Exception:
+                pass
+        return {
+            "ok": True,
+            "mode": "unskip",
+            "source_itinerary_id": itin_id,
+            "restored": int(unskipped.get("restored") or 0),
+            "created": 0,
+            "skipped": 0,
+        }
+
+    if itin_id:
+        return {
+            "ok": False,
+            "error": "apply_failed",
+            "source_itinerary_id": itin_id,
+            "detail": applied.get("error"),
+        }
+    return {"ok": False, "error": "source_not_found"}

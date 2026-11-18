@@ -634,35 +634,36 @@ export function ActivityStepPanel(props: {
   }, [sourceItineraryId, fromPop, plannedTripId, items])
 
   const restorePopActivities = async () => {
-    let itinId =
-      String(resolvedSourceId || sourceItineraryId || '').trim() ||
-      resolveSourceItineraryId(null, items) ||
-      ''
-    if (!itinId && owner.planned_trip_id) {
-      try {
-        const trip = await getApiClient().getPlannedTrip(owner.planned_trip_id)
-        itinId =
-          resolveSourceItineraryId(
-            (trip.meta || {}) as { source_itinerary_id?: string | null },
-            null,
-          ) || ''
-        if (itinId) setResolvedSourceId(itinId)
-      } catch {
-        // fall through
-      }
-    }
-    if (!itinId || (!owner.planned_trip_id && !owner.draft_token)) {
+    const plannedId = String(owner.planned_trip_id || '').trim()
+    if (!plannedId && !owner.draft_token) {
       setError('Pop source introuvable — recharge le séjour.')
       return
     }
     setRestoringPop(true)
     setError(null)
     try {
-      await getApiClient().applyItinerary(itinId, {
-        planned_trip_id: owner.planned_trip_id || undefined,
-        draft_token: owner.draft_token || undefined,
-      })
-      track('restore_pop', { itinerary_id: itinId })
+      if (plannedId) {
+        const res = await getApiClient().restorePopPlannedTrip(plannedId)
+        const sid = String(res.source_itinerary_id || '').trim()
+        if (sid) setResolvedSourceId(sid)
+        track('restore_pop', {
+          itinerary_id: sid || undefined,
+          mode: res.mode,
+        })
+      } else {
+        let itinId =
+          String(resolvedSourceId || sourceItineraryId || '').trim() ||
+          resolveSourceItineraryId(null, items) ||
+          ''
+        if (!itinId) {
+          setError('Pop source introuvable — recharge le séjour.')
+          return
+        }
+        await getApiClient().applyItinerary(itinId, {
+          draft_token: owner.draft_token || undefined,
+        })
+        track('restore_pop', { itinerary_id: itinId })
+      }
       invalidateTripItemsCache(owner)
       backfillDoneRef.current = ''
       await load({ force: true })

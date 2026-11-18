@@ -1115,6 +1115,18 @@ export function createApiClient(options: ApiClientOptions = {}) {
         method: 'PATCH',
         body: JSON.stringify(body),
       }),
+    /** Remettre les activités Pop (résolution serveur + apply / unskip). */
+    restorePopPlannedTrip: (id: string) =>
+      request<{
+        ok: boolean
+        mode?: 'apply' | 'unskip'
+        source_itinerary_id?: string | null
+        created?: number
+        restored?: number
+        skipped?: number
+      }>(`/api/planner/trips/${encodeURIComponent(id)}/restore-pop`, {
+        method: 'POST',
+      }),
     completePlannedTrip: (id: string) =>
       request<PlannedTrip>(
         `/api/planner/trips/${encodeURIComponent(id)}/complete`,

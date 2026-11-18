@@ -3050,45 +3050,53 @@ async def get_trip(trip_id: str, request: Request):
     meta = trip.get("meta") if isinstance(trip.get("meta"), dict) else {}
     if not meta.get("source_itinerary_id"):
         try:
-            item_rows = (
-                supabase.table("trip_items")
-                .select("meta")
-                .eq("planned_trip_id", trip_id)
-                .limit(40)
-                .execute()
-            ).data or []
-            src_item_ids: list[str] = []
-            for row in item_rows:
-                im = row.get("meta") if isinstance(row.get("meta"), dict) else {}
-                fid = str(im.get("from_itinerary_item_id") or "").strip()
-                if fid:
-                    src_item_ids.append(fid)
-            if src_item_ids:
-                next_meta = {**meta, "from_pop": True}
-                ii_rows = (
-                    supabase.table("itinerary_items")
-                    .select("itinerary_id")
-                    .in_("id", src_item_ids[:10])
-                    .limit(1)
+            from activities.itineraries import resolve_source_itinerary_id_for_trip
+
+            itin_id = resolve_source_itinerary_id_for_trip(
+                supabase, trip_id, meta
+            )
+            if itin_id:
+                next_meta = {
+                    **meta,
+                    "from_pop": True,
+                    "source_itinerary_id": itin_id,
+                }
+                try:
+                    supabase.table("planned_trips").update(
+                        {
+                            "meta": next_meta,
+                            "updated_at": datetime.utcnow().isoformat(),
+                        }
+                    ).eq("id", trip_id).execute()
+                except Exception:
+                    pass
+                trip["meta"] = next_meta
+            else:
+                # Still mark from_pop when trip_items keep Pop provenance.
+                item_rows = (
+                    supabase.table("trip_items")
+                    .select("meta")
+                    .eq("planned_trip_id", trip_id)
+                    .limit(40)
                     .execute()
                 ).data or []
-                itin_id = (
-                    str(ii_rows[0].get("itinerary_id") or "").strip()
-                    if ii_rows
-                    else ""
-                )
-                if itin_id:
-                    next_meta["source_itinerary_id"] = itin_id
-                    try:
-                        supabase.table("planned_trips").update(
-                            {
-                                "meta": next_meta,
-                                "updated_at": datetime.utcnow().isoformat(),
-                            }
-                        ).eq("id", trip_id).execute()
-                    except Exception:
-                        pass
-                trip["meta"] = next_meta
+                has_pop_src = False
+                for row in item_rows:
+                    im = (
+                        row.get("meta")
+                        if isinstance(row.get("meta"), dict)
+                        else {}
+                    )
+                    if str(
+                        im.get("from_itinerary_item_id")
+                        or im.get("source_itinerary_id")
+                        or im.get("itinerary_id")
+                        or ""
+                    ).strip():
+                        has_pop_src = True
+                        break
+                if has_pop_src or meta.get("from_pop"):
+                    trip["meta"] = {**meta, "from_pop": True}
         except Exception:
             pass
     elif not meta.get("from_pop"):
@@ -3315,6 +3323,32 @@ async def complete_trip(trip_id: str, request: Request):
     if not result.data:
         raise HTTPException(status_code=404, detail="Voyage introuvable")
     return _row_to_trip(result.data[0])
+
+
+@router.post("/api/planner/trips/{trip_id}/restore-pop")
+@optional_auth
+async def restore_pop_trip(trip_id: str, request: Request):
+    """Remettre les activités du Pop source (apply ou unskip local)."""
+    user_id = _require_user(request)
+    supabase = _svc()
+    row = _user_can_access(supabase, trip_id, user_id)
+    if not row or row.get("status") == "archived":
+        raise HTTPException(status_code=404, detail="Voyage introuvable")
+    from activities.itineraries import restore_pop_on_trip
+
+    result = restore_pop_on_trip(supabase, trip_id)
+    if not result.get("ok"):
+        err = str(result.get("error") or "restore_failed")
+        if err in ("source_not_found", "trip_not_found"):
+            raise HTTPException(
+                status_code=404,
+                detail="Pop source introuvable — recharge le séjour.",
+            )
+        raise HTTPException(
+            status_code=400,
+            detail="Impossible de remettre le Pop",
+        )
+    return result
 
 
 @router.post("/api/planner/trips/{trip_id}/relaunch")
