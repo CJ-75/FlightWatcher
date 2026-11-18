@@ -2373,14 +2373,19 @@ export function TripDetailScreen() {
     activitiesDone: activityStepProgress(activityItems).done,
     activitiesPartial: activityStepProgress(activityItems).partial,
   })
-  const pathSteps =
-    fromPopSource && popFlightLinkOk === false
-      ? pathView.steps.map((s) =>
-          s.id === 'flight'
-            ? { ...s, state: 'off' as const, statusLabel: 'Sans vol' }
-            : s,
-        )
-      : pathView.steps
+  const pathSteps = pathView.steps.map((s) => {
+    if (
+      s.id === 'flight' &&
+      fromPopSource &&
+      popFlightLinkOk === false
+    ) {
+      return { ...s, state: 'off' as const, statusLabel: 'Sans vol' }
+    }
+    if (s.id === 'hotel' && !wantHotelOpt) {
+      return { ...s, statusLabel: 'Activer' }
+    }
+    return s
+  })
   const outDateMobile =
     workspace?.out_date || trip.dates_depart?.[0]?.date || null
   const retDateMobile =
