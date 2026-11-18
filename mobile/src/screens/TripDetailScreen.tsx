@@ -2475,6 +2475,7 @@ export function TripDetailScreen() {
     }),
     activitiesDone: activityStepProgress(activityItems).done,
     activitiesPartial: activityStepProgress(activityItems).partial,
+    activitiesHint: activityStepProgress(activityItems).hint,
   })
   const pathSteps = pathView.steps.map((s) => {
     if (
@@ -2486,6 +2487,19 @@ export function TripDetailScreen() {
     }
     if (s.id === 'hotel' && !wantHotelOpt) {
       return { ...s, statusLabel: 'Activer' }
+    }
+    if (s.id === 'activities') {
+      const act = activityStepProgress(activityItems)
+      const hasActive = activityItems.some(
+        (i) => String(i.status || '') !== 'skipped',
+      )
+      if (!hasActive) {
+        return {
+          ...s,
+          state: 'current' as const,
+          statusLabel: act.hint,
+        }
+      }
     }
     return s
   })

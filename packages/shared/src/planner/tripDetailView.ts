@@ -70,6 +70,7 @@ export type TripDetailViewInput = {
   hotel?: HotelStepStatus
   activitiesDone?: boolean
   activitiesPartial?: boolean
+  activitiesHint?: string
   restaurantsDone?: boolean
   restaurantsPartial?: boolean
 }
@@ -214,6 +215,7 @@ export function buildTripDetailView(input: TripDetailViewInput): TripDetailView 
           activitiesEnabled,
           activitiesDone: input.activitiesDone,
           activitiesPartial: input.activitiesPartial,
+          activitiesHint: input.activitiesHint,
           restaurantsEnabled,
           restaurantsDone: input.restaurantsDone,
           restaurantsPartial: input.restaurantsPartial,

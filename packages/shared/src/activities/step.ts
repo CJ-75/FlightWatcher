@@ -254,10 +254,11 @@ export function activityStepProgress(items: { status?: string | null }[]): {
   const active = items.filter((i) => i.status !== 'skipped')
   if (!active.length) {
     const skipped = items.some((i) => i.status === 'skipped')
+    // Pas d’activité active → pas vert : le parcours reste à traiter (orange).
     return {
-      done: skipped,
+      done: false,
       partial: false,
-      hint: skipped ? 'Passé' : 'Choisir',
+      hint: skipped ? ACTIVITY_SKIP_LABEL_FR : 'Choisir',
     }
   }
   // ≥1 activité sur le séjour → étape verte (parcours), comme Vol « Choisi ».
