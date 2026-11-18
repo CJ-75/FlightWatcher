@@ -1136,35 +1136,6 @@ export default function MyTrip() {
     plannerTripId,
   ])
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="max-w-[1080px] mx-auto px-4 py-8 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8">
-          <div className="space-y-4">
-            <div className="h-9 w-2/3 max-w-sm rounded-lg bg-slate-200 animate-pulse" />
-            <div className="h-5 w-1/2 max-w-xs rounded bg-slate-200 animate-pulse" />
-            <div className="h-48 rounded-2xl bg-slate-200 animate-pulse" />
-            <div className="h-48 rounded-2xl bg-slate-200 animate-pulse" />
-          </div>
-          <div className="hidden lg:block">
-            <div className="h-64 rounded-2xl bg-slate-200 animate-pulse" />
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (error || !draft) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 px-4">
-        <p className="text-slate-700 font-medium">{error || 'Voyage introuvable ou expiré'}</p>
-        <Link to="/sejours" className="text-primary-600 font-bold underline">
-          ← Séjours
-        </Link>
-      </div>
-    )
-  }
-
   const travelersLabel = adults === 1 ? '1 personne' : `${adults} personnes`
 
   /** Hotel payment focus: never cite the flight in the sticky récap. */
@@ -1562,6 +1533,35 @@ export default function MyTrip() {
     token,
     track,
   ])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <div className="max-w-[1080px] mx-auto px-4 py-8 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-8">
+          <div className="space-y-4">
+            <div className="h-9 w-2/3 max-w-sm rounded-lg bg-slate-200 animate-pulse" />
+            <div className="h-5 w-1/2 max-w-xs rounded bg-slate-200 animate-pulse" />
+            <div className="h-48 rounded-2xl bg-slate-200 animate-pulse" />
+            <div className="h-48 rounded-2xl bg-slate-200 animate-pulse" />
+          </div>
+          <div className="hidden lg:block">
+            <div className="h-64 rounded-2xl bg-slate-200 animate-pulse" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !draft) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3 px-4">
+        <p className="text-slate-700 font-medium">{error || 'Voyage introuvable ou expiré'}</p>
+        <Link to="/sejours" className="text-primary-600 font-bold underline">
+          ← Séjours
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <div
