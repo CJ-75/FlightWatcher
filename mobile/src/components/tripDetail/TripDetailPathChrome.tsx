@@ -206,8 +206,11 @@ export function TripDetailPathChrome({
               <Text style={styles.chipText}>{c}</Text>
               {i === 0 && onEditDates ? (
                 <Pressable
-                  onPress={onEditDates}
-                  hitSlop={8}
+                  onPress={(e) => {
+                    e?.stopPropagation?.()
+                    onEditDates()
+                  }}
+                  hitSlop={12}
                   accessibilityRole="button"
                   accessibilityLabel="Modifier les dates"
                   style={styles.dateEditBtn}
@@ -260,13 +263,14 @@ export function TripDetailPathChrome({
       >
         <ImageBackground source={{ uri: heroUrl }} style={styles.hero}>
           <LinearGradient
+            pointerEvents="none"
             colors={['rgba(0,0,0,0.4)', 'transparent', 'rgba(0,0,0,0.72)']}
             locations={[0, 0.4, 1]}
             style={StyleSheet.absoluteFill}
           />
           {/* Spacer so title doesn’t sit under fixed back */}
-          <View style={{ height: insets.top + 56 }} />
-          {heroCopy}
+          <View pointerEvents="none" style={{ height: insets.top + 56 }} />
+          <View pointerEvents="box-none">{heroCopy}</View>
         </ImageBackground>
 
         <View style={styles.sheet}>
@@ -522,14 +526,15 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 },
   chipItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dateEditBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.28)',
+    backgroundColor: 'rgba(255,255,255,0.3)',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255,255,255,0.4)',
+    borderColor: 'rgba(255,255,255,0.45)',
+    zIndex: 5,
   },
   dateEditChip: {
     flexDirection: 'row',

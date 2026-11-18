@@ -875,22 +875,6 @@ export function ActivityStepPanel(props: {
               ? ACTIVITY_RESTORE_EMPTY_FR
               : 'Parcours le catalogue pour en ajouter.'}
           </Text>
-          {canRestorePop ? (
-            <Pressable
-              onPress={() => void restorePopActivities()}
-              disabled={restoringPop}
-              style={({ pressed }) => [
-                styles.restoreBtn,
-                { alignSelf: 'flex-start', marginTop: 4 },
-                pressed && { opacity: 0.85 },
-                restoringPop && { opacity: 0.6 },
-              ]}
-            >
-              <Text style={styles.restoreBtnText}>
-                {restoringPop ? '…' : ACTIVITY_RESTORE_POP_FR}
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
       ) : null}
 

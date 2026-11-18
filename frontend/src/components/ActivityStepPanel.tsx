@@ -1045,7 +1045,7 @@ export function ActivityStepPanel(props: {
       </ul>
       )}
       {!activeItems.length && !loading ? (
-        <div className="flex flex-1 flex-col justify-center rounded-xl border border-dashed border-orange-100 bg-[#FFF8F3] px-3.5 py-3 space-y-2">
+        <div className="flex flex-1 flex-col justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-3.5 py-3 space-y-1">
           <p className="text-sm font-semibold text-slate-800">
             Aucune activité pour l’instant
           </p>
@@ -1054,23 +1054,14 @@ export function ActivityStepPanel(props: {
               ? ACTIVITY_RESTORE_EMPTY_FR
               : 'Parcours le catalogue, ou ajoute une suggestion rapide.'}
           </p>
-          {canRestorePop ? (
-            <button
-              type="button"
-              disabled={restoringPop}
-              onClick={() => void restorePopActivities()}
-              className="inline-flex w-fit rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs font-bold text-[#E85A28] disabled:opacity-60"
-            >
-              {restoringPop ? '…' : ACTIVITY_RESTORE_POP_FR}
-            </button>
-          ) : (
+          {!canRestorePop ? (
             <Link
               to={catalogHref}
               className="inline-flex text-xs font-bold text-primary-700 hover:underline"
             >
               {ACTIVITY_BROWSE_CATALOG_FR} →
             </Link>
-          )}
+          ) : null}
         </div>
       ) : null}
 
@@ -1154,7 +1145,7 @@ export function ActivityStepPanel(props: {
 
       {items.length > 0 ? (
         <p className="text-[11px] text-slate-400">
-          Glisse pour réordonner · statut utilisateur ≠ disponibilité offre
+          Glisse pour réordonner
         </p>
       ) : null}
 

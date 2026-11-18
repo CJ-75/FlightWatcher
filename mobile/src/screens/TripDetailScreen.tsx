@@ -56,7 +56,6 @@ import {
   trackTripDetailViewed,
   plannedTripIsFromPop,
   arrivalCodesForCitySlug,
-  ACTIVITY_RESTORE_POP_FR,
   resolveSourceItineraryId,
   PLANNER_RELAUNCH_ACTION_FR,
   PLANNER_RELAUNCH_CARD_FR,
@@ -100,7 +99,6 @@ import {
 import { getHotelGalleryCached } from '../lib/hotelGalleryCache'
 import {
   hydrateTripItems,
-  invalidateTripItemsCache,
   listTripItemsCached,
 } from '../lib/tripItemsCache'
 import {
@@ -304,7 +302,6 @@ export function TripDetailScreen() {
     meta?: Record<string, unknown> | null
   }
   const [activityItems, setActivityItems] = useState<ActivityRow[]>([])
-  const [restoringPopActivities, setRestoringPopActivities] = useState(false)
   const onActivityItemsChange = useCallback((items: ActivityRow[]) => {
     setActivityItems((prev) => {
       if (items.length === 0 && prev.length > 0) return prev
@@ -2561,52 +2558,6 @@ export function TripDetailScreen() {
   const popProgrammeDays = fromPopSource
     ? groupItemsByDay(popProgrammeItems)
     : []
-  const canLaunchPop = fromPopSource && popProgrammeItems.length > 0
-
-  const restorePopFromPlanner = async () => {
-    let itinId = resolvedPopItineraryId || ''
-    if (!itinId) {
-      try {
-        const fresh = await getApi().getPlannedTrip(tripId)
-        itinId =
-          resolveSourceItineraryId(
-            (fresh.meta || {}) as { source_itinerary_id?: string | null },
-            null,
-          ) || ''
-        if (fresh.meta) {
-          setTrip((prev) =>
-            prev
-              ? { ...prev, meta: { ...(prev.meta || {}), ...fresh.meta } }
-              : prev,
-          )
-        }
-      } catch {
-        // fall through
-      }
-    }
-    if (!itinId) {
-      Alert.alert('Pop', 'Pop source introuvable — recharge le séjour.')
-      return
-    }
-    setRestoringPopActivities(true)
-    try {
-      await getApi().applyItinerary(itinId, { planned_trip_id: tripId })
-      invalidateTripItemsCache({ planned_trip_id: tripId })
-      const res = await listTripItemsCached(
-        { planned_trip_id: tripId },
-        { force: true },
-      )
-      onActivityItemsChange((res.items || []) as ActivityRow[])
-      Alert.alert('Pop', 'Activités du Pop remises')
-    } catch (e) {
-      Alert.alert(
-        'Erreur',
-        e instanceof Error ? e.message : 'Impossible de remettre le Pop',
-      )
-    } finally {
-      setRestoringPopActivities(false)
-    }
-  }
   const orgaDisplayMobile =
     authName || trip.organizer?.full_name || trip.member_names?.[0] || null
   const orgaFirstMobile =
@@ -2700,44 +2651,6 @@ export function TripDetailScreen() {
                 steps={pathSteps}
                 onStepPress={(id) => onPipelineStep(id)}
               />
-              {canEditDates ? (
-                <Pressable
-                  onPress={openEditDates}
-                  style={({ pressed }) => [
-                    styles.editDatesBtn,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Modifier les dates"
-                >
-                  <Text style={styles.editDatesBtnText}>
-                    {dateLineMobile
-                      ? `Dates · ${dateLineMobile}`
-                      : 'Choisir les dates'}
-                  </Text>
-                  <View style={styles.editDatesBtnIcon}>
-                    <PencilIcon size={14} color={colors.primaryDeep} />
-                  </View>
-                </Pressable>
-              ) : null}
-              {fromPopSource &&
-              plannerActivitiesEnabled &&
-              !canLaunchPop ? (
-                <Pressable
-                  onPress={() => void restorePopFromPlanner()}
-                  disabled={restoringPopActivities}
-                  style={({ pressed }) => [
-                    styles.restorePopBtn,
-                    (pressed || restoringPopActivities) && { opacity: 0.7 },
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={ACTIVITY_RESTORE_POP_FR}
-                >
-                  <Text style={styles.restorePopBtnText}>
-                    {restoringPopActivities ? '…' : ACTIVITY_RESTORE_POP_FR}
-                  </Text>
-                </Pressable>
-              ) : null}
               {wantFlightOpt && scanning ? (
                 <PlannerScanPanel
                   fromLabel={
@@ -3361,10 +3274,11 @@ export function TripDetailScreen() {
         imageStyle={styles.heroImage}
       >
         <LinearGradient
+          pointerEvents="none"
           colors={['rgba(17,10,7,0.2)', 'rgba(24,13,8,0.92)']}
           style={StyleSheet.absoluteFill}
         />
-        <View style={styles.heroContent}>
+        <View style={styles.heroContent} pointerEvents="box-none">
           <Text style={styles.kicker}>PROCHAIN DÉPART · {cityLabel.toUpperCase()}</Text>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={2}>
@@ -4781,48 +4695,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
-  },
-  editDatesBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.lineStrong,
-    backgroundColor: colors.white,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    minHeight: 48,
-  },
-  editDatesBtnText: {
-    flex: 1,
-    fontFamily: fonts.semibold,
-    fontSize: 13,
-    color: colors.ink,
-  },
-  editDatesBtnIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primarySoft,
-  },
-  restorePopBtn: {
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.primaryMuted,
-    backgroundColor: colors.primarySoft,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    minHeight: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  restorePopBtnText: {
-    fontFamily: fonts.bold,
-    fontSize: 14,
-    color: colors.primaryDeep,
   },
   pipelineCard: {
     backgroundColor: colors.white,

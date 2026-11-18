@@ -18,10 +18,7 @@ import {
   openHotelInvoicePdf,
 } from '../utils/hotelInvoice'
 import { getAppConfig } from '../utils/configCache'
-import {
-  invalidateTripItemsCache,
-  listTripItemsCached,
-} from '../utils/tripItemsCache'
+import { listTripItemsCached } from '../utils/tripItemsCache'
 import {
   invalidateTravelWorkspacesCache,
   listTravelWorkspacesCached,
@@ -82,7 +79,6 @@ import {
   PLANNER_HUB_EMPTY_FR,
   plannedTripIsFromPop,
   resolveSourceItineraryId,
-  ACTIVITY_RESTORE_POP_FR,
   tripItemsToItineraryItems,
   arrivalCodesForCitySlug,
   PLANNER_PHASE_LABEL_FR,
@@ -1559,7 +1555,6 @@ function TripDetailView({
     name: string
     avatarUrl?: string
   } | null>(null)
-  const [restoringPopActivities, setRestoringPopActivities] = useState(false)
   const [activityItems, setActivityItems] = useState<
     {
       id?: string
@@ -2816,53 +2811,6 @@ function TripDetailView({
       (i) => Boolean(i.id) && String(i.status || '') !== 'skipped',
     )
 
-  const restorePopFromPlanner = async () => {
-    let itinId =
-      resolveSourceItineraryId(tripMeta, activityItems) ||
-      String(tripMeta.source_itinerary_id || '').trim()
-    if (!itinId) {
-      try {
-        const fresh = await getApiClient().getPlannedTrip(tripId)
-        itinId =
-          resolveSourceItineraryId(
-            (fresh.meta || {}) as { source_itinerary_id?: string | null },
-            null,
-          ) || ''
-        if (fresh.meta) {
-          setTrip((prev) =>
-            prev ? { ...prev, meta: { ...(prev.meta || {}), ...fresh.meta } } : prev,
-          )
-        }
-      } catch {
-        // fall through
-      }
-    }
-    if (!itinId) {
-      onToast('Pop source introuvable')
-      stayExtrasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      return
-    }
-    setRestoringPopActivities(true)
-    try {
-      await getApiClient().applyItinerary(itinId, {
-        planned_trip_id: tripId,
-      })
-      invalidateTripItemsCache({ planned_trip_id: tripId })
-      onToast('Activités du Pop remises')
-      stayExtrasRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      const res = await listTripItemsCached(
-        { planned_trip_id: tripId },
-        { force: true },
-      )
-      const rows = (res.items || []) as typeof activityItems
-      onActivityItemsChange(rows)
-    } catch (e) {
-      onToast(e instanceof Error ? e.message : 'Impossible de remettre le Pop')
-    } finally {
-      setRestoringPopActivities(false)
-    }
-  }
-
   // Création → scan immédiat (ne pas attendre le getTrip / isOrganizer)
   useEffect(() => {
     if (!autoScan || autoScanStarted.current) return
@@ -3707,12 +3655,16 @@ function TripDetailView({
                 {canEditDates ? (
                   <button
                     type="button"
-                    onClick={openEditDates}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      openEditDates()
+                    }}
                     aria-label="Modifier les dates"
                     title="Modifier les dates"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/35 bg-white/20 text-white backdrop-blur-md hover:bg-white/30"
+                    className="relative z-20 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/40 bg-white/25 text-white backdrop-blur-md hover:bg-white/40 pointer-events-auto"
                   >
-                    <PencilIcon className="w-3.5 h-3.5" />
+                    <PencilIcon className="w-4 h-4" />
                   </button>
                 ) : null}
               </div>
@@ -3845,32 +3797,6 @@ function TripDetailView({
                 }
               }}
             />
-            {canEditDates ? (
-              <button
-                type="button"
-                onClick={openEditDates}
-                aria-label="Modifier les dates"
-                title="Modifier les dates"
-                className="inline-flex w-full items-center gap-3 rounded-2xl border border-[#EDE4DC] bg-white px-4 py-3 text-sm font-semibold text-[#1A120E] hover:bg-[#F7F2ED] min-h-[44px]"
-              >
-                <span className="truncate min-w-0 flex-1 text-left">
-                  {dateLine ? `Dates · ${dateLine}` : 'Choisir les dates'}
-                </span>
-                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FFF7F2] text-[#E85A28] ring-1 ring-orange-200">
-                  <PencilIcon className="w-3.5 h-3.5" />
-                </span>
-              </button>
-            ) : null}
-            {fromPopSource && plannerActivitiesEnabled && !canLaunchPop ? (
-              <button
-                type="button"
-                disabled={restoringPopActivities}
-                onClick={() => void restorePopFromPlanner()}
-                className="inline-flex w-full items-center justify-center rounded-2xl border border-orange-200 bg-[#FFF7F2] px-4 py-3 text-sm font-bold text-[#E85A28] hover:bg-[#FFEEE4] disabled:opacity-60 min-h-[44px]"
-              >
-                {restoringPopActivities ? '…' : ACTIVITY_RESTORE_POP_FR}
-              </button>
-            ) : null}
             {!fromPopSource &&
             (tripMeta.want_flight != null || tripMeta.want_hotel != null) ? (
               <TripOptInToggles
@@ -4281,6 +4207,56 @@ function TripDetailView({
           </div>
         </div>
       ) : null}
+      {showEditFlexible ? (
+        <div className="app-dialog-root z-[80]">
+          <button
+            type="button"
+            aria-label="Fermer"
+            className="app-dialog-backdrop"
+            onClick={() => {
+              setShowEditFlexible(false)
+              setDatesPickerMode('draft')
+            }}
+          />
+          <div className="app-dialog-panel app-dialog-xl p-5 sm:p-8">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="font-extrabold text-lg text-ink">
+                {t('planner.scan.editDates')}
+              </h4>
+              <button
+                type="button"
+                disabled={savingCriteria}
+                onClick={() => {
+                  if (datesPickerMode === 'commit') void saveEditedDates()
+                  else {
+                    setShowEditFlexible(false)
+                    setDatesPickerMode('draft')
+                  }
+                }}
+                className="font-bold text-primary-600 px-3 py-1.5 rounded-xl hover:bg-primary-50 disabled:opacity-60"
+              >
+                {savingCriteria
+                  ? '…'
+                  : datesPickerMode === 'commit'
+                    ? 'Enregistrer'
+                    : 'OK'}
+              </button>
+            </div>
+            <FlexibleDatesSelector
+              flexibleDates={{
+                dates_depart: editDatesDepart,
+                dates_retour: editDatesRetour,
+              }}
+              onFlexibleDatesChange={(d) => {
+                setEditDatesDepart(d.dates_depart)
+                setEditDatesRetour(d.dates_retour)
+                setEditPreset('flexible')
+              }}
+              formatDateFr={formatDateFr}
+            />
+          </div>
+        </div>
+      ) : null}
       <LaunchPopSheet
         open={launchPopOpen}
         title={trip.name}
@@ -4413,12 +4389,16 @@ function TripDetailView({
                 {canEditDates ? (
                   <button
                     type="button"
-                    onClick={openEditDates}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      openEditDates()
+                    }}
                     aria-label="Modifier les dates"
                     title="Modifier les dates"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/35 bg-white/20 text-white backdrop-blur-md hover:bg-white/30"
+                    className="relative z-20 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/40 bg-white/25 text-white backdrop-blur-md hover:bg-white/40 pointer-events-auto"
                   >
-                    <PencilIcon className="w-3.5 h-3.5" />
+                    <PencilIcon className="w-4 h-4" />
                   </button>
                 ) : null}
               </div>
@@ -5434,7 +5414,7 @@ function TripDetailView({
       ) : null}
 
       {showEditFlexible ? (
-        <div className="app-dialog-root z-[60]">
+        <div className="app-dialog-root z-[80]">
           <button
             type="button"
             aria-label="Fermer"
