@@ -3924,17 +3924,18 @@ function TripDetailView({
         }
         programme={
           fromPopSource ? (
-            programmeItems.length ? (
-              <ItineraryStepsTimeline
-                items={tripItemsToItineraryItems(programmeItems, {
-                  itineraryId: tripMeta.source_itinerary_id,
-                })}
-              />
-            ) : (
-              <p className="text-sm font-medium text-[#8A7B6E]">
-                Les étapes du Pop apparaîtront ici.
-              </p>
-            )
+            (() => {
+              const popSteps = tripItemsToItineraryItems(programmeItems, {
+                itineraryId: tripMeta.source_itinerary_id,
+              })
+              return popSteps.length ? (
+                <ItineraryStepsTimeline items={popSteps} />
+              ) : (
+                <p className="text-sm font-medium text-[#8A7B6E]">
+                  Les étapes du Pop apparaîtront ici.
+                </p>
+              )
+            })()
           ) : (
             <ProgrammePanel
               outDate={outDate}

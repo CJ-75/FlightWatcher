@@ -9,6 +9,8 @@ export type PlannerTripItemLike = {
   day_offset?: number | null
   moment?: string | null
   notes?: string | null
+  /** Soft-removed planner activities — excluded from Programme / Launch Pop. */
+  status?: string | null
   meta?: Record<string, unknown> | null
   places?: {
     id?: string
@@ -131,6 +133,7 @@ export function tripItemsToItineraryItems(
 ): ItineraryItem[] {
   return rows
     .filter((r) => {
+      if (String(r.status || '') === 'skipped') return false
       const t = String(r.item_type || 'activity')
       return t === 'activity' || t === 'restaurant' || t === 'place'
     })

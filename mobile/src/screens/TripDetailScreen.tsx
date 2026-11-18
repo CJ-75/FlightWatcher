@@ -2437,6 +2437,7 @@ export function TripDetailScreen() {
             day_offset: i.day_offset,
             moment: i.moment,
             notes: i.notes,
+            status: i.status,
             meta: i.meta || null,
           })),
         { itineraryId: tripMeta.source_itinerary_id },
