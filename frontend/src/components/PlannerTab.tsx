@@ -77,6 +77,9 @@ import {
   resolveHotelStepStatus,
   PLANNER_HUB_TABS,
   PLANNER_HUB_EMPTY_FR,
+  plannedTripIsFromPop,
+  tripItemsToItineraryItems,
+  arrivalCodesForCitySlug,
   PLANNER_PHASE_LABEL_FR,
   PLANNER_PHASE_HINT_FR,
   PLANNER_PHASE_ACTION_FR,
@@ -112,6 +115,8 @@ import { TripDetailPathChrome } from './planner/detail/TripDetailPathChrome'
 import { ProgrammePanel } from './planner/detail/ProgrammePanel'
 import { PathStepsTiles } from './planner/detail/PathStepsTiles'
 import { TripOptInToggles } from './planner/detail/TripOptInToggles'
+import { ItineraryStepsTimeline } from './parcours/ItineraryStepsTimeline'
+import { LaunchPopSheet } from './parcours/LaunchPopSheet'
 import { StayPipelineStepper } from './StayPipelineStepper'
 import { ActivityStepPanel } from './ActivityStepPanel'
 import { HotelPhotoGallery } from './HotelPhotoGallery'
@@ -130,6 +135,19 @@ function PencilIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
     >
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  )
+}
+
+function LaunchPopPlayIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+      className={`block translate-x-[0.5px] ${className}`}
+    >
+      <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86a1 1 0 0 0-1.5.86z" />
     </svg>
   )
 }
@@ -685,6 +703,7 @@ function TripListCard({
 }) {
   const { t } = useI18n()
   const trip = workspace.planned_trip || null
+  const fromPop = plannedTripIsFromPop(trip)
   const destIata = workspace.dest_iata || trip?.arrival_airport || null
   const originIata = workspace.origin_iata || trip?.departure_airport || null
   const arrival = arrivalDisplayLabel(destIata, cityGroups)
@@ -835,6 +854,11 @@ function TripListCard({
             ? PLANNER_RELAUNCH_KICKER_FR
             : PHASE_LABEL[workspace.phase]}
         </span>
+        {fromPop ? (
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-[#FFF3EC] text-[#E85A28] ring-1 ring-[#FFD8C4]">
+            Pop
+          </span>
+        ) : null}
         {workspace.is_invitee ? (
           <span className="text-xs font-semibold px-3 py-1.5 rounded-full bg-violet-50 text-violet-800 ring-1 ring-violet-200">
             {t('planner.tag.invitee')}
@@ -901,17 +925,24 @@ function TripListCard({
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent lg:bg-gradient-to-r lg:from-transparent lg:via-black/10 lg:to-black/40" />
             <div className="absolute top-5 right-5 flex flex-col items-end gap-1.5">
-              <span
-                className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${
-                  workspace.capabilities?.can_relaunch
-                    ? 'bg-[#FF6B35] text-white'
-                    : PHASE_CHIP_CLASS[workspace.phase]
-                }`}
-              >
-                {workspace.capabilities?.can_relaunch
-                  ? PLANNER_RELAUNCH_KICKER_FR
-                  : PHASE_LABEL[workspace.phase]}
-              </span>
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                <span
+                  className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${
+                    workspace.capabilities?.can_relaunch
+                      ? 'bg-[#FF6B35] text-white'
+                      : PHASE_CHIP_CLASS[workspace.phase]
+                  }`}
+                >
+                  {workspace.capabilities?.can_relaunch
+                    ? PLANNER_RELAUNCH_KICKER_FR
+                    : PHASE_LABEL[workspace.phase]}
+                </span>
+                {fromPop ? (
+                  <span className="text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm bg-[#FF6B35]/95 text-white">
+                    Pop
+                  </span>
+                ) : null}
+              </div>
               {workspace.is_invitee ? (
                 <span className="text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm bg-violet-500/90 text-white">
                   {t('planner.tag.invitee')}
@@ -999,17 +1030,24 @@ function TripListCard({
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/20" />
         <div className="absolute top-4 right-4 flex flex-col items-end gap-1.5">
-          <span
-            className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${
-              workspace.capabilities?.can_relaunch
-                ? 'bg-[#FF6B35] text-white'
-                : PHASE_CHIP_CLASS[workspace.phase]
-            }`}
-          >
-            {workspace.capabilities?.can_relaunch
-              ? PLANNER_RELAUNCH_KICKER_FR
-              : PHASE_LABEL[workspace.phase]}
-          </span>
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <span
+              className={`text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm ${
+                workspace.capabilities?.can_relaunch
+                  ? 'bg-[#FF6B35] text-white'
+                  : PHASE_CHIP_CLASS[workspace.phase]
+              }`}
+            >
+              {workspace.capabilities?.can_relaunch
+                ? PLANNER_RELAUNCH_KICKER_FR
+                : PHASE_LABEL[workspace.phase]}
+            </span>
+            {fromPop ? (
+              <span className="text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm bg-[#FF6B35]/95 text-white">
+                Pop
+              </span>
+            ) : null}
+          </div>
           {workspace.is_invitee ? (
             <span className="text-[11px] font-bold px-3 py-1.5 rounded-full backdrop-blur-sm bg-violet-500/90 text-white">
               {t('planner.tag.invitee')}
@@ -1448,6 +1486,9 @@ function TripDetailView({
   const [trip, setTrip] = useState<PlannedTripDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
+  /** Pop Vol toggle: null checking, true only if Ryanair link exists */
+  const [popFlightLinkOk, setPopFlightLinkOk] = useState<boolean | null>(null)
+  const [launchPopOpen, setLaunchPopOpen] = useState(false)
   const [originFilter, setOriginFilter] = useState<Set<string> | null>(null)
   const [acting, setActing] = useState<string | null>(null)
   const [membersBusy, setMembersBusy] = useState(false)
@@ -2274,7 +2315,9 @@ function TripDetailView({
   }
 
   const onHotelBlockCta = () => {
-    if (hotelBooked || externalHotel) {
+    const metaWantHotel = (trip?.meta as { want_hotel?: boolean } | null)
+      ?.want_hotel
+    if ((hotelBooked || externalHotel) && metaWantHotel !== true) {
       openReservations()
       return
     }
@@ -2359,6 +2402,20 @@ function TripDetailView({
   }
 
   const scan = useCallback(async () => {
+    const meta = (trip?.meta || {}) as {
+      source_itinerary_id?: string | null
+      from_pop?: boolean
+    }
+    const isPop =
+      plannedTripIsFromPop({ meta }) || plannedTripIsFromPop(trip)
+    if (isPop && popFlightLinkOk !== true) {
+      onToast(
+        popFlightLinkOk === false
+          ? 'Aucune liaison aérienne — scan vol indisponible'
+          : 'Vérification de la liaison aérienne…',
+      )
+      return
+    }
     setScanning(true)
     setScanEmpty(null)
     setError(null)
@@ -2407,7 +2464,7 @@ function TripDetailView({
     } finally {
       setScanning(false)
     }
-  }, [tripId, trip?.budget_max, load, t])
+  }, [tripId, trip, popFlightLinkOk, load, t, onToast])
 
   const updateCriteriaAndScan = async () => {
     if (!trip) return
@@ -2630,14 +2687,6 @@ function TripDetailView({
     }
   }
 
-  // Création → scan immédiat (ne pas attendre le getTrip / isOrganizer)
-  useEffect(() => {
-    if (!autoScan || autoScanStarted.current) return
-    autoScanStarted.current = true
-    setScanning(true)
-    void scan().finally(() => onAutoScanDone?.())
-  }, [autoScan, scan, onAutoScanDone])
-
   // Pop → Planner : open hotel compose once draft/skip ready
   useEffect(() => {
     let key = ''
@@ -2663,10 +2712,20 @@ function TripDetailView({
     source_itinerary_id?: string | null
     source_city_slug?: string | null
   }
-  const fromPopSource = Boolean(tripMeta.source_itinerary_id)
+  const fromPopSource =
+    plannedTripIsFromPop({ meta: tripMeta }) ||
+    plannedTripIsFromPop(trip) ||
+    activityItems.some((i) =>
+      Boolean(
+        (i.meta as { from_itinerary_item_id?: string } | null | undefined)
+          ?.from_itinerary_item_id,
+      ),
+    )
+  const fromPopTag = fromPopSource
+  const showPopFlightToggle = !fromPopSource || popFlightLinkOk === true
   const wantFlightOpt =
     tripMeta.want_flight != null
-      ? Boolean(tripMeta.want_flight)
+      ? Boolean(tripMeta.want_flight) && showPopFlightToggle
       : fromPopSource
         ? false
         : !externalFlight
@@ -2676,6 +2735,64 @@ function TripDetailView({
       : fromPopSource
         ? false
         : !(externalHotel || hotelBooked)
+
+  // Création → scan immédiat (ne pas attendre le getTrip / isOrganizer)
+  useEffect(() => {
+    if (!autoScan || autoScanStarted.current) return
+    if (fromPopSource && popFlightLinkOk === null) return
+    if (fromPopSource && popFlightLinkOk === false) {
+      autoScanStarted.current = true
+      onAutoScanDone?.()
+      return
+    }
+    autoScanStarted.current = true
+    setScanning(true)
+    void scan().finally(() => onAutoScanDone?.())
+  }, [
+    autoScan,
+    scan,
+    onAutoScanDone,
+    fromPopSource,
+    popFlightLinkOk,
+  ])
+
+  useEffect(() => {
+    if (!fromPopSource || !trip) {
+      setPopFlightLinkOk(null)
+      return
+    }
+    const dep = String(trip.departure_airport || '').trim()
+    const arr =
+      String(trip.arrival_airport || '').trim() ||
+      arrivalCodesForCitySlug(tripMeta.source_city_slug) ||
+      ''
+    if (!dep || !arr) {
+      setPopFlightLinkOk(false)
+      return
+    }
+    let cancelled = false
+    setPopFlightLinkOk(null)
+    const timer = window.setTimeout(() => {
+      void getApiClient()
+        .checkRouteLink({ from: dep, to: arr })
+        .then((res) => {
+          if (!cancelled) setPopFlightLinkOk(Boolean(res.linked))
+        })
+        .catch(() => {
+          if (!cancelled) setPopFlightLinkOk(false)
+        })
+    }, 200)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [
+    fromPopSource,
+    trip?.id,
+    trip?.departure_airport,
+    trip?.arrival_airport,
+    tripMeta.source_city_slug,
+  ])
 
   const setWantFlags = async (patch: {
     want_flight?: boolean
@@ -2694,7 +2811,28 @@ function TripDetailView({
   }
 
   const enableFlightOpt = async () => {
-    await setWantFlags({ want_flight: true })
+    if (fromPopSource && popFlightLinkOk !== true) {
+      onToast('Aucune liaison aérienne connue pour cette destination')
+      return
+    }
+    try {
+      await setWantFlags({ want_flight: true })
+    } catch (e) {
+      onToast(e instanceof Error ? e.message : 'Impossible d’activer le vol')
+      return
+    }
+    setFlightDraft((prev) => {
+      if (!prev) return prev
+      const payload = { ...(prev.payload || {}) } as Record<string, unknown>
+      delete payload.flight_external
+      delete payload.external_flight
+      const flight = {
+        ...((payload.flight as Record<string, unknown> | undefined) || {}),
+      }
+      delete flight.external
+      payload.flight = flight
+      return { ...prev, payload }
+    })
     try {
       await getApiClient().reopenPlannedTripFlight(tripId)
     } catch {
@@ -2717,7 +2855,21 @@ function TripDetailView({
   }
 
   const enableHotelOpt = async () => {
-    await setWantFlags({ want_hotel: true })
+    try {
+      await setWantFlags({ want_hotel: true })
+    } catch (e) {
+      onToast(e instanceof Error ? e.message : 'Impossible d’activer l’hôtel')
+      return
+    }
+    setFlightDraft((prev) => {
+      if (!prev) return prev
+      const payload = { ...(prev.payload || {}) } as Record<string, unknown>
+      delete payload.hotel_external
+      delete payload.external_hotel
+      delete payload.hotel_booked
+      delete payload.hotel_booked_at
+      return { ...prev, hotel_booked_at: null, payload }
+    })
     openReservation(true)
   }
 
@@ -3267,6 +3419,14 @@ function TripDetailView({
     activitiesDone: activityStepProgress(activityItems).done,
     activitiesPartial: activityStepProgress(activityItems).partial,
   })
+  const pathSteps =
+    fromPopSource && popFlightLinkOk === false
+      ? pathView.steps.map((s) =>
+          s.id === 'flight'
+            ? { ...s, state: 'off' as const, statusLabel: 'Sans vol' }
+            : s,
+        )
+      : pathView.steps
 
   // Path body + classic desktop hero (mobile keeps its own chrome).
   if (tripDetailV2 !== false) {
@@ -3311,17 +3471,24 @@ function TripDetailView({
             >
               ← {t('nav.planner')}
             </button>
-            <span
-              className={`rounded-full text-[11px] font-bold px-3 py-1.5 backdrop-blur-md ${
-                canRelaunch
-                  ? 'bg-[#FF6B35]/95 text-white ring-1 ring-white/25'
-                  : workspace?.phase === 'booked'
-                    ? 'bg-emerald-400/20 text-emerald-50 ring-1 ring-emerald-200/30'
-                    : 'bg-white/90 text-slate-800'
-              }`}
-            >
-              {canRelaunch ? PLANNER_RELAUNCH_KICKER_FR : statusLabel}
-            </span>
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <span
+                className={`rounded-full text-[11px] font-bold px-3 py-1.5 backdrop-blur-md ${
+                  canRelaunch
+                    ? 'bg-[#FF6B35]/95 text-white ring-1 ring-white/25'
+                    : workspace?.phase === 'booked'
+                      ? 'bg-emerald-400/20 text-emerald-50 ring-1 ring-emerald-200/30'
+                      : 'bg-white/90 text-slate-800'
+                }`}
+              >
+                {canRelaunch ? PLANNER_RELAUNCH_KICKER_FR : statusLabel}
+              </span>
+              {fromPopTag ? (
+                <span className="rounded-full bg-[#FF6B35]/95 px-3 py-1.5 text-[11px] font-bold text-white ring-1 ring-white/25 backdrop-blur-md">
+                  Pop
+                </span>
+              ) : null}
+            </div>
           </div>
           <div className="max-w-2xl">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-300">
@@ -3410,14 +3577,25 @@ function TripDetailView({
                     : PLANNER_RELAUNCH_ACTION_FR}
                 </button>
               ) : isOrganizer && trip.status !== 'locked' ? (
-                <button
-                  type="button"
-                  disabled={scanning}
-                  onClick={() => void scan()}
-                  className="inline-flex items-center rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] disabled:opacity-60 min-h-[48px]"
-                >
-                  {scanning ? t('planner.scanning') : t('planner.scan')}
-                </button>
+                fromPopSource ? (
+                  <button
+                    type="button"
+                    onClick={() => setLaunchPopOpen(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] min-h-[48px]"
+                  >
+                    <LaunchPopPlayIcon />
+                    Lancer ce Pop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={scanning}
+                    onClick={() => void scan()}
+                    className="inline-flex items-center rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] disabled:opacity-60 min-h-[48px]"
+                  >
+                    {scanning ? t('planner.scanning') : t('planner.scan')}
+                  </button>
+                )
               ) : null}
               {reservationToken && (hotelBooked || flightBooked) ? (
                 <button
@@ -3446,6 +3624,7 @@ function TripDetailView({
           `${pax} voyageur${pax > 1 ? 's' : ''}`,
         ].filter(Boolean) as string[]}
         phaseLabel={pathView.phaseLabel}
+        showPopTag={fromPopTag}
         onBack={onBack}
         activeTab={pathTab}
         onTabChange={setPathTab}
@@ -3469,10 +3648,23 @@ function TripDetailView({
         }
         apercu={
           <div className="space-y-7" ref={stayExtrasRef}>
+            {fromPopSource ? (
+              <TripOptInToggles
+                wantFlight={wantFlightOpt}
+                wantHotel={wantHotelOpt}
+                showFlight={showPopFlightToggle}
+                busy={scanning || skippingFlight || skippingHotel || hotelBusy}
+                onEnableFlight={enableFlightOpt}
+                onDisableFlight={disableFlightOpt}
+                onEnableHotel={enableHotelOpt}
+                onDisableHotel={disableHotelOpt}
+              />
+            ) : null}
             <PathStepsTiles
-              steps={pathView.steps}
+              steps={pathSteps}
               onStepPress={(id) => {
                 if (id === 'flight') {
+                  if (!showPopFlightToggle) return
                   if (!wantFlightOpt && fromPopSource) {
                     void enableFlightOpt()
                     return
@@ -3490,12 +3682,12 @@ function TripDetailView({
                 }
               }}
             />
-            {fromPopSource ||
-            tripMeta.want_flight != null ||
-            tripMeta.want_hotel != null ? (
+            {!fromPopSource &&
+            (tripMeta.want_flight != null || tripMeta.want_hotel != null) ? (
               <TripOptInToggles
                 wantFlight={wantFlightOpt}
                 wantHotel={wantHotelOpt}
+                showFlight={showPopFlightToggle}
                 busy={scanning || skippingFlight || skippingHotel || hotelBusy}
                 onEnableFlight={enableFlightOpt}
                 onDisableFlight={disableFlightOpt}
@@ -3561,7 +3753,7 @@ function TripDetailView({
                 />
               </div>
             ) : null}
-            {!externalHotel ? (
+            {wantHotelOpt ? (
               <div className="space-y-3">
                 <h3 className="text-2xl font-black tracking-tight text-[#1A120E]">
                   Hôtel
@@ -3578,20 +3770,22 @@ function TripDetailView({
                     <div className="relative z-[1] flex flex-col">
                       <p
                         className={`text-[11px] font-black uppercase tracking-[0.18em] ${
-                          hotelBooked || hasHotel
+                          (hotelBooked && !externalHotel) || hasHotel
                             ? 'text-emerald-200'
                             : 'text-orange-300'
                         }`}
                       >
-                        {hotelBooked || hasHotel ? 'Séjour' : 'À choisir'}
+                        {(hotelBooked && !externalHotel) || hasHotel
+                          ? 'Séjour'
+                          : 'À choisir'}
                       </p>
                       <p className="mt-2 text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-                        {hotelBooked || hasHotel
+                        {(hotelBooked && !externalHotel) || hasHotel
                           ? hotelName
                           : HOTEL_CTA_FR.choose}
                       </p>
                       <p className="mt-2 max-w-md text-sm text-white/75 leading-relaxed">
-                        {hotelBooked || hasHotel
+                        {(hotelBooked && !externalHotel) || hasHotel
                           ? `Séjour à ${destinationName}.`
                           : `Compare les chambres à ${destinationName}.`}
                       </p>
@@ -3602,7 +3796,11 @@ function TripDetailView({
                           onClick={onHotelBlockCta}
                           className="inline-flex min-h-[48px] items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-extrabold text-[#D94D1B] shadow-lg disabled:opacity-60"
                         >
-                          {hotelBlockCtaLabel}
+                          {hotelBusy
+                            ? 'Ouverture…'
+                            : hasHotel && !externalHotel
+                              ? HOTEL_CTA_FR.pay
+                              : HOTEL_CTA_FR.choose}
                           <span aria-hidden>›</span>
                         </button>
                         {hotelInvoiceReady ? (
@@ -3637,7 +3835,7 @@ function TripDetailView({
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : externalHotel ? (
               <div className="rounded-3xl border border-[#EDE8E1] bg-[#F7F4EF] p-5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#8A7B6E]">
                   Hôtel
@@ -3649,7 +3847,7 @@ function TripDetailView({
                   Tu as sauté l’étape hôtel WayPop pour {destinationName}.
                 </p>
               </div>
-            )}
+            ) : null}
             {plannerActivitiesEnabled && deferHeavyPanels ? (
               <div>
                 <h3 className="mb-3 text-2xl font-black tracking-tight text-[#1A120E]">
@@ -3710,38 +3908,52 @@ function TripDetailView({
           />
         }
         programme={
-          <ProgrammePanel
-            outDate={outDate}
-            retDate={retDate}
-            flightLabel={airlineForCta}
-            hotelLabel={hasHotel ? hotelName : null}
-            hasFlight={Boolean(accepted || flightBooked || externalFlight)}
-            hasHotel={hasHotel || hotelBooked}
-            restaurantsEnabled={false}
-            flightOutDepAt={tripData?.aller?.departureTime || null}
-            flightOutArrAt={tripData?.aller?.arrivalTime || null}
-            items={programmeItems}
-            onOpenItem={(item) => {
-              if (item.action === 'scan') void scan()
-              else if (item.action === 'flight') openReservation(false)
-              else if (item.action === 'hotel') openReservation(true)
-              else if (item.action === 'activity') {
-                if (item.productCode) {
-                  window.open(
-                    `https://www.viator.com/tours/-/${encodeURIComponent(item.productCode)}`,
-                    '_blank',
-                    'noopener,noreferrer',
-                  )
-                  return
+          fromPopSource ? (
+            programmeItems.length ? (
+              <ItineraryStepsTimeline
+                items={tripItemsToItineraryItems(programmeItems, {
+                  itineraryId: tripMeta.source_itinerary_id,
+                })}
+              />
+            ) : (
+              <p className="text-sm font-medium text-[#8A7B6E]">
+                Les étapes du Pop apparaîtront ici.
+              </p>
+            )
+          ) : (
+            <ProgrammePanel
+              outDate={outDate}
+              retDate={retDate}
+              flightLabel={airlineForCta}
+              hotelLabel={hasHotel ? hotelName : null}
+              hasFlight={Boolean(accepted || flightBooked || externalFlight)}
+              hasHotel={hasHotel || hotelBooked}
+              restaurantsEnabled={false}
+              flightOutDepAt={tripData?.aller?.departureTime || null}
+              flightOutArrAt={tripData?.aller?.arrivalTime || null}
+              items={programmeItems}
+              onOpenItem={(item) => {
+                if (item.action === 'scan') void scan()
+                else if (item.action === 'flight') openReservation(false)
+                else if (item.action === 'hotel') openReservation(true)
+                else if (item.action === 'activity') {
+                  if (item.productCode) {
+                    window.open(
+                      `https://www.viator.com/tours/-/${encodeURIComponent(item.productCode)}`,
+                      '_blank',
+                      'noopener,noreferrer',
+                    )
+                    return
+                  }
+                  if (item.mapsUrl) {
+                    window.open(item.mapsUrl, '_blank', 'noopener,noreferrer')
+                    return
+                  }
+                  if (plannerActivitiesEnabled) setPathTab('apercu')
                 }
-                if (item.mapsUrl) {
-                  window.open(item.mapsUrl, '_blank', 'noopener,noreferrer')
-                  return
-                }
-                if (plannerActivitiesEnabled) setPathTab('apercu')
-              }
-            }}
-          />
+              }}
+            />
+          )
         }
       />
       {showRelaunch ? (
@@ -3874,6 +4086,15 @@ function TripDetailView({
           </div>
         </div>
       ) : null}
+      <LaunchPopSheet
+        open={launchPopOpen}
+        title={trip.name}
+        items={tripItemsToItineraryItems(activityItems, {
+          itineraryId: tripMeta.source_itinerary_id,
+        })}
+        itineraryId={tripMeta.source_itinerary_id || undefined}
+        onClose={() => setLaunchPopOpen(false)}
+      />
       </>
     )
   }
@@ -3898,17 +4119,24 @@ function TripDetailView({
             >
               ← {t('nav.planner')}
             </button>
-            <span
-              className={`rounded-full text-[11px] font-bold px-3 py-1.5 backdrop-blur-md ${
-                canRelaunch
-                  ? 'bg-[#FF6B35]/95 text-white ring-1 ring-white/25'
-                  : workspace?.phase === 'booked'
-                    ? 'bg-emerald-400/20 text-emerald-50 ring-1 ring-emerald-200/30'
-                    : 'bg-white/90 text-slate-800'
-              }`}
-            >
-              {canRelaunch ? PLANNER_RELAUNCH_KICKER_FR : statusLabel}
-            </span>
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <span
+                className={`rounded-full text-[11px] font-bold px-3 py-1.5 backdrop-blur-md ${
+                  canRelaunch
+                    ? 'bg-[#FF6B35]/95 text-white ring-1 ring-white/25'
+                    : workspace?.phase === 'booked'
+                      ? 'bg-emerald-400/20 text-emerald-50 ring-1 ring-emerald-200/30'
+                      : 'bg-white/90 text-slate-800'
+                }`}
+              >
+                {canRelaunch ? PLANNER_RELAUNCH_KICKER_FR : statusLabel}
+              </span>
+              {fromPopTag ? (
+                <span className="rounded-full bg-[#FF6B35]/95 px-3 py-1.5 text-[11px] font-bold text-white ring-1 ring-white/25 backdrop-blur-md">
+                  Pop
+                </span>
+              ) : null}
+            </div>
           </div>
           <div className="max-w-2xl">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-300">
@@ -3995,14 +4223,25 @@ function TripDetailView({
                     : PLANNER_RELAUNCH_ACTION_FR}
                 </button>
               ) : isOrganizer && trip.status !== 'locked' ? (
-                <button
-                  type="button"
-                  disabled={scanning}
-                  onClick={() => void scan()}
-                  className="inline-flex items-center rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] disabled:opacity-60 min-h-[48px]"
-                >
-                  {scanning ? t('planner.scanning') : t('planner.scan')}
-                </button>
+                fromPopSource ? (
+                  <button
+                    type="button"
+                    onClick={() => setLaunchPopOpen(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] min-h-[48px]"
+                  >
+                    <LaunchPopPlayIcon />
+                    Lancer ce Pop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={scanning}
+                    onClick={() => void scan()}
+                    className="inline-flex items-center rounded-2xl bg-[#FF6B35] px-5 py-3 text-sm font-extrabold text-white shadow-lg shadow-orange-950/30 hover:bg-[#E85A28] disabled:opacity-60 min-h-[48px]"
+                  >
+                    {scanning ? t('planner.scanning') : t('planner.scan')}
+                  </button>
+                )
               ) : null}
               {reservationToken && (hotelBooked || flightBooked) ? (
                 <button
@@ -4617,34 +4856,69 @@ function TripDetailView({
           <p className="text-[11px] font-black uppercase tracking-[0.16em] text-muted mb-2">
             Étape 1
           </p>
-          <h3 className="font-extrabold text-2xl text-ink tracking-tight">Trouver un vol</h3>
-          <p className="text-base text-muted mt-2 max-w-xl leading-relaxed">
-            {isOrganizer
-              ? 'Scanne les prix dans ton budget, puis accepte une proposition.'
-              : 'L’organisateur scanne et choisit le vol pour tout le monde.'}
-          </p>
-          <div className="mt-6 flex flex-wrap gap-2">
-            {isOrganizer ? (
-              <button
-                type="button"
-                disabled={scanning}
-                onClick={() => void scan()}
-                className="app-btn-primary rounded-2xl px-6 py-3 disabled:opacity-60"
-              >
-                {scanning ? t('planner.scanning') : t('planner.scan')}
-              </button>
-            ) : null}
-            {canSkipFlight ? (
-              <button
-                type="button"
-                disabled={skippingFlight || scanning}
-                onClick={() => void skipFlight()}
-                className="inline-flex items-center rounded-2xl border border-line px-5 py-3 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60"
-              >
-                {skippingFlight ? 'Ouverture…' : 'J’ai déjà un vol'}
-              </button>
-            ) : null}
-          </div>
+          {fromPopSource && !showPopFlightToggle ? (
+            <>
+              <h3 className="font-extrabold text-2xl text-ink tracking-tight">
+                Lancer ce Pop
+              </h3>
+              <p className="text-base text-muted mt-2 max-w-xl leading-relaxed">
+                Pas de liaison aérienne connue — lance le parcours sur place.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLaunchPopOpen(true)}
+                  className="app-btn-primary inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3"
+                >
+                  <LaunchPopPlayIcon />
+                  Lancer ce Pop
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h3 className="font-extrabold text-2xl text-ink tracking-tight">
+                Trouver un vol
+              </h3>
+              <p className="text-base text-muted mt-2 max-w-xl leading-relaxed">
+                {isOrganizer
+                  ? 'Scanne les prix dans ton budget, puis accepte une proposition.'
+                  : 'L’organisateur scanne et choisit le vol pour tout le monde.'}
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                {isOrganizer && showPopFlightToggle ? (
+                  <button
+                    type="button"
+                    disabled={scanning}
+                    onClick={() => void scan()}
+                    className="app-btn-primary rounded-2xl px-6 py-3 disabled:opacity-60"
+                  >
+                    {scanning ? t('planner.scanning') : t('planner.scan')}
+                  </button>
+                ) : null}
+                {fromPopSource ? (
+                  <button
+                    type="button"
+                    onClick={() => setLaunchPopOpen(true)}
+                    className="inline-flex items-center justify-center gap-2 rounded-2xl border border-line px-5 py-3 text-sm font-bold text-ink hover:bg-slate-50"
+                  >
+                    <LaunchPopPlayIcon />
+                    Lancer ce Pop
+                  </button>
+                ) : null}
+                {canSkipFlight ? (
+                  <button
+                    type="button"
+                    disabled={skippingFlight || scanning}
+                    onClick={() => void skipFlight()}
+                    className="inline-flex items-center rounded-2xl border border-line px-5 py-3 text-sm font-bold text-ink hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    {skippingFlight ? 'Ouverture…' : 'J’ai déjà un vol'}
+                  </button>
+                ) : null}
+              </div>
+            </>
+          )}
         </section>
       )}
 
@@ -4971,6 +5245,15 @@ function TripDetailView({
         </div>
       ) : null}
 
+      <LaunchPopSheet
+        open={launchPopOpen}
+        title={trip.name}
+        items={tripItemsToItineraryItems(activityItems, {
+          itineraryId: tripMeta.source_itinerary_id,
+        })}
+        itineraryId={tripMeta.source_itinerary_id || undefined}
+        onClose={() => setLaunchPopOpen(false)}
+      />
     </div>
   )
 }

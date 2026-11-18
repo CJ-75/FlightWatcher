@@ -55,6 +55,7 @@ export function PopAddPlannerSheet({ open, onClose, itinerary }: Props) {
   const [inbound, setInbound] = useState(suggested.inbound)
   const [wantFlight, setWantFlight] = useState(false)
   const [wantHotel, setWantHotel] = useState(false)
+  const [canOfferFlight, setCanOfferFlight] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const todayIso = useMemo(() => formatDateLocal(new Date()), [])
@@ -83,13 +84,47 @@ export function PopAddPlannerSheet({ open, onClose, itinerary }: Props) {
     if (encoded) setDeparture(encoded)
   }, [open, wantFlight, itinerary.city_slug, departure])
 
+  useEffect(() => {
+    if (!open) return
+    const dep =
+      encodeAirportCodes(parseAirportCodes(departure)) || 'CDG,ORY'
+    const arr = arrivalCodesForCitySlug(itinerary.city_slug)
+    if (!arr) {
+      setCanOfferFlight(false)
+      setWantFlight(false)
+      return
+    }
+    let cancelled = false
+    setCanOfferFlight(null)
+    const timer = window.setTimeout(() => {
+      void getPlannerApi()
+        .checkRouteLink({ from: dep, to: arr })
+        .then((res) => {
+          if (cancelled) return
+          const ok = Boolean(res.linked)
+          setCanOfferFlight(ok)
+          if (!ok) setWantFlight(false)
+        })
+        .catch(() => {
+          if (cancelled) return
+          setCanOfferFlight(false)
+          setWantFlight(false)
+        })
+    }, 200)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [open, departure, itinerary.city_slug])
+
   if (!open) return null
 
   const cityLabel =
     citySlugDisplayNameFr(itinerary.city_slug) ||
     itinerary.city_slug ||
     ''
-  const needsDeparture = wantFlight
+  const flightEnabled = canOfferFlight === true && wantFlight
+  const needsDeparture = flightEnabled
 
   const selectParty = (mode: PartyMode) => {
     setPartyMode(mode)
@@ -128,21 +163,21 @@ export function PopAddPlannerSheet({ open, onClose, itinerary }: Props) {
         dates_retour: [{ date: ret, heure_min: '00:00', heure_max: '23:59' }],
         budget_max: 200,
         direct: false,
-        want_flight: wantFlight,
+        want_flight: flightEnabled,
         want_hotel: wantHotel,
         source_itinerary_id: itinerary.id,
         source_city_slug: itinerary.city_slug || null,
       })
       await api.applyItinerary(itinerary.id, { planned_trip_id: trip.id })
-      if (!wantFlight) {
+      if (!flightEnabled) {
         await api.skipPlannedTripFlight(trip.id).catch(() => {})
       }
       if (!wantHotel) {
         await api.skipPlannedTripHotel(trip.id).catch(() => {})
       }
       const q = new URLSearchParams()
-      if (wantFlight) q.set('autoScan', '1')
-      if (wantHotel && !wantFlight) q.set('openHotel', '1')
+      if (flightEnabled) q.set('autoScan', '1')
+      if (wantHotel && !flightEnabled) q.set('openHotel', '1')
       const href = `${plannerTripHref(trip.id)}${q.toString() ? `?${q}` : ''}`
       window.location.href = href
     } catch (e) {
@@ -206,12 +241,14 @@ export function PopAddPlannerSheet({ open, onClose, itinerary }: Props) {
           <p className="text-[12px] font-semibold text-accent">
             Tu n’es pas sur place ? Pense au vol et à l’hôtel.
           </p>
-          <ToggleRow
-            label="Trouver un vol"
-            hint="Départ + scan des prix"
-            checked={wantFlight}
-            onChange={setWantFlight}
-          />
+          {canOfferFlight === true ? (
+            <ToggleRow
+              label="Trouver un vol"
+              hint="Départ + scan des prix"
+              checked={wantFlight}
+              onChange={setWantFlight}
+            />
+          ) : null}
           <ToggleRow
             label="Trouver un hôtel"
             hint="Offres près du Pop"

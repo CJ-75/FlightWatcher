@@ -6,6 +6,7 @@ import {
   resolveTripImageUrl,
   partyModeFromCount,
   partyModeKickerFr,
+  plannedTripIsFromPop,
   PLANNER_PHASE_LABEL_FR,
   PLANNER_PHASE_ACTION_FR,
   PLANNER_RELAUNCH_ACTION_FR,
@@ -141,6 +142,7 @@ export function JourneyCard({
     : meta.tone
   const phaseLabel = canRelaunch ? PLANNER_RELAUNCH_KICKER_FR : meta.label
   const actionLabel = canRelaunch ? PLANNER_RELAUNCH_ACTION_FR : meta.action
+  const fromPop = plannedTripIsFromPop(workspace.planned_trip)
   const destCode = (workspace.dest_iata || '').split(/[,;]/)[0]?.trim() || ''
   const cityRaw = String(workspace.city || '')
     .split(',')[0]
@@ -178,16 +180,23 @@ export function JourneyCard({
             style={StyleSheet.absoluteFill}
           />
           <View style={styles.phaseStack}>
-            <View
-              style={[
-                styles.phase,
-                phaseTone.glass && styles.phaseGlass,
-                { backgroundColor: phaseTone.bg },
-              ]}
-            >
-              <Text style={[styles.phaseText, { color: phaseTone.text }]}>
-                {phaseLabel}
-              </Text>
+            <View style={styles.phaseRow}>
+              <View
+                style={[
+                  styles.phase,
+                  phaseTone.glass && styles.phaseGlass,
+                  { backgroundColor: phaseTone.bg },
+                ]}
+              >
+                <Text style={[styles.phaseText, { color: phaseTone.text }]}>
+                  {phaseLabel}
+                </Text>
+              </View>
+              {fromPop ? (
+                <View style={styles.popTag}>
+                  <Text style={styles.popTagText}>Pop</Text>
+                </View>
+              ) : null}
             </View>
             {workspace.is_invitee ? (
               <View style={styles.inviteeTag}>
@@ -259,6 +268,7 @@ export function JourneyCard({
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.phaseStack}>
+          <View style={styles.phaseRow}>
             <View
               style={[
                 styles.phase,
@@ -270,6 +280,12 @@ export function JourneyCard({
                 {phaseLabel}
               </Text>
             </View>
+            {fromPop ? (
+              <View style={styles.popTag}>
+                <Text style={styles.popTagText}>Pop</Text>
+              </View>
+            ) : null}
+          </View>
           {workspace.is_invitee ? (
             <View style={styles.inviteeTag}>
               <Text style={styles.inviteeTagText}>Invité</Text>
@@ -367,6 +383,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     zIndex: 2,
   },
+  phaseRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+  },
   phase: {
     borderRadius: 999,
     paddingHorizontal: 10,
@@ -381,6 +403,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.white,
     letterSpacing: 0.2,
+  },
+  popTag: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,107,53,0.95)',
+  },
+  popTagText: {
+    fontFamily: fonts.bold,
+    fontSize: 10,
+    color: colors.white,
   },
   inviteeTag: {
     borderRadius: 999,

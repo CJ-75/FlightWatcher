@@ -80,9 +80,9 @@ export function MakeTripSheet({
   const [budget, setBudget] = useState('200')
   const [wantFlight, setWantFlight] = useState(false)
   const [wantHotel, setWantHotel] = useState(false)
+  const [canOfferFlight, setCanOfferFlight] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const needsDeparture = wantFlight
   const todayIso = useMemo(() => formatDateLocal(new Date()), [])
 
   useEffect(() => {
@@ -115,11 +115,46 @@ export function MakeTripSheet({
     if (encoded) setDeparture(encoded)
   }, [wantFlight, itinerary.city_slug, departure])
 
+  useEffect(() => {
+    if (!visible) return
+    const dep =
+      encodeAirportCodes(parseAirportCodes(departure)) || 'CDG,ORY'
+    const arr = arrivalCodesForCitySlug(itinerary.city_slug)
+    if (!arr) {
+      setCanOfferFlight(false)
+      setWantFlight(false)
+      return
+    }
+    let cancelled = false
+    setCanOfferFlight(null)
+    const timer = setTimeout(() => {
+      void getApi()
+        .checkRouteLink({ from: dep, to: arr })
+        .then((res) => {
+          if (cancelled) return
+          const ok = Boolean(res.linked)
+          setCanOfferFlight(ok)
+          if (!ok) setWantFlight(false)
+        })
+        .catch(() => {
+          if (cancelled) return
+          setCanOfferFlight(false)
+          setWantFlight(false)
+        })
+    }, 200)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [visible, departure, itinerary.city_slug])
+
   const cityLabel =
     citySlugDisplayNameFr(itinerary.city_slug) ||
     itinerary.city_slug ||
     ''
   const noFlightHub = isParcoursCityWithoutFlightHub(itinerary.city_slug)
+  const flightEnabled = canOfferFlight === true && wantFlight
+  const needsDeparture = flightEnabled
 
   const selectParty = (mode: PartyMode) => {
     setPartyMode(mode)
@@ -163,13 +198,13 @@ export function MakeTripSheet({
         ],
         budget_max: Number(budget) || 200,
         direct: false,
-        want_flight: wantFlight,
+        want_flight: flightEnabled,
         want_hotel: wantHotel,
         source_itinerary_id: itinerary.id,
         source_city_slug: itinerary.city_slug || null,
       })
       await api.applyItinerary(itinerary.id, { planned_trip_id: trip.id })
-      if (!wantFlight) {
+      if (!flightEnabled) {
         await api.skipPlannedTripFlight(trip.id).catch(() => {})
       }
       if (!wantHotel) {
@@ -184,12 +219,16 @@ export function MakeTripSheet({
           meta: {
             itinerary_id: itinerary.id,
             trip_id: trip.id,
-            want_flight: wantFlight,
+            want_flight: flightEnabled,
             want_hotel: wantHotel,
           },
         })
         .catch(() => {})
-      onCreated({ tripId: trip.id, wantFlight, wantHotel })
+      onCreated({
+        tripId: trip.id,
+        wantFlight: flightEnabled,
+        wantHotel,
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Création impossible')
     } finally {
@@ -243,7 +282,7 @@ export function MakeTripSheet({
             On garde ce Pop dans ton Planner. Vol et hôtel, seulement si tu en
             as besoin.
           </Text>
-          {noFlightHub && wantFlight ? (
+          {noFlightHub && flightEnabled ? (
             <Text style={styles.hubHint}>
               Pas d’aéroport direct pour {cityLabel} — arrivée à renseigner
               ensuite.
@@ -252,25 +291,30 @@ export function MakeTripSheet({
 
           <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
             {nudge ? <Text style={styles.nudgeAccent}>{nudge}</Text> : null}
-            <Pressable
-              onPress={() => setWantFlight((v) => !v)}
-              style={styles.toggle}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.toggleTitle}>Trouver un vol</Text>
-                <Text style={styles.toggleHint}>Départ + scan des prix</Text>
-              </View>
-              <View
-                style={[styles.switchTrack, wantFlight && styles.switchTrackOn]}
+            {canOfferFlight === true ? (
+              <Pressable
+                onPress={() => setWantFlight((v) => !v)}
+                style={styles.toggle}
               >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.toggleTitle}>Trouver un vol</Text>
+                  <Text style={styles.toggleHint}>Départ + scan des prix</Text>
+                </View>
                 <View
                   style={[
-                    styles.switchThumb,
-                    wantFlight && styles.switchThumbOn,
+                    styles.switchTrack,
+                    wantFlight && styles.switchTrackOn,
                   ]}
-                />
-              </View>
-            </Pressable>
+                >
+                  <View
+                    style={[
+                      styles.switchThumb,
+                      wantFlight && styles.switchThumbOn,
+                    ]}
+                  />
+                </View>
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={() => setWantHotel((v) => !v)}
               style={styles.toggle}
@@ -367,7 +411,7 @@ export function MakeTripSheet({
               <Text style={styles.link}>Week-end prochain</Text>
             </Pressable>
 
-            {wantFlight ? (
+            {flightEnabled ? (
               <>
                 <Text style={styles.label}>Budget max / pers. (€)</Text>
                 <TextInput

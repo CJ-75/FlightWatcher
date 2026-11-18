@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from typing import List, Optional, Tuple
 
-from ryanair_routes import fetch_destinations_by_country
+from ryanair_routes import any_served_link, fetch_destinations_by_country
 from airports_catalog import common_airports_from_travelpayouts, merge_airport_lists
 from city_names_fr import (
     CITY_FR_BY_IATA,
@@ -17,7 +17,7 @@ from city_names_fr import (
     country_for_code,
     localize_airport_dict,
 )
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'ryanair-py'))
 from ryanair import Ryanair
@@ -248,6 +248,29 @@ def get_airports(query: Optional[str] = None):
         # Never hard-fail the mobile/search cold start
         print(f"get_airports fatal: {e}")
         return {"airports": list(_FALLBACK_AIRPORTS), "count": len(_FALLBACK_AIRPORTS)}
+
+
+@router.get("/api/routes/link")
+def routes_link(
+    from_: str = Query("", alias="from"),
+    to: str = Query(""),
+):
+    """Positive Ryanair link check: any origin serves any arrival IATA.
+
+    Query: ``from`` (comma IATAs) + ``to`` (comma IATAs).
+    No catalogue / country fallback — used to gate Pop Vol toggles.
+    """
+    dep = (from_ or "").strip()
+    arr = (to or "").strip()
+    if not dep or not arr:
+        return {"ok": True, "linked": False, "from": [], "to": []}
+    linked, origins, dests = any_served_link(dep, arr)
+    return {
+        "ok": True,
+        "linked": bool(linked),
+        "from": origins,
+        "to": dests,
+    }
 
 
 @router.get("/api/destinations")

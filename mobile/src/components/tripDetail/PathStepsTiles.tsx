@@ -77,15 +77,21 @@ export function PathStepsTiles({ steps, onStepPress }: Props) {
       {steps.map((step) => {
         const live = step.state === 'current'
         const done = step.state === 'done'
-        const iconColor = live || done ? '#fff' : '#6B5C50'
+        const off = step.state === 'off'
+        const iconColor = live || done ? '#fff' : off ? '#C4B8AC' : '#6B5C50'
         return (
           <Pressable
             key={step.id}
-            onPress={() => onStepPress?.(step.id)}
+            disabled={off}
+            onPress={() => {
+              if (off) return
+              onStepPress?.(step.id)
+            }}
             style={[
               styles.tile,
               live && styles.tileLive,
               done && !live && styles.tileDone,
+              off && styles.tileOff,
             ]}
           >
             <View
@@ -93,16 +99,20 @@ export function PathStepsTiles({ steps, onStepPress }: Props) {
                 styles.iconWrap,
                 live && styles.iconLive,
                 done && !live && styles.iconDone,
+                off && styles.iconOff,
               ]}
             >
               <StepIcon id={step.id} color={iconColor} />
             </View>
-            <Text style={styles.label}>{step.label}</Text>
+            <Text style={[styles.label, off && styles.labelOff]}>
+              {step.label}
+            </Text>
             <Text
               style={[
                 styles.status,
                 live && styles.statusLive,
                 done && !live && styles.statusDone,
+                off && styles.statusOff,
               ]}
             >
               {step.statusLabel}
@@ -141,6 +151,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3FAF6',
     borderColor: 'rgba(15,138,95,0.12)',
   },
+  tileOff: {
+    backgroundColor: '#F7F4EF',
+    borderColor: '#EDE4DC',
+    opacity: 0.72,
+  },
   iconWrap: {
     width: 36,
     height: 36,
@@ -151,11 +166,13 @@ const styles = StyleSheet.create({
   },
   iconLive: { backgroundColor: colors.primary },
   iconDone: { backgroundColor: colors.success },
+  iconOff: { backgroundColor: '#EDE4DC' },
   label: {
     fontFamily: fonts.semibold,
     fontSize: 11,
     color: colors.ink,
   },
+  labelOff: { color: '#9A8778' },
   status: {
     fontFamily: fonts.medium,
     fontSize: 10,
@@ -163,4 +180,5 @@ const styles = StyleSheet.create({
   },
   statusLive: { color: colors.primaryDeep },
   statusDone: { color: colors.success },
+  statusOff: { color: '#B0A296' },
 })

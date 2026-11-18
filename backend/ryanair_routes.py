@@ -161,6 +161,46 @@ def fetch_destinations_by_country(departure: str) -> dict:
     return by_country
 
 
+def _parse_iata_list(raw: Optional[str]) -> list[str]:
+    out: list[str] = []
+    seen: Set[str] = set()
+    for part in str(raw or "").replace(";", ",").split(","):
+        code = part.strip().upper()
+        if len(code) == 3 and code.isalpha() and code not in seen:
+            seen.add(code)
+            out.append(code)
+    return out
+
+
+def any_served_link(
+    departure: str, arrival: str
+) -> tuple[bool, list[str], list[str]]:
+    """Positive route evidence: True iff some origin serves some arrival.
+
+    Empty Ryanair data for an origin is skipped (no soft-OK). Used to gate
+    the Pop/Planner « Vol » toggle — not the soft multi-provider create check.
+    Returns ``(linked, matching_origins, matching_dests)``.
+    """
+    deps = _parse_iata_list(departure)
+    arrs = _parse_iata_list(arrival)
+    if not deps or not arrs:
+        return False, [], []
+    arr_set = set(arrs)
+    match_from: list[str] = []
+    match_to: Set[str] = set()
+    for dep in deps:
+        routes = fetch_served_codes(dep)
+        if not routes:
+            continue
+        hit = routes & arr_set
+        if hit:
+            match_from.append(dep)
+            match_to |= hit
+    if not match_from:
+        return False, [], []
+    return True, match_from, sorted(match_to)
+
+
 def invalid_arrival_codes(departure: str, arrival: Optional[str]) -> list[str]:
     """Return arrival IATA codes not served from any departure origin.
 
@@ -174,18 +214,10 @@ def invalid_arrival_codes(departure: str, arrival: Optional[str]) -> list[str]:
     """
     if not arrival:
         return []
-    codes = [
-        c.strip().upper()
-        for c in str(arrival).replace(";", ",").split(",")
-        if c.strip()
-    ]
+    codes = _parse_iata_list(arrival)
     if not codes:
         return []
-    deps = [
-        c.strip().upper()
-        for c in str(departure or "").replace(";", ",").split(",")
-        if c.strip() and len(c.strip()) == 3 and c.strip().isalpha()
-    ]
+    deps = _parse_iata_list(departure)
     if not deps:
         return []
 

@@ -22,7 +22,7 @@ from api_models import (
 )
 from email_notify import notify_trip_relaunch, notify_trip_under_budget
 from flight_scanner import enrich_trip_results, scanner_vols_api
-from ryanair_routes import invalid_arrival_codes
+from ryanair_routes import any_served_link, invalid_arrival_codes
 from supabase_deps import (
     SUPABASE_AVAILABLE,
     get_supabase_client,
@@ -856,6 +856,69 @@ def _flight_pipeline_state(
     return "none"
 
 
+_CITY_SLUG_ARRIVAL = {
+    "paris": "CDG,ORY,BVA",
+    "lyon": "LYS",
+    "marseille": "MRS",
+    "nice": "NCE",
+    "bordeaux": "BOD",
+    "toulouse": "TLS",
+    "nantes": "NTE",
+    "lille": "LIL",
+    "lisbon": "LIS",
+    "lisbonne": "LIS",
+    "porto": "OPO",
+    "barcelone": "BCN",
+    "barcelona": "BCN",
+    "rome": "FCO,CIA",
+    "milan": "MXP,BGY,LIN",
+    "amsterdam": "AMS",
+    "bruxelles": "BRU,CRL",
+    "londres": "STN,LTN,LGW,LHR",
+    "london": "STN,LTN,LGW,LHR",
+}
+
+
+def _arrival_codes_for_trip(trip: dict) -> list[str]:
+    arr_codes = [
+        c.strip().upper()
+        for c in str(trip.get("arrival_airport") or "")
+        .replace(";", ",")
+        .split(",")
+        if c.strip()
+    ]
+    if arr_codes:
+        return arr_codes
+    meta = trip.get("meta") if isinstance(trip.get("meta"), dict) else {}
+    slug = str(meta.get("source_city_slug") or "").strip().lower()
+    if slug and slug in _CITY_SLUG_ARRIVAL:
+        return [
+            c.strip().upper()
+            for c in _CITY_SLUG_ARRIVAL[slug].split(",")
+            if c.strip()
+        ]
+    return []
+
+
+def _require_positive_flight_link(departure: str, arrival: str) -> None:
+    """Hard gate for Pop want_flight / scan — positive Ryanair evidence only."""
+    linked, _, _ = any_served_link(departure or "", arrival or "")
+    if linked:
+        return
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Aucune liaison aérienne connue entre ce départ et cette destination. "
+            "Le scan vol n’est pas disponible."
+        ),
+    )
+
+
+def _trip_arrival_for_link(trip: dict) -> str:
+    codes = _arrival_codes_for_trip(trip)
+    return ",".join(codes)
+
+
 def _external_flight_payload(trip: dict) -> dict:
     """Build a hotel-compose draft when the user already has flights elsewhere."""
     dep_codes = [
@@ -863,11 +926,7 @@ def _external_flight_payload(trip: dict) -> dict:
         for c in str(trip.get("departure_airport") or "").split(",")
         if c.strip()
     ]
-    arr_codes = [
-        c.strip().upper()
-        for c in str(trip.get("arrival_airport") or "").split(",")
-        if c.strip()
-    ]
+    arr_codes = _arrival_codes_for_trip(trip)
     if not dep_codes:
         raise HTTPException(status_code=400, detail="Aéroport de départ requis")
     if not arr_codes:
@@ -882,7 +941,12 @@ def _external_flight_payload(trip: dict) -> dict:
     origin = dep_codes[0]
     destination = arr_codes[0]
     pax = _clamp_passengers(trip.get("passengers") or 1)
-    city = str(trip.get("name") or "").replace("Weekend ", "").strip() or destination
+    meta = trip.get("meta") if isinstance(trip.get("meta"), dict) else {}
+    city = (
+        str(meta.get("source_city_slug") or "").strip()
+        or str(trip.get("name") or "").replace("Weekend ", "").strip()
+        or destination
+    )
     return {
         "origin_iata": origin,
         "departure_airport": origin,
@@ -905,6 +969,103 @@ def _external_flight_payload(trip: dict) -> dict:
         },
         "price_per_person": 0,
     }
+
+
+def _clear_draft_external_flags(
+    supabase,
+    *,
+    trip_id: str,
+    user_id: str,
+    clear_flight: bool = False,
+    clear_hotel: bool = False,
+) -> Optional[dict]:
+    """Undo skip-flight / skip-hotel marks when Pop opt-ins are re-enabled."""
+    row = _user_trip_draft(supabase, trip_id, user_id)
+    if not row:
+        return None
+    payload = dict(row.get("payload") or {})
+    changed = False
+    if clear_flight:
+        for key in ("flight_external", "external_flight"):
+            if key in payload:
+                payload.pop(key, None)
+                changed = True
+        flight = payload.get("flight")
+        if isinstance(flight, dict) and flight.get("external"):
+            flight = dict(flight)
+            flight.pop("external", None)
+            payload["flight"] = flight
+            changed = True
+    if clear_hotel:
+        for key in (
+            "hotel_external",
+            "external_hotel",
+            "hotel_booked",
+            "hotel_booked_at",
+        ):
+            if key in payload:
+                payload.pop(key, None)
+                changed = True
+    needs_hotel_col_clear = bool(clear_hotel and row.get("hotel_booked_at"))
+    if not changed and not needs_hotel_col_clear:
+        return row
+    now = datetime.utcnow().isoformat()
+    patch: Dict[str, Any] = {
+        "payload": payload,
+        "updated_at": now,
+        "source_kind": "planner",
+        "source_planned_trip_id": trip_id,
+    }
+    if clear_hotel:
+        patch["hotel_booked_at"] = None
+    try:
+        updated = (
+            supabase.table("my_trip_drafts")
+            .update(patch)
+            .eq("id", row["id"])
+            .execute()
+        )
+        return (updated.data or [{**row, **patch}])[0]
+    except Exception as exc:
+        print(f"⚠️ clear draft external flags {trip_id}: {exc}")
+        if clear_hotel and "hotel_booked_at" in patch:
+            patch.pop("hotel_booked_at", None)
+            try:
+                updated = (
+                    supabase.table("my_trip_drafts")
+                    .update(patch)
+                    .eq("id", row["id"])
+                    .execute()
+                )
+                return (updated.data or [{**row, **patch}])[0]
+            except Exception as exc2:
+                print(f"⚠️ clear draft external flags retry {trip_id}: {exc2}")
+        return row
+
+
+def _ensure_hotel_compose_draft(supabase, trip: dict, user_id: str) -> dict:
+    """Ensure a my_trip draft exists so HotelCompose can open after Pop opt-in."""
+    trip_id = str(trip.get("id") or "")
+    existing = _user_trip_draft(supabase, trip_id, user_id)
+    if existing:
+        return existing
+    from deals.my_trips import create_draft
+
+    created = create_draft(
+        supabase,
+        payload=_external_flight_payload(trip),
+        user_id=user_id,
+        source_planned_trip_id=trip_id,
+        source_kind="planner",
+    )
+    row = (
+        supabase.table("my_trip_drafts")
+        .select("*")
+        .eq("id", created["id"])
+        .limit(1)
+        .execute()
+    ).data
+    return (row or [created])[0]
 
 
 _HOTEL_BOOKED_STATUSES = {
@@ -1376,7 +1537,8 @@ _TRIPS_LIST_SELECT = (
     "id,organizer_id,name,departure_airport,arrival_airport,passengers,direct,"
     "dates_depart,dates_retour,budget_max,invite_token,status,"
     "auto_scan_enabled,auto_scan_interval_seconds,last_scan_at,"
-    "last_notified_at,last_notified_cheapest,created_at,updated_at"
+    "last_notified_at,last_notified_cheapest,created_at,updated_at,"
+    "meta"
 )
 # Hub list only needs accepted proposals + a few draft/booking columns.
 _WS_PROPOSAL_SELECT = "id,trip_id,status,trip_data,created_at"
@@ -1715,6 +1877,36 @@ def _load_travel_workspaces_sync(supabase, user_id: str) -> list:
         tid = m.get("trip_id")
         if tid in members_by_trip:
             members_by_trip[tid].append(m)
+
+    # Pop tag: trips with programme items copied from an itinerary (even if meta empty).
+    pop_trip_ids: set = set()
+    if trip_ids:
+        try:
+            item_rows = (
+                supabase.table("trip_items")
+                .select("planned_trip_id,meta")
+                .in_("planned_trip_id", trip_ids)
+                .execute()
+            ).data or []
+            for row in item_rows:
+                tid = str(row.get("planned_trip_id") or "").strip()
+                if not tid:
+                    continue
+                im = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+                if im.get("from_itinerary_item_id"):
+                    pop_trip_ids.add(tid)
+        except Exception:
+            pop_trip_ids = set()
+
+    for tid, trow in list(trips_by_id.items()):
+        m = trow.get("meta") if isinstance(trow.get("meta"), dict) else {}
+        if m.get("source_itinerary_id") or m.get("from_pop"):
+            pop_trip_ids.add(str(tid))
+            continue
+        if str(tid) not in pop_trip_ids:
+            continue
+        next_meta = {**m, "from_pop": True}
+        trips_by_id[tid] = {**trow, "meta": next_meta}
 
     profiles_by_id: Dict[str, dict] = {}
     for p in prof_rows:
@@ -2063,6 +2255,14 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
             ),
         )
 
+    if body.want_flight:
+        link_arr = arr or (
+            _CITY_SLUG_ARRIVAL.get(
+                str(body.source_city_slug or "").strip().lower(), ""
+            )
+        )
+        _require_positive_flight_link(dep, link_arr or "")
+
     # Exact same aller/retour slots (date + heures) → refuse duplicate planner.
     if body.dates_depart and body.dates_retour:
         existing = _find_organizer_trip_same_flight_slots(
@@ -2114,8 +2314,21 @@ async def create_trip(body: CreatePlannedTripRequest, request: Request):
     if not result.data:
         raise HTTPException(status_code=500, detail="Création échouée")
     trip = result.data[0]
-    if meta and "meta" not in (trip or {}):
-        trip = {**trip, "meta": meta}
+    if meta:
+        got = trip.get("meta") if isinstance(trip.get("meta"), dict) else {}
+        if not got or (
+            meta.get("source_itinerary_id")
+            and not got.get("source_itinerary_id")
+        ):
+            try:
+                supabase.table("planned_trips").update({"meta": meta}).eq(
+                    "id", trip["id"]
+                ).execute()
+            except Exception:
+                pass
+            trip = {**trip, "meta": meta}
+    elif "meta" not in (trip or {}):
+        trip = {**trip, "meta": {}}
     supabase.table("trip_members").insert(
         {
             "trip_id": trip["id"],
@@ -2832,6 +3045,26 @@ async def get_trip(trip_id: str, request: Request):
     props.sort(key=_prop_sort_key)
     trip["proposals"] = props
     trip["members"] = members.data or []
+    # Soft Pop detection when meta.source_itinerary_id was not persisted
+    # (e.g. planned_trips.meta migration not applied yet).
+    meta = trip.get("meta") if isinstance(trip.get("meta"), dict) else {}
+    if not meta.get("source_itinerary_id") and not meta.get("from_pop"):
+        try:
+            item_rows = (
+                supabase.table("trip_items")
+                .select("meta")
+                .eq("planned_trip_id", trip_id)
+                .limit(20)
+                .execute()
+            ).data or []
+            if any(
+                isinstance(r.get("meta"), dict)
+                and r["meta"].get("from_itinerary_item_id")
+                for r in item_rows
+            ):
+                trip["meta"] = {**meta, "from_pop": True}
+        except Exception:
+            pass
     return trip
 
 
@@ -2906,6 +3139,14 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
     if meta_patch:
         patch["meta"] = cur_meta
 
+    if body.want_flight is True:
+        dep_link = patch.get("departure_airport") or current.get(
+            "departure_airport"
+        )
+        merged_for_link = {**current, **patch, "meta": cur_meta}
+        arr_link = _trip_arrival_for_link(merged_for_link)
+        _require_positive_flight_link(str(dep_link or ""), arr_link)
+
     modality_keys = {
         "departure_airport",
         "arrival_airport",
@@ -2962,6 +3203,32 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
             raise
     if not result.data:
         raise HTTPException(status_code=500, detail="Mise à jour échouée")
+
+    # Pop opt-ins: clear skip marks / seed draft so client can open compose or scan.
+    try:
+        merged_row = {**current, **(result.data[0] or {})}
+        if isinstance(patch.get("meta"), dict):
+            merged_row["meta"] = patch["meta"]
+        if body.want_hotel is True:
+            _ensure_hotel_compose_draft(supabase, merged_row, user_id)
+            _clear_draft_external_flags(
+                supabase,
+                trip_id=trip_id,
+                user_id=user_id,
+                clear_hotel=True,
+            )
+        if body.want_flight is True:
+            _clear_draft_external_flags(
+                supabase,
+                trip_id=trip_id,
+                user_id=user_id,
+                clear_flight=True,
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"⚠️ update_trip opt-in draft sync {trip_id}: {exc}")
+
     if name_only:
         # Lightweight response — avoid re-validating routes on a rename.
         row = result.data[0]
@@ -3869,6 +4136,13 @@ async def scan_trip(trip_id: str, request: Request):
             .limit(1)
             .execute()
         ).data[0]
+
+    meta = trip.get("meta") if isinstance(trip.get("meta"), dict) else {}
+    if meta.get("source_itinerary_id") or meta.get("from_pop"):
+        _require_positive_flight_link(
+            str(trip.get("departure_airport") or ""),
+            _trip_arrival_for_link(trip),
+        )
 
     supabase.table("planned_trips").update(
         {"status": "scanning", "updated_at": datetime.utcnow().isoformat()}

@@ -74,8 +74,18 @@ function placeOf(it: ItemRow): {
 }
 
 function photoOf(it: ItemRow): string {
-  const fromMeta = String(it.meta?.photo_url || '').trim()
+  const meta = (it.meta || {}) as Record<string, unknown>
+  const fromMeta = String(meta.photo_url || '').trim()
   if (fromMeta) return fromMeta
+  const fromPhoto = String(meta.photo || '').trim()
+  if (fromPhoto) return fromPhoto
+  const photos = meta.photos
+  if (Array.isArray(photos)) {
+    for (const entry of photos) {
+      const url = String(entry || '').trim()
+      if (url) return url
+    }
+  }
   return String(placeOf(it)?.meta?.photo_url || '').trim()
 }
 

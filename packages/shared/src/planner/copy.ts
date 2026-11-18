@@ -2,7 +2,18 @@
  * Canonical FR copy for planner hub / phases.
  * Prefer translate() when language is available; these maps keep mobile + web aligned.
  */
-import type { TravelWorkspacePhase } from '../types'
+import type { PlannedTrip, PlannedTripMeta, TravelWorkspacePhase } from '../types'
+
+/** True when the trip was created / filled from a Pop (parcours). */
+export function plannedTripIsFromPop(
+  trip?: Pick<PlannedTrip, 'meta'> | null,
+): boolean {
+  const meta = (trip?.meta || null) as PlannedTripMeta | null | undefined
+  if (!meta || typeof meta !== 'object') return false
+  if (meta.from_pop === true) return true
+  const src = meta.source_itinerary_id
+  return typeof src === 'string' && src.trim().length > 0
+}
 
 export type PlannerHubFilter = 'organize' | 'upcoming' | 'past'
 

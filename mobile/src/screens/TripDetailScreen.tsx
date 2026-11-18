@@ -42,6 +42,10 @@ import {
   resolveFlightStepStatus,
   resolveHotelStepStatus,
   buildProgrammeTimeline,
+  tripItemsToItineraryItems,
+  groupItemsByDay,
+  momentLabelFr,
+  travelMinutesFromMeta,
   buildTripDetailView,
   computeTripPartyPrice,
   displayLegFlightNumber,
@@ -50,6 +54,8 @@ import {
   partyPriceCaptionFr,
   partyPriceSuffixFr,
   trackTripDetailViewed,
+  plannedTripIsFromPop,
+  arrivalCodesForCitySlug,
   PLANNER_RELAUNCH_ACTION_FR,
   PLANNER_RELAUNCH_CARD_FR,
   PLANNER_RELAUNCH_KICKER_FR,
@@ -62,6 +68,10 @@ import {
 import { RelaunchDatesSheet } from '../components/RelaunchDatesSheet'
 import { TripDetailPathChrome } from '../components/tripDetail/TripDetailPathChrome'
 import { PathStepsTiles } from '../components/tripDetail/PathStepsTiles'
+import { TripOptInToggles } from '../components/tripDetail/TripOptInToggles'
+import { ParcoursDayHeader } from '../components/parcours/ParcoursDayHeader'
+import { ParcoursStepBlock } from '../components/parcours/ParcoursStepBlock'
+import { LaunchPopSheet } from '../components/parcours/LaunchPopSheet'
 import { ActivityStepPanel } from '../components/ActivityStepPanel'
 import { HotelPhotoGallery } from '../components/HotelPhotoGallery'
 import { getApi, plannerInviteUrl } from '../lib/client'
@@ -155,6 +165,20 @@ function PencilIcon({
   )
 }
 
+function LaunchPopPlayMark({
+  size = 14,
+  color = colors.white,
+}: {
+  size?: number
+  color?: string
+}) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86a1 1 0 0 0-1.5.86z" />
+    </Svg>
+  )
+}
+
 function departureRouteLabel(value: string | null | undefined): string {
   const codes = parseAirportCodes(value)
   if (!codes.length) return value || '—'
@@ -199,6 +223,8 @@ export function TripDetailScreen() {
     return !peekPlannedTrip(tripId)
   })
   const [scanning, setScanning] = useState(false)
+  const [popFlightLinkOk, setPopFlightLinkOk] = useState<boolean | null>(null)
+  const [launchPopOpen, setLaunchPopOpen] = useState(false)
   const [relaunchOpen, setRelaunchOpen] = useState(false)
   const [relaunching, setRelaunching] = useState(false)
   const [acting, setActing] = useState<string | null>(null)
@@ -263,6 +289,7 @@ export function TripDetailScreen() {
     moment?: string | null
     notes?: string | null
     status?: string | null
+    meta?: Record<string, unknown> | null
   }
   const [activityItems, setActivityItems] = useState<ActivityRow[]>([])
   const onActivityItemsChange = useCallback((items: ActivityRow[]) => {
@@ -604,6 +631,7 @@ export function TripDetailScreen() {
             moment: (i.moment as string | null | undefined) ?? null,
             notes: (i.notes as string | null | undefined) ?? null,
             status: (i.status as string | null | undefined) ?? null,
+            meta: Object.keys(meta).length ? meta : null,
           }
         })
 
@@ -696,6 +724,21 @@ export function TripDetailScreen() {
   )
 
   const scan = useCallback(async () => {
+    const meta = (trip?.meta || {}) as {
+      source_itinerary_id?: string | null
+      from_pop?: boolean
+    }
+    const isPop =
+      plannedTripIsFromPop({ meta }) || plannedTripIsFromPop(trip)
+    if (isPop && popFlightLinkOk !== true) {
+      Alert.alert(
+        'Vol',
+        popFlightLinkOk === false
+          ? 'Aucune liaison aérienne — scan vol indisponible'
+          : 'Vérification de la liaison aérienne…',
+      )
+      return
+    }
     setScanning(true)
     setScanEmpty(null)
     setError(null)
@@ -761,7 +804,7 @@ export function TripDetailScreen() {
     } finally {
       setScanning(false)
     }
-  }, [tripId, useGuestPreview, load, navigation])
+  }, [tripId, trip, popFlightLinkOk, useGuestPreview, load, navigation])
 
   const bumpBudgetAndScan = async () => {
     if (!trip) return
@@ -780,15 +823,6 @@ export function TripDetailScreen() {
       setSavingCriteria(false)
     }
   }
-
-  // Création → scan immédiat (ne pas attendre le getTrip)
-  useEffect(() => {
-    if (!autoScan || autoScanStarted.current) return
-    autoScanStarted.current = true
-    setScanning(true)
-    navigation.setParams({ autoScan: undefined })
-    void scan()
-  }, [autoScan, scan, navigation])
 
   const accept = async (id: string) => {
     setActing(id)
@@ -1928,11 +1962,10 @@ export function TripDetailScreen() {
 
   const openMyHotel = () => {
     const token = flightDraft?.draft_token || workspace?.draft_token || null
-    if (
-      reservationFlags.hotelBooked ||
-      reservationFlags.externalHotel ||
-      workspace?.phase === 'booked'
-    ) {
+    const hotelDoneElsewhere =
+      (reservationFlags.hotelBooked || reservationFlags.externalHotel) &&
+      !wantHotelOpt
+    if (hotelDoneElsewhere || workspace?.phase === 'booked') {
       if (token) {
         navigation.navigate('TripSummary', { draftToken: token })
         return
@@ -1940,7 +1973,7 @@ export function TripDetailScreen() {
       navigation.navigate('Bookings')
       return
     }
-    if (reservationFlags.hasHotel && token) {
+    if (reservationFlags.hasHotel && token && !reservationFlags.externalHotel) {
       navigation.navigate('HotelCompose', {
         draftToken: token,
         openSelected: true,
@@ -1953,10 +1986,264 @@ export function TripDetailScreen() {
       return
     }
     if (accepted) void addHotelFromTrip(accepted.trip_data, accepted.id)
+    else void enableHotelOpt()
+  }
+
+  const tripMeta = (trip?.meta || {}) as {
+    want_flight?: boolean
+    want_hotel?: boolean
+    source_itinerary_id?: string | null
+    source_city_slug?: string | null
+    from_pop?: boolean
+  }
+  const fromPopViaItems = activityItems.some((i) =>
+    Boolean(
+      (i.meta as { from_itinerary_item_id?: string } | null | undefined)
+        ?.from_itinerary_item_id,
+    ),
+  )
+  const fromPopSource =
+    plannedTripIsFromPop(trip) ||
+    plannedTripIsFromPop(workspace?.planned_trip) ||
+    fromPopViaItems
+  const showPopFlightToggle = !fromPopSource || popFlightLinkOk === true
+  const wantFlightOpt =
+    tripMeta.want_flight != null
+      ? Boolean(tripMeta.want_flight) && showPopFlightToggle
+      : (
+            workspace?.planned_trip?.meta as
+              | { want_flight?: boolean }
+              | null
+              | undefined
+          )?.want_flight != null
+        ? Boolean(
+            (
+              workspace?.planned_trip?.meta as { want_flight?: boolean }
+            ).want_flight,
+          ) && showPopFlightToggle
+        : fromPopSource
+          ? false
+          : !reservationFlags.externalFlight
+  const wantHotelOpt =
+    tripMeta.want_hotel != null
+      ? Boolean(tripMeta.want_hotel)
+      : (
+            workspace?.planned_trip?.meta as
+              | { want_hotel?: boolean }
+              | null
+              | undefined
+          )?.want_hotel != null
+        ? Boolean(
+            (
+              workspace?.planned_trip?.meta as { want_hotel?: boolean }
+            ).want_hotel,
+          )
+        : fromPopSource
+          ? false
+          : !(reservationFlags.externalHotel || reservationFlags.hotelBooked)
+
+  useEffect(() => {
+    if (!fromPopSource || !trip) {
+      setPopFlightLinkOk(null)
+      return
+    }
+    const dep = String(trip.departure_airport || '').trim()
+    const arr =
+      String(trip.arrival_airport || '').trim() ||
+      arrivalCodesForCitySlug(tripMeta.source_city_slug) ||
+      ''
+    if (!dep || !arr) {
+      setPopFlightLinkOk(false)
+      return
+    }
+    let cancelled = false
+    setPopFlightLinkOk(null)
+    const timer = setTimeout(() => {
+      void getApi()
+        .checkRouteLink({ from: dep, to: arr })
+        .then((res) => {
+          if (!cancelled) setPopFlightLinkOk(Boolean(res.linked))
+        })
+        .catch(() => {
+          if (!cancelled) setPopFlightLinkOk(false)
+        })
+    }, 200)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [
+    fromPopSource,
+    trip?.id,
+    trip?.departure_airport,
+    trip?.arrival_airport,
+    tripMeta.source_city_slug,
+  ])
+
+  // Création → scan immédiat (ne pas attendre le getTrip)
+  useEffect(() => {
+    if (!autoScan || autoScanStarted.current) return
+    if (fromPopSource && popFlightLinkOk === null) return
+    if (fromPopSource && popFlightLinkOk === false) {
+      autoScanStarted.current = true
+      navigation.setParams({ autoScan: undefined })
+      return
+    }
+    autoScanStarted.current = true
+    setScanning(true)
+    navigation.setParams({ autoScan: undefined })
+    void scan()
+  }, [autoScan, scan, navigation, fromPopSource, popFlightLinkOk])
+
+  const setWantFlags = async (patch: {
+    want_flight?: boolean
+    want_hotel?: boolean
+  }) => {
+    if (!trip || useGuestPreview) return
+    const updated = await getApi().updatePlannedTrip(tripId, patch)
+    setTrip((prev) =>
+      prev
+        ? {
+            ...prev,
+            ...updated,
+            meta: { ...(prev.meta || {}), ...(updated.meta || {}), ...patch },
+          }
+        : prev,
+    )
+  }
+
+  const enableFlightOpt = async () => {
+    if (fromPopSource && popFlightLinkOk !== true) {
+      Alert.alert('Vol', 'Aucune liaison aérienne connue pour cette destination')
+      return
+    }
+    try {
+      await setWantFlags({ want_flight: true })
+    } catch (e) {
+      Alert.alert(
+        'Vol',
+        e instanceof Error ? e.message : 'Impossible d’activer le vol',
+      )
+      return
+    }
+    setFlightDraft((prev) => {
+      if (!prev) return prev
+      const payload = { ...(prev.payload || {}) } as Record<string, unknown>
+      delete payload.flight_external
+      delete payload.external_flight
+      const flight = {
+        ...((payload.flight as Record<string, unknown> | undefined) || {}),
+      }
+      delete flight.external
+      payload.flight = flight
+      return { ...prev, payload }
+    })
+    try {
+      await getApi().reopenPlannedTripFlight(tripId)
+    } catch {
+      /* may already be open */
+    }
+    void scan()
+  }
+
+  const disableFlightOpt = async () => {
+    try {
+      await setWantFlags({ want_flight: false })
+    } catch {
+      /* keep going — local skip still useful */
+    }
+    if (!reservationFlags.externalFlight) {
+      try {
+        const draft = await getApi().skipPlannedTripFlight(tripId)
+        setFlightDraft(draft)
+      } catch (e) {
+        Alert.alert(
+          'Vol',
+          e instanceof Error ? e.message : 'Impossible de désactiver le vol',
+        )
+        return
+      }
+    }
+    Alert.alert('Vol', 'Vol désactivé — programme conservé')
+  }
+
+  const enableHotelOpt = async () => {
+    try {
+      await setWantFlags({ want_hotel: true })
+    } catch (e) {
+      Alert.alert(
+        'Hôtel',
+        e instanceof Error ? e.message : 'Impossible d’activer l’hôtel',
+      )
+      return
+    }
+    try {
+      const workspaces = await listTravelWorkspacesCached({ force: true })
+      const matched =
+        workspaces.find((item) => item.planned_trip_id === tripId) || null
+      if (matched) setWorkspace(matched)
+      let token = String(
+        matched?.draft_token ||
+          flightDraft?.draft_token ||
+          workspace?.draft_token ||
+          '',
+      ).trim()
+      if (!token) {
+        const seeded = await getApi().skipPlannedTripFlight(tripId)
+        token = String(seeded?.draft_token || '').trim()
+        if (token) setFlightDraft(seeded)
+      }
+      if (!token) {
+        Alert.alert('Hôtel', 'Séjour pas encore prêt — réessaie.')
+        return
+      }
+      const draft = await getMyTripCached(token)
+      const payload = {
+        ...((draft?.payload || {}) as Record<string, unknown>),
+      }
+      delete payload.hotel_external
+      delete payload.external_hotel
+      delete payload.hotel_booked
+      delete payload.hotel_booked_at
+      setFlightDraft({
+        ...(draft || flightDraft)!,
+        draft_token: token,
+        hotel_booked_at: null,
+        payload,
+      })
+      navigation.navigate('HotelCompose', { draftToken: token })
+    } catch (e) {
+      Alert.alert(
+        'Hôtel',
+        e instanceof Error ? e.message : 'Impossible d’ouvrir l’hôtel',
+      )
+    }
+  }
+
+  const disableHotelOpt = async () => {
+    try {
+      await setWantFlags({ want_hotel: false })
+    } catch {
+      /* continue with skip */
+    }
+    if (!reservationFlags.externalHotel) {
+      try {
+        await skipHotel()
+      } catch (e) {
+        Alert.alert(
+          'Hôtel',
+          e instanceof Error ? e.message : 'Impossible de désactiver l’hôtel',
+        )
+      }
+    } else Alert.alert('Hôtel', 'Hôtel désactivé')
   }
 
   const onPipelineStep = (id: StayStepId) => {
     if (id === 'hotel') {
+      if (!wantHotelOpt && fromPopSource) {
+        void enableHotelOpt()
+        return
+      }
       if (
         reservationFlags.hotelBooked ||
         reservationFlags.externalHotel ||
@@ -1976,11 +2263,17 @@ export function TripDetailScreen() {
       return
     }
     if (id === 'flight') {
+      if (!showPopFlightToggle) return
+      if (!wantFlightOpt && fromPopSource) {
+        void enableFlightOpt()
+        return
+      }
       if (reservationFlags.flightBooked || reservationFlags.externalFlight) {
         openReservations()
         return
       }
       if (accepted) void bookSelectedFlight()
+      else void scan()
       return
     }
     if (id === 'activities' && plannerActivitiesEnabled) {
@@ -2078,6 +2371,14 @@ export function TripDetailScreen() {
     activitiesDone: activityStepProgress(activityItems).done,
     activitiesPartial: activityStepProgress(activityItems).partial,
   })
+  const pathSteps =
+    fromPopSource && popFlightLinkOk === false
+      ? pathView.steps.map((s) =>
+          s.id === 'flight'
+            ? { ...s, state: 'off' as const, statusLabel: 'Sans vol' }
+            : s,
+        )
+      : pathView.steps
   const outDateMobile =
     workspace?.out_date || trip.dates_depart?.[0]?.date || null
   const retDateMobile =
@@ -2114,8 +2415,29 @@ export function TripDetailScreen() {
         moment: i.moment,
         notes: i.notes,
         status: i.status,
+        meta: i.meta || null,
       })),
   })
+  const popProgrammeItems = fromPopSource
+    ? tripItemsToItineraryItems(
+        activityItems
+          .filter((i) => i.id)
+          .map((i) => ({
+            id: String(i.id),
+            item_type: i.item_type,
+            title: i.title,
+            name: i.name,
+            day_offset: i.day_offset,
+            moment: i.moment,
+            notes: i.notes,
+            meta: i.meta || null,
+          })),
+        { itineraryId: tripMeta.source_itinerary_id },
+      )
+    : []
+  const popProgrammeDays = fromPopSource
+    ? groupItemsByDay(popProgrammeItems)
+    : []
   const orgaDisplayMobile =
     authName || trip.organizer?.full_name || trip.member_names?.[0] || null
   const orgaFirstMobile =
@@ -2135,6 +2457,7 @@ export function TripDetailScreen() {
             `${pax} voyageur${pax > 1 ? 's' : ''}`,
           ].filter(Boolean) as string[]}
           phaseLabel={pathView.phaseLabel}
+          showPopTag={plannedTripIsFromPop(trip)}
           guideName={
             orgaFirstMobile
               ? `Organisé par ${orgaFirstMobile}`
@@ -2172,10 +2495,107 @@ export function TripDetailScreen() {
           titleSaving={savingName}
           apercu={
             <View style={{ gap: 16 }}>
+              {fromPopSource ? (
+                <TripOptInToggles
+                  wantFlight={wantFlightOpt}
+                  wantHotel={wantHotelOpt}
+                  showFlight={showPopFlightToggle}
+                  busy={
+                    scanning ||
+                    skippingFlight ||
+                    skippingHotel ||
+                    hotelBusy
+                  }
+                  onEnableFlight={enableFlightOpt}
+                  onDisableFlight={disableFlightOpt}
+                  onEnableHotel={enableHotelOpt}
+                  onDisableHotel={disableHotelOpt}
+                />
+              ) : null}
               <PathStepsTiles
-                steps={pathView.steps}
+                steps={pathSteps}
                 onStepPress={(id) => onPipelineStep(id)}
               />
+              {fromPopSource ? (
+                <Button
+                  label="Lancer ce Pop"
+                  left={<LaunchPopPlayMark />}
+                  onPress={() => setLaunchPopOpen(true)}
+                />
+              ) : null}
+              {wantFlightOpt && scanning ? (
+                <PlannerScanPanel
+                  fromLabel={
+                    trip.departure_airport
+                      ? String(trip.departure_airport).replace(/,/g, ' · ')
+                      : '…'
+                  }
+                  toLabel={
+                    trip.arrival_airport
+                      ? String(trip.arrival_airport).replace(/,/g, ' · ')
+                      : 'inspire'
+                  }
+                  compact
+                />
+              ) : null}
+              {wantFlightOpt && !scanning && pending.length > 0 ? (
+                <View style={{ gap: 10 }}>
+                  <Text
+                    style={{
+                      fontFamily: fonts.semibold,
+                      fontSize: 16,
+                      color: colors.ink,
+                    }}
+                  >
+                    Choisir un vol ({pending.length})
+                  </Text>
+                  {pending.map((p) => (
+                    <ProposalBlock
+                      key={p.id}
+                      proposal={p}
+                      passengers={trip.passengers}
+                      isOrganizer={isOrganizer}
+                      busy={acting === p.id}
+                      onAccept={() => void accept(p.id)}
+                      onReject={() => void reject(p.id)}
+                    />
+                  ))}
+                </View>
+              ) : null}
+              {wantFlightOpt &&
+              !scanning &&
+              !accepted &&
+              pending.length === 0 &&
+              scanEmpty ? (
+                <View
+                  style={[
+                    styles.empty,
+                    shadow.soft,
+                    scanEmpty.reason === 'budget' && styles.emptyBudget,
+                  ]}
+                >
+                  <Text style={styles.emptyTitle}>
+                    {scanEmpty.reason === 'budget'
+                      ? `Rien sous ${scanEmpty.budget} €/pers`
+                      : 'Aucun vol trouvé'}
+                  </Text>
+                  <Text style={styles.emptyBody}>
+                    {scanEmpty.reason === 'budget'
+                      ? scanEmpty.cheapest
+                        ? `Le moins cher vu : ~${Math.ceil(scanEmpty.cheapest)} €/pers.`
+                        : 'Élargis le budget ou les dates, puis relance.'
+                      : 'Essaie d’autres dates ou un budget plus large.'}
+                  </Text>
+                  {isOrganizer ? (
+                    <Pressable
+                      onPress={() => void scan()}
+                      style={styles.emptyCta}
+                    >
+                      <Text style={styles.emptyCtaText}>Relancer le scan</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
               {canRelaunch ? (
                 <Pressable
                   onPress={() => setRelaunchOpen(true)}
@@ -2217,7 +2637,9 @@ export function TripDetailScreen() {
                   </ImageBackground>
                 </Pressable>
               ) : null}
-              {accepted?.trip_data && !reservationFlags.externalFlight ? (
+              {accepted?.trip_data &&
+              !(reservationFlags.externalFlight && !wantFlightOpt) &&
+              wantFlightOpt ? (
                 <MobileBoardingPass
                   trip={sanitizeTripAirports(
                     accepted.trip_data as EnrichedTripResponse,
@@ -2225,12 +2647,16 @@ export function TripDetailScreen() {
                   passengers={pax}
                   pricePerPerson={stayParty.flightPp || stayParty.perPerson}
                   priceCaption={partyPriceCaptionFr(pax, { kind: 'flight' })}
-                  flightBooked={reservationFlags.flightBooked}
+                  flightBooked={
+                    reservationFlags.flightBooked &&
+                    !reservationFlags.externalFlight
+                  }
                   bookingBusy={flightBookingBusy}
                   onBook={() => void bookSelectedFlight()}
                 />
               ) : null}
-              {!reservationFlags.externalHotel ? (
+              {wantHotelOpt &&
+              !(reservationFlags.externalHotel && !wantHotelOpt) ? (
                 <View style={[styles.nextStepCard, shadow.soft]}>
                   {showHotelGallery ? (
                     <HotelPhotoGallery
@@ -2440,175 +2866,211 @@ export function TripDetailScreen() {
             />
           }
           programme={
-            <View style={{ gap: 16 }}>
-              <Text
-                style={{
-                  fontFamily: fonts.semibold,
-                  fontSize: 17,
-                  color: colors.ink,
-                }}
-              >
-                Programme
-              </Text>
-              {programmeMobile.needsDates ? (
-                <Text
-                  style={{
-                    fontFamily: fonts.medium,
-                    fontSize: 13,
-                    color: '#6B5C50',
-                    lineHeight: 19,
-                  }}
-                >
-                  Les jours apparaîtront quand les dates seront fixées.
-                </Text>
-              ) : null}
-              {programmeMobile.unplaced.length > 0 ? (
-                <View
-                  style={{
-                    backgroundColor: '#fff',
-                    borderRadius: 16,
-                    padding: 14,
-                    gap: 6,
-                    borderWidth: StyleSheet.hairlineWidth,
-                    borderColor: '#EDE4DC',
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontFamily: fonts.semibold,
-                      fontSize: 15,
-                      color: colors.ink,
-                    }}
-                  >
-                    À placer
-                  </Text>
+            fromPopSource ? (
+              <View style={{ gap: 12 }}>
+                {!popProgrammeDays.length ? (
                   <Text
                     style={{
                       fontFamily: fonts.medium,
-                      fontSize: 12,
+                      fontSize: 13,
                       color: '#8A7B6E',
                     }}
                   >
-                    {programmeMobile.unplacedHint}
+                    Les étapes du Pop apparaîtront ici.
                   </Text>
-                  {programmeMobile.unplaced.map((it) => (
+                ) : (
+                  popProgrammeDays.map((day) => (
+                    <View key={day.dayOffset} style={{ marginBottom: 8 }}>
+                      <ParcoursDayHeader
+                        label={day.label}
+                        items={day.items}
+                      />
+                      {day.items.map((it, i) => (
+                        <ParcoursStepBlock
+                          key={it.id || `${day.dayOffset}-${i}`}
+                          item={it}
+                          index={i}
+                          momentLabel={momentLabelFr(it.moment) || null}
+                          travelMinutes={travelMinutesFromMeta(
+                            it.meta || null,
+                          )}
+                        />
+                      ))}
+                    </View>
+                  ))
+                )}
+              </View>
+            ) : (
+              <View style={{ gap: 16 }}>
+                <Text
+                  style={{
+                    fontFamily: fonts.semibold,
+                    fontSize: 17,
+                    color: colors.ink,
+                  }}
+                >
+                  Programme
+                </Text>
+                {programmeMobile.needsDates ? (
+                  <Text
+                    style={{
+                      fontFamily: fonts.medium,
+                      fontSize: 13,
+                      color: '#6B5C50',
+                      lineHeight: 19,
+                    }}
+                  >
+                    Les jours apparaîtront quand les dates seront fixées.
+                  </Text>
+                ) : null}
+                {programmeMobile.unplaced.length > 0 ? (
+                  <View
+                    style={{
+                      backgroundColor: '#fff',
+                      borderRadius: 16,
+                      padding: 14,
+                      gap: 6,
+                      borderWidth: StyleSheet.hairlineWidth,
+                      borderColor: '#EDE4DC',
+                    }}
+                  >
                     <Text
-                      key={it.id}
                       style={{
                         fontFamily: fonts.semibold,
-                        fontSize: 14,
+                        fontSize: 15,
                         color: colors.ink,
                       }}
                     >
-                      {it.title}
+                      À placer
                     </Text>
-                  ))}
-                </View>
-              ) : null}
-              {programmeMobile.days.map((d) => (
-                <View key={d.dayOffset} style={{ gap: 10 }}>
-                  <Text
-                    style={{
-                      fontFamily: fonts.semibold,
-                      fontSize: 15,
-                      color: colors.ink,
-                      textTransform: 'capitalize',
-                    }}
-                  >
-                    {d.label}
-                  </Text>
-                  {d.empty ? (
                     <Text
                       style={{
                         fontFamily: fonts.medium,
-                        fontSize: 13,
-                        color: '#C4B8AC',
+                        fontSize: 12,
+                        color: '#8A7B6E',
                       }}
                     >
-                      Journée libre
+                      {programmeMobile.unplacedHint}
                     </Text>
-                  ) : (
-                    d.slots.map((slot) => (
-                      <View key={slot.moment} style={{ gap: 6 }}>
-                        <Text
-                          style={{
-                            fontFamily: fonts.semibold,
-                            fontSize: 11,
-                            letterSpacing: 1.2,
-                            textTransform: 'uppercase',
-                            color: '#A3988C',
-                          }}
-                        >
-                          {slot.label}
-                        </Text>
-                        {slot.items.map((it) => (
-                          <Pressable
-                            key={it.id}
-                            onPress={() => {
-                              if (it.action === 'scan') void scan()
-                              else if (it.action === 'flight')
-                                void bookSelectedFlight()
-                              else if (it.action === 'hotel') {
-                                const token =
-                                  flightDraft?.draft_token ||
-                                  workspace?.draft_token ||
-                                  null
-                                if (token) {
-                                  navigation.navigate('HotelCompose', {
-                                    draftToken: token,
-                                  })
-                                }
-                              } else if (it.action === 'activity') {
-                                setPathTab('apercu')
-                              }
-                            }}
+                    {programmeMobile.unplaced.map((it) => (
+                      <Text
+                        key={it.id}
+                        style={{
+                          fontFamily: fonts.semibold,
+                          fontSize: 14,
+                          color: colors.ink,
+                        }}
+                      >
+                        {it.title}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+                {programmeMobile.days.map((d) => (
+                  <View key={d.dayOffset} style={{ gap: 10 }}>
+                    <Text
+                      style={{
+                        fontFamily: fonts.semibold,
+                        fontSize: 15,
+                        color: colors.ink,
+                        textTransform: 'capitalize',
+                      }}
+                    >
+                      {d.label}
+                    </Text>
+                    {d.empty ? (
+                      <Text
+                        style={{
+                          fontFamily: fonts.medium,
+                          fontSize: 13,
+                          color: '#C4B8AC',
+                        }}
+                      >
+                        Journée libre
+                      </Text>
+                    ) : (
+                      d.slots.map((slot) => (
+                        <View key={slot.moment} style={{ gap: 6 }}>
+                          <Text
                             style={{
-                              backgroundColor: '#F7F4EF',
-                              borderRadius: 16,
-                              paddingHorizontal: 14,
-                              paddingVertical: 12,
-                              gap: 4,
+                              fontFamily: fonts.semibold,
+                              fontSize: 11,
+                              letterSpacing: 1.2,
+                              textTransform: 'uppercase',
+                              color: '#A3988C',
                             }}
                           >
-                            <Text
+                            {slot.label}
+                          </Text>
+                          {slot.items.map((it) => (
+                            <Pressable
+                              key={it.id}
+                              onPress={() => {
+                                if (it.action === 'scan') void scan()
+                                else if (it.action === 'flight')
+                                  void bookSelectedFlight()
+                                else if (it.action === 'hotel') {
+                                  const token =
+                                    flightDraft?.draft_token ||
+                                    workspace?.draft_token ||
+                                    null
+                                  if (token) {
+                                    navigation.navigate('HotelCompose', {
+                                      draftToken: token,
+                                    })
+                                  }
+                                } else if (it.action === 'activity') {
+                                  setPathTab('apercu')
+                                }
+                              }}
                               style={{
-                                fontFamily: fonts.semibold,
-                                fontSize: 14,
-                                color: colors.ink,
+                                backgroundColor: '#F7F4EF',
+                                borderRadius: 16,
+                                paddingHorizontal: 14,
+                                paddingVertical: 12,
+                                gap: 4,
                               }}
                             >
-                              {it.title}
-                            </Text>
-                            {it.subtitle ? (
                               <Text
                                 style={{
-                                  fontFamily: fonts.medium,
-                                  fontSize: 12,
-                                  color: '#8A7B6E',
+                                  fontFamily: fonts.semibold,
+                                  fontSize: 14,
+                                  color: colors.ink,
                                 }}
                               >
-                                {it.subtitle}
+                                {it.title}
                               </Text>
-                            ) : null}
-                            {it.notes ? (
-                              <Text
-                                style={{
-                                  fontFamily: fonts.medium,
-                                  fontSize: 12,
-                                  color: '#6B5C50',
-                                }}
-                              >
-                                {it.notes}
-                              </Text>
-                            ) : null}
-                          </Pressable>
-                        ))}
-                      </View>
-                    ))
-                  )}
-                </View>
-              ))}
-            </View>
+                              {it.subtitle ? (
+                                <Text
+                                  style={{
+                                    fontFamily: fonts.medium,
+                                    fontSize: 12,
+                                    color: '#8A7B6E',
+                                  }}
+                                >
+                                  {it.subtitle}
+                                </Text>
+                              ) : null}
+                              {it.notes ? (
+                                <Text
+                                  style={{
+                                    fontFamily: fonts.medium,
+                                    fontSize: 12,
+                                    color: '#6B5C50',
+                                  }}
+                                >
+                                  {it.notes}
+                                </Text>
+                              ) : null}
+                            </Pressable>
+                          ))}
+                        </View>
+                      ))
+                    )}
+                  </View>
+                ))}
+              </View>
+            )
           }
         />
         <RelaunchDatesSheet
@@ -2617,6 +3079,13 @@ export function TripDetailScreen() {
           cityLabel={cityLabel}
           onClose={() => !relaunching && setRelaunchOpen(false)}
           onConfirm={(dates) => void relaunchWithDates(dates)}
+        />
+        <LaunchPopSheet
+          visible={launchPopOpen}
+          title={trip.name}
+          items={popProgrammeItems}
+          itineraryId={tripMeta.source_itinerary_id || undefined}
+          onClose={() => setLaunchPopOpen(false)}
         />
       </View>
     )
@@ -2779,15 +3248,20 @@ export function TripDetailScreen() {
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       {isOrganizer && trip.status !== 'locked' ? (
-        <>
+        fromPopSource ? (
+          <Button
+            label="Lancer ce Pop"
+            left={<LaunchPopPlayMark />}
+            onPress={() => setLaunchPopOpen(true)}
+          />
+        ) : (
           <Button
             label={scanning ? 'Scan en cours…' : 'Scanner les prix'}
             onPress={() => void scan()}
             loading={scanning}
             disabled={scanning}
           />
-          {/* Price watch / surveillance — masqué pour le moment */}
-        </>
+        )
       ) : null}
 
       {reservationFlags.externalFlight && !scanning ? (
@@ -3427,6 +3901,13 @@ export function TripDetailScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+      <LaunchPopSheet
+        visible={launchPopOpen}
+        title={trip.name}
+        items={popProgrammeItems}
+        itineraryId={tripMeta.source_itinerary_id || undefined}
+        onClose={() => setLaunchPopOpen(false)}
+      />
     </View>
   )
 }
@@ -4530,6 +5011,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFBEB',
     borderWidth: 1,
     borderColor: '#FDE68A',
+  },
+  emptyCta: {
+    marginTop: 12,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCtaText: {
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    color: '#fff',
   },
   budgetEdit: { width: '100%', gap: 12, marginTop: 12 },
   budgetLabel: {

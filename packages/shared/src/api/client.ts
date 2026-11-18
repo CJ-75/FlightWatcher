@@ -256,6 +256,19 @@ export function createApiClient(options: ApiClientOptions = {}) {
         `/api/destinations?airport=${encodeURIComponent(airport)}`
       ),
 
+    /** Positive Ryanair link: any origin IATA serves any arrival IATA. */
+    checkRouteLink: (opts: { from: string; to: string }) => {
+      const from = String(opts.from || '').trim()
+      const to = String(opts.to || '').trim()
+      const q = new URLSearchParams({ from, to })
+      return request<{
+        ok: boolean
+        linked: boolean
+        from: string[]
+        to: string[]
+      }>(`/api/routes/link?${q.toString()}`)
+    },
+
     autoCheck: (body: unknown) =>
       request<unknown>('/api/auto-check', {
         method: 'POST',

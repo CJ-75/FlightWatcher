@@ -135,6 +135,19 @@ def apply_itinerary_to_trip(
         for key in ("maps_url", "lat", "lng", "travel_minutes", "photos"):
             if raw_meta.get(key) is not None and key not in meta:
                 meta[key] = raw_meta.get(key)
+        photo_url = ""
+        raw_photo = meta.get("photo")
+        if isinstance(raw_photo, str) and raw_photo.strip():
+            photo_url = raw_photo.strip()
+        if not photo_url:
+            photos = meta.get("photos")
+            if isinstance(photos, list):
+                for entry in photos:
+                    if isinstance(entry, str) and entry.strip():
+                        photo_url = entry.strip()
+                        break
+        if photo_url:
+            meta["photo_url"] = photo_url
         place = it.get("places") if isinstance(it.get("places"), dict) else {}
         place_meta = place.get("meta") if isinstance(place.get("meta"), dict) else {}
         if meta.get("lat") is None and place_meta.get("lat") is not None:
@@ -217,4 +230,35 @@ def apply_itinerary_to_trip(
         except Exception as e:
             logger.debug("apply item: %s", e)
             skipped += 1
+
+    # Persist Pop provenance on the trip so hub/detail can show the Pop tag.
+    if planned_trip_id and itinerary_id:
+        try:
+            cur = (
+                supabase.table("planned_trips")
+                .select("meta")
+                .eq("id", planned_trip_id)
+                .limit(1)
+                .execute()
+            )
+            row = (cur.data or [None])[0] or {}
+            cur_meta = (
+                dict(row.get("meta") or {})
+                if isinstance(row.get("meta"), dict)
+                else {}
+            )
+            next_meta = {
+                **cur_meta,
+                "from_pop": True,
+                "source_itinerary_id": str(
+                    cur_meta.get("source_itinerary_id") or itinerary_id
+                ).strip(),
+            }
+            if next_meta != cur_meta:
+                supabase.table("planned_trips").update({"meta": next_meta}).eq(
+                    "id", planned_trip_id
+                ).execute()
+        except Exception as e:
+            logger.debug("apply meta source: %s", e)
+
     return {"ok": True, "created": created, "skipped": skipped}

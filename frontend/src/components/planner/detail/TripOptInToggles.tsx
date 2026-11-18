@@ -4,6 +4,8 @@ type Props = {
   wantFlight: boolean
   wantHotel: boolean
   busy?: boolean
+  /** Hide Vol when no real origin→dest link (Pop route gate). Default true. */
+  showFlight?: boolean
   /** Enable flight: may need departure/dates collection first */
   onEnableFlight: () => void | Promise<void>
   onDisableFlight: () => void | Promise<void>
@@ -18,6 +20,7 @@ export function TripOptInToggles({
   wantFlight,
   wantHotel,
   busy,
+  showFlight = true,
   onEnableFlight,
   onDisableFlight,
   onEnableHotel,
@@ -25,6 +28,7 @@ export function TripOptInToggles({
 }: Props) {
   const [pending, setPending] = useState<'flight' | 'hotel' | null>(null)
   const locked = Boolean(busy || pending)
+  const flightVisible = showFlight
 
   const run = async (key: 'flight' | 'hotel', fn: () => void | Promise<void>) => {
     setPending(key)
@@ -40,21 +44,23 @@ export function TripOptInToggles({
       <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#8A7B6E]">
         Options séjour
       </p>
-      <ToggleRow
-        label="Vol"
-        hint={
-          wantFlight
-            ? 'Scan et réservation WayPop'
-            : 'Activer pour chercher un vol'
-        }
-        checked={wantFlight}
-        disabled={locked}
-        onToggle={() =>
-          void run('flight', () =>
-            wantFlight ? onDisableFlight() : onEnableFlight(),
-          )
-        }
-      />
+      {flightVisible ? (
+        <ToggleRow
+          label="Vol"
+          hint={
+            wantFlight
+              ? 'Scan et réservation WayPop'
+              : 'Activer pour chercher un vol'
+          }
+          checked={wantFlight}
+          disabled={locked}
+          onToggle={() =>
+            void run('flight', () =>
+              wantFlight ? onDisableFlight() : onEnableFlight(),
+            )
+          }
+        />
+      ) : null}
       <ToggleRow
         label="Hôtel"
         hint={
@@ -70,7 +76,7 @@ export function TripOptInToggles({
           )
         }
       />
-      {!wantFlight && !wantHotel ? (
+      {(!flightVisible || !wantFlight) && !wantHotel ? (
         <p className="px-0.5 text-[12px] font-medium text-[#8A7B6E]">
           Tu n’es pas sur place ? Pense au vol et à l’hôtel quand le groupe est
           prêt.

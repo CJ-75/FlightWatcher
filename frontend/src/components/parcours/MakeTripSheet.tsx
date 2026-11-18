@@ -68,6 +68,8 @@ export function MakeTripSheet({
   const todayIso = useMemo(() => formatDateLocal(new Date()), [])
   const [wantFlight, setWantFlight] = useState(false)
   const [wantHotel, setWantHotel] = useState(false)
+  /** null = checking; only show Vol toggle when true */
+  const [canOfferFlight, setCanOfferFlight] = useState<boolean | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -107,7 +109,41 @@ export function MakeTripSheet({
     ''
   const arrival =
     arrivalCodesForCitySlug(itinerary.city_slug) || undefined
-  const needsDeparture = wantFlight
+
+  useEffect(() => {
+    const dep =
+      encodeAirportCodes(parseAirportCodes(departure)) || 'CDG,ORY'
+    const arr = arrivalCodesForCitySlug(itinerary.city_slug)
+    if (!arr) {
+      setCanOfferFlight(false)
+      setWantFlight(false)
+      return
+    }
+    let cancelled = false
+    setCanOfferFlight(null)
+    const timer = window.setTimeout(() => {
+      void getApiClient()
+        .checkRouteLink({ from: dep, to: arr })
+        .then((res) => {
+          if (cancelled) return
+          const ok = Boolean(res.linked)
+          setCanOfferFlight(ok)
+          if (!ok) setWantFlight(false)
+        })
+        .catch(() => {
+          if (cancelled) return
+          setCanOfferFlight(false)
+          setWantFlight(false)
+        })
+    }, 200)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [departure, itinerary.city_slug])
+
+  const flightEnabled = canOfferFlight === true && wantFlight
+  const needsDeparture = flightEnabled
 
   const selectParty = (mode: PartyMode) => {
     setPartyMode(mode)
@@ -148,7 +184,7 @@ export function MakeTripSheet({
         ],
         budget_max: budget,
         direct: false,
-        want_flight: wantFlight,
+        want_flight: flightEnabled,
         want_hotel: wantHotel,
         source_itinerary_id: itinerary.id,
         source_city_slug: itinerary.city_slug || null,
@@ -156,7 +192,7 @@ export function MakeTripSheet({
       const apply = await api.applyItinerary(itinerary.id, {
         planned_trip_id: trip.id,
       })
-      if (!wantFlight) {
+      if (!flightEnabled) {
         await api.skipPlannedTripFlight(trip.id).catch(() => {})
       }
       if (!wantHotel) {
@@ -172,12 +208,16 @@ export function MakeTripSheet({
             itinerary_id: itinerary.id,
             trip_id: trip.id,
             created: apply.created,
-            want_flight: wantFlight,
+            want_flight: flightEnabled,
             want_hotel: wantHotel,
           },
         })
         .catch(() => {})
-      onCreated({ tripId: trip.id, wantFlight, wantHotel })
+      onCreated({
+        tripId: trip.id,
+        wantFlight: flightEnabled,
+        wantHotel,
+      })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Création impossible')
     } finally {
@@ -201,7 +241,7 @@ export function MakeTripSheet({
             outbound,
             inbound,
             budget,
-            wantFlight,
+            wantFlight: flightEnabled,
             wantHotel,
           },
           createdAt: Date.now(),
@@ -260,12 +300,14 @@ export function MakeTripSheet({
                 {nudge}
               </p>
             ) : null}
-            <ToggleRow
-              label="Trouver un vol"
-              hint="Départ + scan des prix"
-              checked={wantFlight}
-              onChange={setWantFlight}
-            />
+            {canOfferFlight === true ? (
+              <ToggleRow
+                label="Trouver un vol"
+                hint="Départ + scan des prix"
+                checked={wantFlight}
+                onChange={setWantFlight}
+              />
+            ) : null}
             <ToggleRow
               label="Trouver un hôtel"
               hint="Offres près du Pop"
@@ -357,7 +399,7 @@ export function MakeTripSheet({
             Utiliser le week-end prochain
           </button>
 
-          {wantFlight ? (
+          {flightEnabled ? (
             <label className="block text-xs font-bold uppercase tracking-wide text-muted space-y-1">
               Budget max / pers. (€)
               <input

@@ -28,6 +28,8 @@ type Props = {
   hotelHero?: HotelHero | null
   metaChips?: string[]
   phaseLabel: string
+  /** Tag « Pop » à côté du statut (voyage issu d’un parcours). */
+  showPopTag?: boolean
   onBack: () => void
   onShare?: () => void
   onRename?: () => void
@@ -78,6 +80,7 @@ export function TripDetailPathChrome({
   hotelHero,
   metaChips,
   phaseLabel,
+  showPopTag = false,
   onBack: _onBack,
   onShare,
   onRename,
@@ -124,9 +127,16 @@ export function TripDetailPathChrome({
 
   const heroCopy = (
     <div className="max-w-3xl space-y-3">
-      <span className="inline-flex rounded-full bg-[rgba(255,255,255,0.82)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#1A120E] shadow-sm ring-1 ring-black/10 backdrop-blur-md">
-        {phaseLabel}
-      </span>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex rounded-full bg-[rgba(255,255,255,0.82)] px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#1A120E] shadow-sm ring-1 ring-black/10 backdrop-blur-md">
+          {phaseLabel}
+        </span>
+        {showPopTag ? (
+          <span className="inline-flex rounded-full bg-[#FF6B35]/95 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm ring-1 ring-white/25 backdrop-blur-md">
+            Pop
+          </span>
+        ) : null}
+      </div>
       {titleEditing ? (
         <form
           className="flex flex-wrap items-center gap-2"

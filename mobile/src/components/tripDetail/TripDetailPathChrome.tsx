@@ -27,6 +27,7 @@ type Props = {
   city: string
   metaChips?: string[]
   phaseLabel: string
+  showPopTag?: boolean
   onBack: () => void
   /** e.g. « Retour au parcours » when opened from Make trip */
   backAccessibilityLabel?: string
@@ -76,6 +77,7 @@ export function TripDetailPathChrome({
   city,
   metaChips,
   phaseLabel,
+  showPopTag = false,
   onBack,
   backAccessibilityLabel = 'Retour',
   onShare,
@@ -123,8 +125,15 @@ export function TripDetailPathChrome({
 
   const heroCopy = (
     <View style={styles.heroCopy}>
-      <View style={styles.phasePill}>
-        <Text style={styles.phaseText}>{phaseLabel}</Text>
+      <View style={styles.phaseRow}>
+        <View style={styles.phasePill}>
+          <Text style={styles.phaseText}>{phaseLabel}</Text>
+        </View>
+        {showPopTag ? (
+          <View style={styles.popTag}>
+            <Text style={styles.popTagText}>Pop</Text>
+          </View>
+        ) : null}
       </View>
       {titleEditing ? (
         <View style={styles.renameRow}>
@@ -398,6 +407,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 12,
   },
+  phaseRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+  },
   phasePill: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(255,255,255,0.82)',
@@ -411,6 +426,20 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 1 },
     elevation: 2,
+  },
+  popTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,107,53,0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  popTagText: {
+    color: '#fff',
+    fontFamily: fonts.bold,
+    fontSize: 11,
   },
   phaseText: {
     color: colors.ink,

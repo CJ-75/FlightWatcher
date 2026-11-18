@@ -48,7 +48,7 @@ function StepIcon({ id, color }: { id: StayStepId; color: string }) {
   )
 }
 
-/** Path « Étapes » — parity mobile (cream / live / done). */
+/** Path « Étapes » — parity mobile (cream / live / done / off). */
 export function PathStepsTiles({ steps, onStepPress }: Props) {
   if (!steps.length) return null
   return (
@@ -56,42 +56,58 @@ export function PathStepsTiles({ steps, onStepPress }: Props) {
       {steps.map((step) => {
         const live = step.state === 'current'
         const done = step.state === 'done'
-        const iconColor = live || done ? '#fff' : '#6B5C50'
+        const off = step.state === 'off'
+        const iconColor = live || done ? '#fff' : off ? '#C4B8AC' : '#6B5C50'
         return (
           <button
             key={step.id}
             type="button"
-            onClick={() => onStepPress?.(step.id)}
+            disabled={off}
+            aria-disabled={off || undefined}
+            onClick={() => {
+              if (off) return
+              onStepPress?.(step.id)
+            }}
             className={`flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-2xl border px-1 py-3 text-center transition ${
-              live
-                ? 'border-[rgba(255,107,53,0.3)] bg-[#FFF7F2]'
-                : done
-                  ? 'border-[rgba(15,138,95,0.12)] bg-[#F3FAF6]'
-                  : 'border-[#EDE4DC] bg-white hover:bg-[#F7F2ED]'
+              off
+                ? 'cursor-default border-[#EDE4DC] bg-[#F7F4EF] opacity-70'
+                : live
+                  ? 'border-[rgba(255,107,53,0.3)] bg-[#FFF7F2]'
+                  : done
+                    ? 'border-[rgba(15,138,95,0.12)] bg-[#F3FAF6]'
+                    : 'border-[#EDE4DC] bg-white hover:bg-[#F7F2ED]'
             }`}
           >
             <span
               className={`flex h-9 w-9 items-center justify-center rounded-full ${
-                live
-                  ? 'bg-[#FF6B35]'
-                  : done
-                    ? 'bg-[#0F8A5F]'
-                    : 'bg-[#F7F2ED]'
+                off
+                  ? 'bg-[#EDE4DC]'
+                  : live
+                    ? 'bg-[#FF6B35]'
+                    : done
+                      ? 'bg-[#0F8A5F]'
+                      : 'bg-[#F7F2ED]'
               }`}
             >
               <StepIcon id={step.id} color={iconColor} />
             </span>
-            <span className="text-[11px] font-semibold leading-tight text-[#1A120E]">
+            <span
+              className={`text-[11px] font-semibold leading-tight ${
+                off ? 'text-[#9A8778]' : 'text-[#1A120E]'
+              }`}
+            >
               {step.label}
             </span>
             {step.statusLabel ? (
               <span
                 className={`max-w-full truncate px-1 text-[10px] font-medium ${
-                  live
-                    ? 'text-[#E85A28]'
-                    : done
-                      ? 'text-[#0F8A5F]'
-                      : 'text-[#9A8778]'
+                  off
+                    ? 'text-[#B0A296]'
+                    : live
+                      ? 'text-[#E85A28]'
+                      : done
+                        ? 'text-[#0F8A5F]'
+                        : 'text-[#9A8778]'
                 }`}
               >
                 {step.statusLabel}

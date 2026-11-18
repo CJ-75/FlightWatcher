@@ -86,6 +86,10 @@ export function stubPlannedTripFromWorkspace(
 ): PlannedTripDetail {
   const out = String(ws.out_date || '').slice(0, 10)
   const ret = String(ws.ret_date || '').slice(0, 10)
+  const wsMeta =
+    ws.planned_trip?.meta && typeof ws.planned_trip.meta === 'object'
+      ? ws.planned_trip.meta
+      : null
   return {
     id: tripId,
     organizer_id: '',
@@ -104,6 +108,7 @@ export function stubPlannedTripFromWorkspace(
     created_at: String(ws.updated_at || new Date().toISOString()),
     proposals: [],
     members: [],
+    meta: wsMeta || undefined,
   }
 }
 

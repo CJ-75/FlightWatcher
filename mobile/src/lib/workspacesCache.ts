@@ -4,7 +4,7 @@ import { getApi } from './client'
 
 /** Keep hub instant on tab focus; pull-to-refresh / mutations still force. */
 const TTL_MS = 60_000
-const DISK_KEY = 'fw_travel_workspaces_v1'
+const DISK_KEY = 'fw_travel_workspaces_v2'
 
 let cached: { at: number; data: TravelWorkspace[] } | null = null
 let inflight: Promise<TravelWorkspace[]> | null = null
