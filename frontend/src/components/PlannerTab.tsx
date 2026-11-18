@@ -2735,6 +2735,8 @@ function TripDetailView({
       : fromPopSource
         ? false
         : !(externalHotel || hotelBooked)
+  /** Pop sans vol (gate routes / toggle off) : pas d’aéroports ni hint « Finalise… ». */
+  const hidePopFlightChrome = fromPopSource && !wantFlightOpt
 
   // Création → scan immédiat (ne pas attendre le getTrip / isOrganizer)
   useEffect(() => {
@@ -3552,14 +3554,18 @@ function TripDetailView({
                 ) : null}
               </div>
             )}
-            <p className="mt-3 text-sm sm:text-base font-semibold text-white/80">
-              {routeLine}
-              {trip.direct ? ' · directs' : ''}
-            </p>
-            {dateLine ? (
-              <p className="mt-1 text-sm text-white/65">{dateLine}</p>
+            {!hidePopFlightChrome ? (
+              <p className="mt-3 text-sm sm:text-base font-semibold text-white/80">
+                {routeLine}
+                {trip.direct ? ' · directs' : ''}
+              </p>
             ) : null}
-            {workspace?.phase ? (
+            {dateLine ? (
+              <p className={`${hidePopFlightChrome ? 'mt-3' : 'mt-1'} text-sm text-white/65`}>
+                {dateLine}
+              </p>
+            ) : null}
+            {workspace?.phase && !hidePopFlightChrome ? (
               <p className="mt-2 text-sm text-white/55">
                 {PHASE_HINT[workspace.phase]}
               </p>
@@ -3597,13 +3603,13 @@ function TripDetailView({
                   </button>
                 )
               ) : null}
-              {reservationToken && (hotelBooked || flightBooked) ? (
+              {reservationToken && hotelBooked ? (
                 <button
                   type="button"
                   onClick={openReservations}
                   className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold text-white hover:bg-white/20 min-h-[48px] backdrop-blur-md"
                 >
-                  {hotelBooked ? HOTEL_CTA_FR.view : 'Voir les réservations'}
+                  {HOTEL_CTA_FR.view}
                 </button>
               ) : null}
             </div>
@@ -3623,7 +3629,11 @@ function TripDetailView({
           dateLine,
           `${pax} voyageur${pax > 1 ? 's' : ''}`,
         ].filter(Boolean) as string[]}
-        phaseLabel={pathView.phaseLabel}
+        phaseLabel={
+          hidePopFlightChrome && detailPhase === 'composing'
+            ? PLANNER_PHASE_LABEL_FR.planning
+            : pathView.phaseLabel
+        }
         showPopTag={fromPopTag}
         onBack={onBack}
         activeTab={pathTab}
@@ -3868,14 +3878,14 @@ function TripDetailView({
                 />
               </div>
             ) : null}
-            {reservationToken && (hotelBooked || flightBooked) ? (
+            {reservationToken && hotelBooked ? (
               <div className="border-t border-[#EDE8E1] pt-5">
                 <button
                   type="button"
                   onClick={openReservations}
                   className="text-sm font-semibold text-[#1A120E] underline decoration-[#EDE8E1] underline-offset-4"
                 >
-                  Voir les réservations
+                  {HOTEL_CTA_FR.view}
                 </button>
               </div>
             ) : null}
@@ -4200,15 +4210,23 @@ function TripDetailView({
                 ) : null}
               </div>
             )}
-            <p className="mt-3 text-sm sm:text-base font-semibold text-white/80">
-              {routeLine}
-              {trip.direct ? ' · directs' : ''}
-            </p>
-            {dateLine ? (
-              <p className="mt-1 text-sm text-white/65">{dateLine}</p>
+            {!hidePopFlightChrome ? (
+              <p className="mt-3 text-sm sm:text-base font-semibold text-white/80">
+                {routeLine}
+                {trip.direct ? ' · directs' : ''}
+              </p>
             ) : null}
-            {workspace?.phase ? (
-              <p className="mt-2 text-sm text-white/55">{PHASE_HINT[workspace.phase]}</p>
+            {dateLine ? (
+              <p
+                className={`${hidePopFlightChrome ? 'mt-3' : 'mt-1'} text-sm text-white/65`}
+              >
+                {dateLine}
+              </p>
+            ) : null}
+            {workspace?.phase && !hidePopFlightChrome ? (
+              <p className="mt-2 text-sm text-white/55">
+                {PHASE_HINT[workspace.phase]}
+              </p>
             ) : null}
             <div className="mt-5 flex flex-wrap items-center gap-2">
               {canRelaunch ? (
@@ -4243,13 +4261,13 @@ function TripDetailView({
                   </button>
                 )
               ) : null}
-              {reservationToken && (hotelBooked || flightBooked) ? (
+              {reservationToken && hotelBooked ? (
                 <button
                   type="button"
                   onClick={openReservations}
                   className="inline-flex items-center rounded-2xl border border-white/30 bg-white/10 px-5 py-3 text-sm font-bold text-white hover:bg-white/20 min-h-[48px] backdrop-blur-md"
                 >
-                  {hotelBooked ? HOTEL_CTA_FR.view : 'Voir les réservations'}
+                  {HOTEL_CTA_FR.view}
                 </button>
               ) : null}
             </div>

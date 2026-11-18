@@ -18,6 +18,7 @@ import {
   ACTIVITY_ADD_TO_PLANNER_FR,
   ACTIVITY_BOOK_VIATOR_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
+  ACTIVITY_DELETE_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
   activityDestinationLabelFr,
   canonicalViatorProductUrl,
@@ -25,6 +26,7 @@ import {
   isTripItemsAuthError,
   pickTripItemOwner,
   resolveActivityCitySlug,
+  tripItemHasViatorCatalog,
   tripItemStatusLabelFr,
   tripItemsErrorLabelFr,
   type ActivityCardModel,
@@ -37,6 +39,7 @@ import { useAuth } from '../context/AuthContext'
 import { auth, getApi } from '../lib/client'
 import {
   hydrateTripItems,
+  invalidateTripItemsCache,
   listTripItemsCached,
   peekTripItems,
   setTripItemsCache,
@@ -273,6 +276,7 @@ export function ActivityStepPanel(props: {
   const authRetryRef = useRef(false)
   const parcoursReadyRef = useRef(false)
   const loadGenRef = useRef(0)
+  const backfillDoneRef = useRef<string>('')
   const onItemsChangeRef = useRef(onItemsChange)
   onItemsChangeRef.current = onItemsChange
   const hasAccount = Boolean(user || session?.user || viewUser)
@@ -359,8 +363,40 @@ export function ActivityStepPanel(props: {
     }
 
     try {
-      const rows = await fetchActivityRows()
+      let rows = await fetchActivityRows()
       if (gen !== loadGenRef.current) return
+
+      const ownerKey = `${owner.planned_trip_id || ''}|${owner.draft_token || draftFallback || ''}`
+      if (backfillDoneRef.current !== ownerKey) {
+        const toValidate = rows.filter(
+          (it) =>
+            !it.inherited &&
+            it.status === 'idea' &&
+            !tripItemHasViatorCatalog(it.meta),
+        )
+        backfillDoneRef.current = ownerKey
+        if (toValidate.length) {
+          await Promise.all(
+            toValidate.map((it) =>
+              getApi().patchTripItem(it.id, {
+                status: 'validated',
+                draft_token: owner.draft_token,
+              }),
+            ),
+          )
+          invalidateTripItemsCache(
+            owner.planned_trip_id
+              ? { planned_trip_id: owner.planned_trip_id }
+              : {
+                  draft_token:
+                    owner.draft_token || draftFallback || undefined,
+                },
+          )
+          rows = await fetchActivityRows()
+          if (gen !== loadGenRef.current) return
+        }
+      }
+
       setItems(rows)
       publishParcours(rows)
       // Titles/status paint now — photos fill in after (don't await).
@@ -469,6 +505,7 @@ export function ActivityStepPanel(props: {
 
   useEffect(() => {
     parcoursReadyRef.current = false
+    backfillDoneRef.current = ''
   }, [owner.draft_token, owner.planned_trip_id, draftFallback])
 
   useEffect(() => {
@@ -696,6 +733,7 @@ export function ActivityStepPanel(props: {
               footer={
                 <>
                   {!it.inherited &&
+                  tripItemHasViatorCatalog(it.meta) &&
                   it.status !== 'validated' &&
                   it.status !== 'booked' ? (
                     <Pressable
@@ -708,6 +746,7 @@ export function ActivityStepPanel(props: {
                     </Pressable>
                   ) : null}
                   {(it.meta?.product_url || it.meta?.product_code) &&
+                  tripItemHasViatorCatalog(it.meta) &&
                   it.status !== 'validated' &&
                   it.status !== 'booked' ? (
                     <Pressable
@@ -716,6 +755,16 @@ export function ActivityStepPanel(props: {
                     >
                       <Text style={stayBookingLinkBtn.text}>
                         {ACTIVITY_BOOK_VIATOR_FR}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {!it.inherited && it.status !== 'skipped' ? (
+                    <Pressable
+                      style={stayBookingLinkBtn.btn}
+                      onPress={() => void patch(it.id, { status: 'skipped' })}
+                    >
+                      <Text style={[stayBookingLinkBtn.text, { color: colors.danger }]}>
+                        {ACTIVITY_DELETE_LABEL_FR}
                       </Text>
                     </Pressable>
                   ) : null}
@@ -755,6 +804,7 @@ export function ActivityStepPanel(props: {
           </Pressable>
           <View style={styles.actions}>
             {!it.inherited &&
+            tripItemHasViatorCatalog(it.meta) &&
             it.status !== 'validated' &&
             it.status !== 'booked' &&
             it.status !== 'skipped' ? (
@@ -766,11 +816,20 @@ export function ActivityStepPanel(props: {
               </Pressable>
             ) : null}
             {(it.meta?.product_url || it.meta?.product_code) &&
+            tripItemHasViatorCatalog(it.meta) &&
             it.status !== 'validated' &&
             it.status !== 'booked' &&
             it.status !== 'skipped' ? (
               <Pressable hitSlop={8} onPress={() => bookItem(it)}>
                 <Text style={styles.linkPrimary}>{ACTIVITY_BOOK_VIATOR_FR}</Text>
+              </Pressable>
+            ) : null}
+            {!it.inherited && it.status !== 'skipped' ? (
+              <Pressable
+                onPress={() => void patch(it.id, { status: 'skipped' })}
+                hitSlop={8}
+              >
+                <Text style={styles.linkDanger}>{ACTIVITY_DELETE_LABEL_FR}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -1022,6 +1081,7 @@ const styles = StyleSheet.create({
   },
   link: { fontFamily: fonts.semibold, color: colors.inkSoft, fontSize: 12 },
   linkPrimary: { fontFamily: fonts.bold, color: colors.primary, fontSize: 12 },
+  linkDanger: { fontFamily: fonts.semibold, color: colors.danger, fontSize: 12 },
   modalBg: {
     flex: 1,
     backgroundColor: colors.overlay,

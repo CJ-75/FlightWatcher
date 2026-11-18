@@ -159,6 +159,12 @@ def apply_itinerary_to_trip(
 
         notes_parts = [p for p in (title, note) if p]
         notes = " — ".join(notes_parts) if notes_parts else None
+        viator_code = str(
+            meta.get("product_code") or meta.get("viator_product_code") or ""
+        ).strip()
+        has_viator = bool(viator_code) and not viator_code.startswith("skip-")
+        # Hors catalogue Viator → validée d’office (stops Pop place/free).
+        item_status = "idea" if has_viator else "validated"
 
         try:
             if kind == "free" or (not place_id and kind != "activity"):
@@ -171,7 +177,7 @@ def apply_itinerary_to_trip(
                     "day_offset": day_offset,
                     "moment": moment,
                     "sort_key": sort_key,
-                    "status": "idea",
+                    "status": item_status,
                     "availability_state": "ok",
                     "added_by": user_id,
                     "notes": notes,
@@ -198,7 +204,7 @@ def apply_itinerary_to_trip(
                     "day_offset": day_offset,
                     "moment": moment,
                     "sort_key": sort_key,
-                    "status": "idea",
+                    "status": item_status,
                     "availability_state": "needs_check",
                     "added_by": user_id,
                     "notes": notes,
@@ -218,7 +224,7 @@ def apply_itinerary_to_trip(
                 "day_offset": day_offset,
                 "moment": moment,
                 "sort_key": sort_key,
-                "status": "idea",
+                "status": item_status,
                 "availability_state": "needs_check",
                 "added_by": user_id,
                 "notes": notes,

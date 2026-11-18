@@ -8,6 +8,7 @@ import {
   ACTIVITY_BOOK_VIATOR_FR,
   ACTIVITY_BOOKED_PROMPT_FR,
   ACTIVITY_BROWSE_CATALOG_FR,
+  ACTIVITY_DELETE_LABEL_FR,
   ACTIVITY_SKIP_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
   AVAILABILITY_STATE_LABEL_FR,
@@ -18,6 +19,7 @@ import {
   isTripItemsAuthError,
   pickTripItemOwner,
   reorderKeysMoving,
+  tripItemHasViatorCatalog,
   tripItemStatusLabelFr,
   tripItemsErrorLabelFr,
   type ActivityCardModel,
@@ -340,6 +342,8 @@ export function ActivityStepPanel(props: {
     )
   }, [])
 
+  const backfillDoneRef = useRef<string>('')
+
   const load = useCallback(async (opts?: { force?: boolean }) => {
     if (!owner.draft_token && !owner.planned_trip_id) return
     const gen = ++loadGenRef.current
@@ -347,8 +351,35 @@ export function ActivityStepPanel(props: {
     setError(null)
     try {
       const res = await listTripItemsCached(owner, { force: opts?.force })
-      const rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
+      let rows = ((res.items || []) as ItemRow[]).filter(isActivityItem)
       if (gen !== loadGenRef.current) return
+
+      // Hors Viator encore en « idée » → validées (trips Pop déjà importés).
+      const ownerKey = `${owner.planned_trip_id || ''}|${owner.draft_token || ''}`
+      if (backfillDoneRef.current !== ownerKey) {
+        const toValidate = rows.filter(
+          (it) =>
+            !it.inherited &&
+            it.status === 'idea' &&
+            !tripItemHasViatorCatalog(it.meta),
+        )
+        backfillDoneRef.current = ownerKey
+        if (toValidate.length) {
+          await Promise.all(
+            toValidate.map((it) =>
+              getApiClient().patchTripItem(it.id, {
+                status: 'validated',
+                draft_token: owner.draft_token,
+              }),
+            ),
+          )
+          invalidateTripItemsCache(owner)
+          const res2 = await listTripItemsCached(owner, { force: true })
+          rows = ((res2.items || []) as ItemRow[]).filter(isActivityItem)
+          if (gen !== loadGenRef.current) return
+        }
+      }
+
       setItems(rows)
       // Sync parcours immediately — don't wait for photo enrich.
       publishParcours(rows)
@@ -423,6 +454,7 @@ export function ActivityStepPanel(props: {
 
   useEffect(() => {
     parcoursReadyRef.current = false
+    backfillDoneRef.current = ''
     loadGenRef.current += 1
   }, [owner.draft_token, owner.planned_trip_id])
 
@@ -742,6 +774,7 @@ export function ActivityStepPanel(props: {
                   </div>
                   <div className="mt-auto pt-4 flex flex-wrap gap-2">
                     {!it.inherited &&
+                    tripItemHasViatorCatalog(it.meta) &&
                     it.status !== 'validated' &&
                     it.status !== 'booked' ? (
                       <button
@@ -757,6 +790,7 @@ export function ActivityStepPanel(props: {
                       </button>
                     ) : null}
                     {(it.meta?.product_url || it.meta?.product_code) &&
+                    tripItemHasViatorCatalog(it.meta) &&
                     it.status !== 'validated' &&
                     it.status !== 'booked' ? (
                       <button
@@ -765,6 +799,19 @@ export function ActivityStepPanel(props: {
                         onClick={() => onBook(it)}
                       >
                         {ACTIVITY_BOOK_VIATOR_FR}
+                      </button>
+                    ) : null}
+                    {!it.inherited && it.status !== 'skipped' ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center rounded-xl border border-red-200 px-3.5 py-2 text-sm font-bold text-red-600 hover:bg-red-50 min-h-[40px]"
+                        onClick={() =>
+                          void patch(it.id, {
+                            status: 'skipped' as TripItemStatus,
+                          })
+                        }
+                      >
+                        {ACTIVITY_DELETE_LABEL_FR}
                       </button>
                     ) : null}
                     <button
@@ -838,7 +885,11 @@ export function ActivityStepPanel(props: {
               </div>
             </button>
             <div className="flex flex-wrap gap-2">
-              {!it.inherited && it.status !== 'validated' && it.status !== 'booked' && it.status !== 'skipped' ? (
+              {!it.inherited &&
+              tripItemHasViatorCatalog(it.meta) &&
+              it.status !== 'validated' &&
+              it.status !== 'booked' &&
+              it.status !== 'skipped' ? (
                 <button
                   type="button"
                   className="text-xs font-semibold rounded-lg bg-slate-100 px-2 py-1"
@@ -850,6 +901,7 @@ export function ActivityStepPanel(props: {
                 </button>
               ) : null}
               {(it.meta?.product_url || it.meta?.product_code) &&
+              tripItemHasViatorCatalog(it.meta) &&
               it.status !== 'validated' &&
               it.status !== 'booked' &&
               it.status !== 'skipped' ? (
@@ -859,6 +911,17 @@ export function ActivityStepPanel(props: {
                   onClick={() => onBook(it)}
                 >
                   {ACTIVITY_BOOK_VIATOR_FR}
+                </button>
+              ) : null}
+              {!it.inherited && it.status !== 'skipped' ? (
+                <button
+                  type="button"
+                  className="text-xs font-semibold rounded-lg px-2 py-1 text-red-600 hover:bg-red-50"
+                  onClick={() =>
+                    void patch(it.id, { status: 'skipped' as TripItemStatus })
+                  }
+                >
+                  {ACTIVITY_DELETE_LABEL_FR}
                 </button>
               ) : null}
             </div>

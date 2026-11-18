@@ -282,13 +282,6 @@ export function MakeTripSheet({
             On garde ce Pop dans ton Planner. Vol et hôtel, seulement si tu en
             as besoin.
           </Text>
-          {noFlightHub && flightEnabled ? (
-            <Text style={styles.hubHint}>
-              Pas d’aéroport direct pour {cityLabel} — arrivée à renseigner
-              ensuite.
-            </Text>
-          ) : null}
-
           <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
             {nudge ? <Text style={styles.nudgeAccent}>{nudge}</Text> : null}
             {canOfferFlight === true ? (

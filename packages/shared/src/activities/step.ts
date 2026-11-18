@@ -6,9 +6,22 @@ export const ACTIVITY_BOOKED_PROMPT_FR = (title: string) =>
   `Tu as réservé ${title} ?`
 
 export const ACTIVITY_SKIP_LABEL_FR = 'Pas d’activité'
+export const ACTIVITY_DELETE_LABEL_FR = 'Supprimer'
 export const ACTIVITY_ADD_LABEL_FR = 'Ajouter une activité'
 export const ACTIVITY_VALIDATE_LABEL_FR = 'Valider'
 export const ACTIVITY_BOOK_VIATOR_FR = 'Réserver'
+
+/** True when meta links a real Viator catalog product (not skip-* placeholders). */
+export function tripItemHasViatorCatalog(
+  meta?: Record<string, unknown> | null,
+): boolean {
+  if (!meta || typeof meta !== 'object') return false
+  const code = String(
+    meta.product_code || meta.viator_product_code || '',
+  ).trim()
+  if (!code || code.startsWith('skip-')) return false
+  return true
+}
 export const ACTIVITY_BROWSE_CATALOG_FR = 'Parcourir le catalogue'
 export const ACTIVITY_OPEN_PLANNER_FR = 'Ouvrir le planner'
 /** Titre page Activités (miroir Séjours). */

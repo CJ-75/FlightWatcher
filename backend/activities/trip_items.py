@@ -393,6 +393,13 @@ def add_place_item(
     if (draft_id is None) == (planned_trip_id is None):
         return None
     itype = item_type if item_type in ("activity", "hotel", "restaurant") else "activity"
+    meta_row = meta or {}
+    viator_code = str(
+        meta_row.get("product_code") or meta_row.get("viator_product_code") or ""
+    ).strip()
+    has_viator = bool(viator_code) and not viator_code.startswith("skip-")
+    # Hors catalogue Viator → validée d’office.
+    item_status = "idea" if has_viator else "validated"
     row = {
         "draft_id": draft_id,
         "planned_trip_id": planned_trip_id,
@@ -401,10 +408,10 @@ def add_place_item(
         "day_offset": int(day_offset or 0),
         "moment": moment,
         "sort_key": sort_key or "a0",
-        "status": "idea",
+        "status": item_status,
         "availability_state": "ok",
         "added_by": user_id,
-        "meta": meta or {},
+        "meta": meta_row,
         "updated_at": _now_iso(),
     }
     try:

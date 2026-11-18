@@ -2041,6 +2041,8 @@ export function TripDetailScreen() {
         : fromPopSource
           ? false
           : !(reservationFlags.externalHotel || reservationFlags.hotelBooked)
+  /** Pop sans vol (gate / toggle off) : pas d’aéroports ni hint « Finalise… ». */
+  const hidePopFlightChrome = fromPopSource && !wantFlightOpt
 
   useEffect(() => {
     if (!fromPopSource || !trip) {
@@ -2456,7 +2458,11 @@ export function TripDetailScreen() {
             dateLineMobile,
             `${pax} voyageur${pax > 1 ? 's' : ''}`,
           ].filter(Boolean) as string[]}
-          phaseLabel={pathView.phaseLabel}
+          phaseLabel={
+            hidePopFlightChrome && detailPhase === 'composing'
+              ? 'En cours'
+              : pathView.phaseLabel
+          }
           showPopTag={plannedTripIsFromPop(trip)}
           guideName={
             orgaFirstMobile
@@ -3154,16 +3160,18 @@ export function TripDetailScreen() {
               </Pressable>
             ) : null}
           </View>
-          <View style={styles.heroChips}>
-            <View style={styles.heroChip}>
-              <Text style={styles.heroChipText}>
-                {departureRouteLabel(trip.departure_airport)}
-                {trip.arrival_airport
-                  ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
-                  : ' · inspire'}
-              </Text>
+          {!hidePopFlightChrome ? (
+            <View style={styles.heroChips}>
+              <View style={styles.heroChip}>
+                <Text style={styles.heroChipText}>
+                  {departureRouteLabel(trip.departure_airport)}
+                  {trip.arrival_airport
+                    ? ` → ${trip.arrival_airport.replace(/,/g, ' · ')}`
+                    : ' · inspire'}
+                </Text>
+              </View>
             </View>
-          </View>
+          ) : null}
           {trip.dates_depart[0] && trip.dates_retour[0] ? (
             <Text style={styles.meta}>
               {formatTripDateRangeFr(
@@ -3184,7 +3192,7 @@ export function TripDetailScreen() {
         </Text>
         <StayPipelineStepper steps={pipelineForUi} onStepPress={onPipelineStep} />
         {reservationToken &&
-        (reservationFlags.hotelBooked || reservationFlags.flightBooked) ? (
+        reservationFlags.hotelBooked ? (
           <Pressable
             onPress={openReservations}
             style={({ pressed }) => [
