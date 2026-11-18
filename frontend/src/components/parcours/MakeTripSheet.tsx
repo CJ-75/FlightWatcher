@@ -27,12 +27,19 @@ type Props = {
   itinerary: Itinerary
   onClose: () => void
   onCreated: (result: MakeTripCreated) => void
+  /** Elsewhere nudge above toggles. */
+  nudge?: string | null
 }
 
 /**
  * Feuille Pop → Planner : programme toujours ; Vol / Hôtel opt-in séparés.
  */
-export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
+export function MakeTripSheet({
+  itinerary,
+  onClose,
+  onCreated,
+  nudge = null,
+}: Props) {
   const { openAuthSheet } = useAuthSheet()
   const suggested = useMemo(
     () => suggestedParcoursDates(itinerary),
@@ -65,7 +72,6 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
     ''
   const arrival =
     arrivalCodesForCitySlug(itinerary.city_slug) || undefined
-  const needsDates = wantFlight || wantHotel
   const needsDeparture = wantFlight
 
   const createTrip = async () => {
@@ -74,7 +80,7 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
       setError('Choisis une ville de départ')
       return
     }
-    if (needsDates && (!outbound || !inbound)) {
+    if (!outbound || !inbound) {
       setError('Choisis des dates')
       return
     }
@@ -207,21 +213,23 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
           </p>
 
           <div className="space-y-2">
+            {nudge ? (
+              <p className="px-1 text-[12px] font-semibold text-[#E85A28]">
+                {nudge}
+              </p>
+            ) : null}
             <ToggleRow
-              label="Vol"
-              hint="Départ + dates, puis scan des prix"
+              label="Trouver un vol"
+              hint="Départ + scan des prix"
               checked={wantFlight}
               onChange={setWantFlight}
             />
             <ToggleRow
-              label="Hôtel"
-              hint="Dates, puis offres près du Pop"
+              label="Trouver un hôtel"
+              hint="Offres près du Pop"
               checked={wantHotel}
               onChange={setWantHotel}
             />
-            <p className="px-1 text-[12px] font-medium text-muted">
-              Tu viens d’une autre ville ? Active Vol et/ou Hôtel.
-            </p>
           </div>
 
           <div>
@@ -272,37 +280,33 @@ export function MakeTripSheet({ itinerary, onClose, onCreated }: Props) {
             </div>
           ) : null}
 
-          {needsDates ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs font-bold uppercase tracking-wide text-muted space-y-1">
-                  Aller
-                  <input
-                    type="date"
-                    value={outbound}
-                    onChange={(e) => setOutbound(e.target.value)}
-                    className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
-                  />
-                </label>
-                <label className="text-xs font-bold uppercase tracking-wide text-muted space-y-1">
-                  Retour
-                  <input
-                    type="date"
-                    value={inbound}
-                    onChange={(e) => setInbound(e.target.value)}
-                    className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
-                  />
-                </label>
-              </div>
-              <button
-                type="button"
-                onClick={useNextWeekend}
-                className="text-xs font-bold text-[color:var(--fw-accent)]"
-              >
-                Utiliser le week-end prochain
-              </button>
-            </>
-          ) : null}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="text-xs font-bold uppercase tracking-wide text-muted space-y-1">
+              Aller
+              <input
+                type="date"
+                value={outbound}
+                onChange={(e) => setOutbound(e.target.value)}
+                className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
+              />
+            </label>
+            <label className="text-xs font-bold uppercase tracking-wide text-muted space-y-1">
+              Retour
+              <input
+                type="date"
+                value={inbound}
+                onChange={(e) => setInbound(e.target.value)}
+                className="w-full rounded-xl border border-line px-3 py-2.5 text-sm font-semibold text-ink"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            onClick={useNextWeekend}
+            className="text-xs font-bold text-[color:var(--fw-accent)]"
+          >
+            Utiliser le week-end prochain
+          </button>
 
           {wantFlight ? (
             <label className="block text-xs font-bold uppercase tracking-wide text-muted space-y-1">

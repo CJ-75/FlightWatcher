@@ -22,6 +22,8 @@ type Props = {
   stickyLeft?: string
   stickyCta?: string
   onStickyCta?: () => void
+  stickySecondary?: string
+  onStickySecondary?: () => void
 }
 
 function ShareSvg() {
@@ -93,6 +95,8 @@ export function ItineraryDetailChrome({
   stickyLeft,
   stickyCta,
   onStickyCta,
+  stickySecondary,
+  onStickySecondary,
 }: Props) {
   const chips = (metaChips || []).filter(Boolean)
   const stickyRef = useRef<HTMLDivElement>(null)
@@ -106,7 +110,7 @@ export function ItineraryDetailChrome({
     const ro = new ResizeObserver(sync)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [stickyCta])
+  }, [stickyCta, stickySecondary])
 
   return (
     <div
@@ -244,16 +248,40 @@ export function ItineraryDetailChrome({
           className="fixed inset-x-0 bottom-0 z-40 border-t border-[#EDE8E1] bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]"
         >
           <div className="mx-auto flex max-w-3xl lg:max-w-5xl items-center gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-[#1A120E]">
-                {stickyLeft || ' '}
-              </p>
-            </div>
+            {stickySecondary && onStickySecondary ? (
+              <button
+                type="button"
+                onClick={onStickySecondary}
+                className="inline-flex min-w-0 flex-1 items-center justify-center rounded-full border border-[#1A120E]/20 bg-white px-4 py-3 text-sm font-bold text-[#1A120E] hover:bg-[#F7F4EF]"
+              >
+                {stickySecondary}
+              </button>
+            ) : (
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-[#1A120E]">
+                  {stickyLeft || ' '}
+                </p>
+              </div>
+            )}
             <button
               type="button"
               onClick={onStickyCta}
-              className="shrink-0 rounded-full bg-[#1A120E] px-5 py-3 text-sm font-bold text-white hover:bg-black"
+              className={`inline-flex items-center justify-center gap-1.5 rounded-full bg-[#1A120E] px-5 py-3 text-sm font-bold text-white hover:bg-black ${
+                stickySecondary ? 'flex-1' : 'shrink-0'
+              }`}
             >
+              {/lancer/i.test(stickyCta || '') ? (
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden
+                  className="block translate-x-[0.5px]"
+                >
+                  <path d="M8 5.14v13.72a1 1 0 0 0 1.5.86l11-6.86a1 1 0 0 0 0-1.72l-11-6.86a1 1 0 0 0-1.5.86z" />
+                </svg>
+              ) : null}
               {stickyCta}
             </button>
           </div>

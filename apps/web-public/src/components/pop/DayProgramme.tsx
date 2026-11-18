@@ -1,7 +1,11 @@
 'use client'
 
 import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react'
-import { formatDurationMinutes, sanitizeUserFacingText } from '@waypop/shared'
+import {
+  formatDurationMinutes,
+  sanitizeUserFacingText,
+  type ItineraryItem,
+} from '@waypop/shared'
 import { LaunchPopCta } from '@/components/pop/LaunchPopCta'
 import {
   PopPhotoLightbox,
@@ -42,7 +46,9 @@ type DayGroup = { day: number; items: PopStop[] }
 type Props = {
   days: DayGroup[]
   mapsUrl?: string | null
-  launchHref?: string
+  launchItems?: ItineraryItem[]
+  launchItineraryId?: string
+  launchTitle?: string
   cityLabel: string
   colorKey?: string | null
   city?: string
@@ -77,7 +83,9 @@ export function DayProgramme({
   city,
   coverImage,
   h2,
-  launchHref,
+  launchItems,
+  launchItineraryId,
+  launchTitle,
 }: Props) {
   const baseId = useId()
   const [active, setActive] = useState(days[0]?.day ?? 0)
@@ -156,7 +164,14 @@ export function DayProgramme({
             {h2 || `Programme à ${cityLabel}`}
           </h2>
         </div>
-        {launchHref ? <LaunchPopCta href={launchHref} size="sm" /> : null}
+        {launchItineraryId && launchItems?.length ? (
+          <LaunchPopCta
+            items={launchItems}
+            itineraryId={launchItineraryId}
+            title={launchTitle}
+            size="sm"
+          />
+        ) : null}
       </div>
 
       {days.length > 1 ? (

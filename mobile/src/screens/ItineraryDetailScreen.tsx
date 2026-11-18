@@ -5,22 +5,24 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Linking,
   Platform,
 } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
-  buildItineraryMapsUrl,
   buildItineraryMarkerTiles,
   buildItinerarySticky,
   citySlugDisplayNameFr,
   cityImageUrl,
+  groupAirportsByCity,
   groupItemsByDay,
   ITINERARY_DURATION_LABELS,
   itineraryDatedLabelFr,
   itineraryOccasionPhaseLabel,
+  loadOnboardingPrefs,
   momentLabelFr,
+  parseAirportCodes,
+  seedPopularAirports,
   travelMinutesFromMeta,
   type Itinerary,
   type ItineraryDurationKind,
@@ -40,6 +42,7 @@ import { useAuthSheet } from '../components/onboarding/AuthSheetHost'
 import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChrome'
 import { ItineraryEditorialSections } from '../components/parcours/ItineraryEditorialSections'
 import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
+import { LaunchPopSheet } from '../components/parcours/LaunchPopSheet'
 import { ParcoursDayHeader } from '../components/parcours/ParcoursDayHeader'
 import { ParcoursStepBlock } from '../components/parcours/ParcoursStepBlock'
 import type { RootStackParamList } from '../navigation/types'
@@ -92,13 +95,33 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
   )
   const [error, setError] = useState<string | null>(null)
   const [userCity, setUserCity] = useState('paris')
+  const [originCityLabel, setOriginCityLabel] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [liked, setLiked] = useState(false)
   const [makeTripOpen, setMakeTripOpen] = useState(false)
+  const [launchPopOpen, setLaunchPopOpen] = useState(false)
 
   useEffect(() => {
     void AsyncStorage.getItem(CITY_LS).then((v) => {
       if (v) setUserCity(v)
+    })
+    void loadOnboardingPrefs().then((p) => {
+      const codes = parseAirportCodes(p.departureAirportCodes || '')
+      if (!codes.length) return
+      const groups = groupAirportsByCity(seedPopularAirports())
+      const hit = groups.find((g) =>
+        g.airports.some((a) => codes.includes(a.code)),
+      )
+      if (hit?.city) {
+        setOriginCityLabel(hit.city)
+        const slug = hit.city
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+        if (slug) setUserCity(slug)
+      }
     })
   }, [])
 
@@ -192,8 +215,12 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
 
   const sticky = useMemo(() => {
     if (!itin) return null
-    return buildItinerarySticky({ itinerary: itin, userCitySlug: userCity })
-  }, [itin, userCity])
+    return buildItinerarySticky({
+      itinerary: itin,
+      userCitySlug: userCity,
+      originCityLabel,
+    })
+  }, [itin, userCity, originCityLabel])
 
   if (!itin && loadingSteps) {
     return (
@@ -244,27 +271,25 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
   const days = groupItemsByDay(items)
   const shareUrl = `${getWebOrigin()}/parcours/${itin.slug || itin.id}`
 
-  const onSticky = async () => {
-    if (!sticky) return
-    if (sticky.ctaAction === 'launch_maps') {
-      // Toujours Google Maps multi-étapes (pas Apple Maps)
-      const url = buildItineraryMapsUrl(items)
-      if (url) {
-        void getApi()
-          .trackActivityEvent({
-            domain: 'itinerary',
-            event: 'itinerary_launch_maps',
-            surface: 'parcours',
-            platform: Platform.OS === 'ios' ? 'ios' : 'android',
-            meta: { id: itin.id },
-          })
-          .catch(() => {})
-        void Linking.openURL(url)
-      } else setToast('Ajoute des lieux pour lancer le parcours.')
+  const onSticky = () => {
+    setMakeTripOpen(true)
+  }
+
+  const onLaunchPop = () => {
+    if (!items.length) {
+      setToast('Ajoute des lieux pour lancer le parcours.')
       return
     }
-    // Auth only at create inside MakeTripSheet
-    setMakeTripOpen(true)
+    void getApi()
+      .trackActivityEvent({
+        domain: 'itinerary',
+        event: 'itinerary_launch_maps',
+        surface: 'parcours',
+        platform: Platform.OS === 'ios' ? 'ios' : 'android',
+        meta: { id: itin.id, mode: 'launch_pop_sheet' },
+      })
+      .catch(() => {})
+    setLaunchPopOpen(true)
   }
 
   const doLike = async () => {
@@ -336,8 +361,10 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
         liked={liked}
         onLike={() => void toggleLike()}
         stickyLeft={sticky?.leftLabel}
-        stickyCta={sticky?.ctaLabel}
-        onStickyCta={() => void onSticky()}
+        stickyCta={sticky?.secondaryLabel}
+        onStickyCta={onLaunchPop}
+        stickySecondary={sticky?.ctaLabel}
+        onStickySecondary={onSticky}
       >
         <View style={styles.body}>
           {itin.intro ? <Text style={styles.intro}>{itin.intro}</Text> : null}
@@ -396,6 +423,7 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
       <MakeTripSheet
         visible={makeTripOpen}
         itinerary={itin}
+        nudge={sticky?.nudge}
         onClose={() => setMakeTripOpen(false)}
         onCreated={({ tripId, wantFlight, wantHotel }) => {
           setMakeTripOpen(false)
@@ -408,6 +436,13 @@ export function ItineraryDetailScreen({ route, navigation }: Props) {
             wantHotel,
           })
         }}
+      />
+      <LaunchPopSheet
+        visible={launchPopOpen}
+        title={itin.title}
+        items={items}
+        itineraryId={itin.id}
+        onClose={() => setLaunchPopOpen(false)}
       />
 
       {toast ? (

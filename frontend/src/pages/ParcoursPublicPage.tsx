@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  buildItineraryMapsUrl,
   buildItinerarySticky,
   citySlugDisplayNameFr,
   cityImageUrl,
+  groupAirportsByCity,
   itineraryDatedLabelFr,
   itineraryHeroMetaChips,
   itineraryOccasionPhaseLabel,
+  loadOnboardingPrefs,
+  parseAirportCodes,
   resolveParcoursCoverUrl,
   sanitizeUserFacingText,
+  seedPopularAirports,
   type Itinerary,
   type ItineraryItem,
 } from '@waypop/shared'
@@ -27,6 +30,7 @@ import { ItineraryDetailChrome } from '../components/parcours/ItineraryDetailChr
 import { ItineraryEditorialSections } from '../components/parcours/ItineraryEditorialSections'
 import { ItineraryStepsTimeline } from '../components/parcours/ItineraryStepsTimeline'
 import { MakeTripSheet } from '../components/parcours/MakeTripSheet'
+import { LaunchPopSheet } from '../components/parcours/LaunchPopSheet'
 import { peekConfigFlag } from '../lib/configFlags'
 import { publicPopPath } from '../lib/popLinks'
 
@@ -50,13 +54,35 @@ export default function ParcoursPublicPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [liked, setLiked] = useState(false)
   const [makeTripOpen, setMakeTripOpen] = useState(false)
-
-  const userCity = useMemo(() => {
+  const [launchPopOpen, setLaunchPopOpen] = useState(false)
+  const [userCity, setUserCity] = useState(() => {
     try {
       return localStorage.getItem(CITY_LS) || 'paris'
     } catch {
       return 'paris'
     }
+  })
+  const [originCityLabel, setOriginCityLabel] = useState<string | null>(null)
+
+  useEffect(() => {
+    void loadOnboardingPrefs().then((p) => {
+      const codes = parseAirportCodes(p.departureAirportCodes || '')
+      if (!codes.length) return
+      const groups = groupAirportsByCity(seedPopularAirports())
+      const hit = groups.find((g) =>
+        g.airports.some((a) => codes.includes(a.code)),
+      )
+      if (hit?.city) {
+        setOriginCityLabel(hit.city)
+        const slug = hit.city
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+        if (slug) setUserCity(slug)
+      }
+    })
   }, [])
 
   const refreshLiked = useCallback(async (id: string) => {
@@ -244,6 +270,7 @@ export default function ParcoursPublicPage() {
   const sticky = buildItinerarySticky({
     itinerary: itin,
     userCitySlug: userCity,
+    originCityLabel,
   })
   const shareUrl = `${window.location.origin}${publicPopPath({
     citySlug: itin.city_slug,
@@ -291,26 +318,25 @@ export default function ParcoursPublicPage() {
     }
   }
 
-  const onSticky = async () => {
-    if (sticky.ctaAction === 'launch_maps') {
-      // Toujours Google Maps multi-étapes (pas Apple Maps)
-      const url = buildItineraryMapsUrl(items)
-      if (url) {
-        void getApiClient()
-          .trackActivityEvent({
-            domain: 'itinerary',
-            event: 'itinerary_launch_maps',
-            surface: 'parcours',
-            platform: 'web',
-            meta: { id: itin.id },
-          })
-          .catch(() => {})
-        window.open(url, '_blank', 'noopener,noreferrer')
-      } else setToast('Ajoute des lieux pour lancer le parcours.')
+  const onSticky = () => {
+    setMakeTripOpen(true)
+  }
+
+  const onLaunchPop = () => {
+    if (!items.length) {
+      setToast('Ajoute des lieux pour lancer le parcours.')
       return
     }
-    // MakeTripSheet gère auth au moment de create — ouvrir sans auth
-    setMakeTripOpen(true)
+    void getApiClient()
+      .trackActivityEvent({
+        domain: 'itinerary',
+        event: 'itinerary_launch_maps',
+        surface: 'parcours',
+        platform: 'web',
+        meta: { id: itin.id, mode: 'launch_pop_sheet' },
+      })
+      .catch(() => {})
+    setLaunchPopOpen(true)
   }
 
   const toggleLike = async () => {
@@ -375,8 +401,10 @@ export default function ParcoursPublicPage() {
           )
         }}
         stickyLeft={sticky.leftLabel}
-        stickyCta={sticky.ctaLabel}
-        onStickyCta={() => void onSticky()}
+        stickyCta={sticky.secondaryLabel}
+        onStickyCta={onLaunchPop}
+        stickySecondary={sticky.ctaLabel}
+        onStickySecondary={onSticky}
       >
         <div className="space-y-8">
           {itin.intro ? (
@@ -415,6 +443,7 @@ export default function ParcoursPublicPage() {
       {makeTripOpen ? (
         <MakeTripSheet
           itinerary={itin}
+          nudge={sticky.nudge}
           onClose={() => setMakeTripOpen(false)}
           onCreated={({ tripId, wantFlight, wantHotel }) => {
             setMakeTripOpen(false)
@@ -429,6 +458,14 @@ export default function ParcoursPublicPage() {
           }}
         />
       ) : null}
+
+      <LaunchPopSheet
+        open={launchPopOpen}
+        title={itin.title}
+        items={items}
+        itineraryId={itin.id}
+        onClose={() => setLaunchPopOpen(false)}
+      />
 
       {toast ? (
         <div className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-[#1A120E] px-4 py-2.5 text-sm font-semibold text-white shadow-lg">

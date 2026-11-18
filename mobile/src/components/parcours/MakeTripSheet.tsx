@@ -40,6 +40,7 @@ type Props = {
   itinerary: Itinerary
   onClose: () => void
   onCreated: (result: MakeTripCreated) => void
+  nudge?: string | null
 }
 
 export function MakeTripSheet({
@@ -47,6 +48,7 @@ export function MakeTripSheet({
   itinerary,
   onClose,
   onCreated,
+  nudge = null,
 }: Props) {
   const insets = useSafeAreaInsets()
   const { user } = useAuth()
@@ -65,7 +67,6 @@ export function MakeTripSheet({
   const [wantHotel, setWantHotel] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const needsDates = wantFlight || wantHotel
   const needsDeparture = wantFlight
 
   useEffect(() => {
@@ -95,7 +96,7 @@ export function MakeTripSheet({
       setError('Indique un aéroport de départ (ex. CDG,ORY)')
       return
     }
-    if (needsDates && (!outbound || !inbound)) {
+    if (!outbound || !inbound) {
       setError('Choisis des dates')
       return
     }
@@ -212,13 +213,14 @@ export function MakeTripSheet({
           ) : null}
 
           <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
+            {nudge ? <Text style={styles.nudgeAccent}>{nudge}</Text> : null}
             <Pressable
               onPress={() => setWantFlight((v) => !v)}
               style={[styles.toggle, wantFlight && styles.toggleOn]}
             >
               <View style={{ flex: 1 }}>
-                <Text style={styles.toggleTitle}>Vol</Text>
-                <Text style={styles.toggleHint}>Départ + dates, puis scan</Text>
+                <Text style={styles.toggleTitle}>Trouver un vol</Text>
+                <Text style={styles.toggleHint}>Départ + scan des prix</Text>
               </View>
               <Text style={styles.toggleState}>{wantFlight ? 'ON' : 'OFF'}</Text>
             </Pressable>
@@ -227,14 +229,11 @@ export function MakeTripSheet({
               style={[styles.toggle, wantHotel && styles.toggleOn]}
             >
               <View style={{ flex: 1 }}>
-                <Text style={styles.toggleTitle}>Hôtel</Text>
-                <Text style={styles.toggleHint}>Dates, puis offres près du Pop</Text>
+                <Text style={styles.toggleTitle}>Trouver un hôtel</Text>
+                <Text style={styles.toggleHint}>Offres près du Pop</Text>
               </View>
               <Text style={styles.toggleState}>{wantHotel ? 'ON' : 'OFF'}</Text>
             </Pressable>
-            <Text style={styles.nudge}>
-              Tu viens d’une autre ville ? Active Vol et/ou Hôtel.
-            </Text>
 
             <Text style={styles.label}>Qui voyage ?</Text>
             <View style={styles.row}>
@@ -291,35 +290,31 @@ export function MakeTripSheet({
               </>
             ) : null}
 
-            {needsDates ? (
-              <>
-                <Text style={styles.label}>Aller</Text>
-                <TextInput
-                  value={outbound}
-                  onChangeText={setOutbound}
-                  placeholder="YYYY-MM-DD"
-                  style={styles.input}
-                />
-                <Text style={styles.label}>Retour</Text>
-                <TextInput
-                  value={inbound}
-                  onChangeText={setInbound}
-                  placeholder="YYYY-MM-DD"
-                  style={styles.input}
-                />
-                <Pressable
-                  onPress={() => {
-                    const d = generateDatesFromPreset('next-weekend')
-                    if (d.dates_depart[0]?.date)
-                      setOutbound(d.dates_depart[0].date)
-                    if (d.dates_retour[0]?.date)
-                      setInbound(d.dates_retour[0].date)
-                  }}
-                >
-                  <Text style={styles.link}>Week-end prochain</Text>
-                </Pressable>
-              </>
-            ) : null}
+            <Text style={styles.label}>Aller</Text>
+            <TextInput
+              value={outbound}
+              onChangeText={setOutbound}
+              placeholder="YYYY-MM-DD"
+              style={styles.input}
+            />
+            <Text style={styles.label}>Retour</Text>
+            <TextInput
+              value={inbound}
+              onChangeText={setInbound}
+              placeholder="YYYY-MM-DD"
+              style={styles.input}
+            />
+            <Pressable
+              onPress={() => {
+                const d = generateDatesFromPreset('next-weekend')
+                if (d.dates_depart[0]?.date)
+                  setOutbound(d.dates_depart[0].date)
+                if (d.dates_retour[0]?.date)
+                  setInbound(d.dates_retour[0].date)
+              }}
+            >
+              <Text style={styles.link}>Week-end prochain</Text>
+            </Pressable>
 
             {wantFlight ? (
               <>
@@ -405,6 +400,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.medium,
     fontSize: 12,
     color: colors.muted,
+  },
+  nudgeAccent: {
+    marginTop: 8,
+    fontFamily: fonts.semibold,
+    fontSize: 12,
+    color: colors.primary,
   },
   label: {
     marginTop: 10,

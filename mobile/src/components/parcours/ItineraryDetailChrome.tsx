@@ -214,7 +214,12 @@ export function ItineraryDetailChrome({
             onPress={onStickyCta}
             disabled={stickyCtaDisabled}
           >
-            <Text style={styles.stickyCtaText}>{stickyCta}</Text>
+            <View style={styles.stickyCtaInner}>
+              {/lancer/i.test(stickyCta || '') ? (
+                <View style={styles.playMarkOnDark} />
+              ) : null}
+              <Text style={styles.stickyCtaText}>{stickyCta}</Text>
+            </View>
           </Pressable>
         </View>
       ) : null}
@@ -370,6 +375,22 @@ const styles = StyleSheet.create({
   stickyCtaFlex: {
     flex: 1,
     alignItems: 'center',
+  },
+  stickyCtaInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  playMarkOnDark: {
+    width: 0,
+    height: 0,
+    marginLeft: 1,
+    borderTopWidth: 5,
+    borderBottomWidth: 5,
+    borderLeftWidth: 8,
+    borderTopColor: 'transparent',
+    borderBottomColor: 'transparent',
+    borderLeftColor: '#fff',
   },
   stickyCtaText: {
     color: '#fff',

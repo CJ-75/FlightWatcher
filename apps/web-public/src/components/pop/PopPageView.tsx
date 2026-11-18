@@ -5,6 +5,7 @@ import {
   citySlugDisplayNameFr,
   idealLabelFr,
   sanitizeUserFacingText,
+  type ItineraryItem,
   type PopIndexResult,
 } from '@waypop/shared'
 import type { PublicItinerary } from '@/lib/parcoursApi'
@@ -125,7 +126,6 @@ export function PopPageView({
   const tips = parseTips(itin.tips)
   const faq = parseFaq(itin.faq)
 
-  const launchHref = `/parcours/${encodeURIComponent(itin.slug || slug)}`
   // Hero meta: ville + durée only (stops / idéal / budget live elsewhere).
   const metaBits = [cityLabel, durationLabel].filter(Boolean)
 
@@ -245,7 +245,12 @@ export function PopPageView({
               citySlug={city}
               slug={String(itin.slug || slug)}
             />
-            <LaunchPopCta href={launchHref} variant="hero" />
+            <LaunchPopCta
+              items={items as ItineraryItem[]}
+              itineraryId={itin.id}
+              title={h1}
+              variant="hero"
+            />
             <ShareButton title={h1} variant="icon" />
             <KeepButton
               city={city}
@@ -322,7 +327,9 @@ export function PopPageView({
 
             <DayProgramme
               days={days}
-              launchHref={launchHref}
+              launchItems={items as ItineraryItem[]}
+              launchItineraryId={itin.id}
+              launchTitle={h1}
               cityLabel={cityLabel}
               colorKey={itin.color_key}
               city={city}

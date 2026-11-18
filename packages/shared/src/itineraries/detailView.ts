@@ -25,7 +25,52 @@ export type ItineraryStickyView = {
   mode: ItineraryStickyMode
   leftLabel: string
   ctaLabel: string
-  ctaAction: 'launch_maps' | 'make_trip'
+  ctaAction: 'make_trip'
+  secondaryLabel: string
+  secondaryAction: 'launch_pop'
+  /** Planner sheet nudge when origin city ≠ pop city. */
+  nudge: string | null
+}
+
+/** Max stops inside one Google Maps walking `dir` URL (origin+dest+waypoints). */
+export const MAPS_DIR_MAX_STOPS = 10
+/** Reserved v2: skip transit leg if user nearer than this (meters). */
+export const MAPS_NEAR_FIRST_STOP_M = 1500
+/** Reserved v2: split walk if consecutive stops farther than this (meters). */
+export const MAPS_MAX_WALK_BETWEEN_STOPS_M = 2000
+
+export type LaunchPopLeg = {
+  id: string
+  kind: 'transit' | 'walk'
+  title: string
+  subtitle: string
+  preview: string
+  mapsUrl: string
+  durationLabel?: string | null
+  ctaLabel: string
+}
+
+export type LaunchPopSegment = {
+  id: string
+  label: string
+  stopCount: number
+  legs: LaunchPopLeg[]
+}
+
+export type LaunchPopDay = {
+  dayOffset: number
+  label: string
+  stopCount: number
+  durationMinutes: number | null
+  previewTitles: string[]
+  segments: LaunchPopSegment[]
+  isToday?: boolean
+}
+
+export type LaunchPopPlan = {
+  days: LaunchPopDay[]
+  /** True when more than one day or any day needed walk split. */
+  needsSheet: boolean
 }
 
 function coordsFromMapsUrl(url: string): { lat: number; lng: number } | null {
@@ -321,6 +366,8 @@ export function buildItineraryMarkerTiles(it: Itinerary): ItineraryMarkerTile[] 
 export function buildItinerarySticky(opts: {
   itinerary: Itinerary
   userCitySlug?: string | null
+  /** Display name of onboarding origin city (e.g. Lyon). */
+  originCityLabel?: string | null
   dealPriceLabel?: string | null
 }): ItineraryStickyView {
   const city = (opts.itinerary.city_slug || '').toLowerCase()
@@ -334,29 +381,251 @@ export function buildItinerarySticky(opts: {
     ]
 
   const isLocal = !!user && !!city && user === city
-  if (isLocal) {
-    return {
-      mode: 'local',
-      leftLabel: [dur, stepsLabel].filter(Boolean).join(' · '),
-      ctaLabel: 'Lancer le parcours',
-      ctaAction: 'launch_maps',
-    }
-  }
-  if (opts.dealPriceLabel) {
-    return {
-      mode: 'elsewhere_priced',
-      leftLabel: opts.dealPriceLabel,
-      ctaLabel: 'En faire mon voyage',
-      ctaAction: 'make_trip',
-    }
-  }
-  const cityName = city || 'ailleurs'
+  const originLabel = String(opts.originCityLabel || '').trim()
+  const nudge =
+    !isLocal && originLabel
+      ? `Tu viens de ${originLabel} ? Ajoute le vol et l’hôtel`
+      : !isLocal
+        ? 'Tu viens d’une autre ville ? Ajoute le vol et l’hôtel'
+        : null
+
+  const leftLabel = opts.dealPriceLabel
+    ? opts.dealPriceLabel
+    : [dur, stepsLabel].filter(Boolean).join(' · ') ||
+      (city ? `Week-end à ${city}` : 'Programme')
+
   return {
-    mode: 'elsewhere',
-    leftLabel: dur ? `${dur} · ${cityName}` : `Week-end à ${cityName}`,
-    ctaLabel: 'En faire mon voyage',
+    mode: isLocal
+      ? 'local'
+      : opts.dealPriceLabel
+        ? 'elsewhere_priced'
+        : 'elsewhere',
+    leftLabel,
+    ctaLabel: 'Ajouter au Planner',
     ctaAction: 'make_trip',
+    secondaryLabel: 'Lancer le pop',
+    secondaryAction: 'launch_pop',
+    nudge,
   }
+}
+
+function stopTitle(item: ItineraryItem): string {
+  return String(item.places?.name || item.title || 'Stop').trim() || 'Stop'
+}
+
+function formatMinutesLabel(mins: number | null | undefined): string | null {
+  if (mins == null || !Number.isFinite(mins) || mins <= 0) return null
+  const m = Math.round(mins)
+  if (m < 60) return `≈ ${m} min`
+  const h = Math.floor(m / 60)
+  const r = m % 60
+  return r ? `≈ ${h} h ${r}` : `≈ ${h} h`
+}
+
+function sumDurationMinutes(items: ItineraryItem[]): number | null {
+  let total = 0
+  let any = false
+  for (const it of items) {
+    const d = it.duration_minutes
+    if (d != null && Number.isFinite(Number(d)) && Number(d) > 0) {
+      total += Number(d)
+      any = true
+    }
+    const travel = Number(
+      (it.meta as { travel_minutes?: number } | null | undefined)
+        ?.travel_minutes,
+    )
+    if (Number.isFinite(travel) && travel > 0) {
+      total += travel
+      any = true
+    }
+  }
+  return any ? total : null
+}
+
+/** Transit: user → first stop (no waypoints). */
+export function buildTransitToStopUrl(
+  firstStop: ItineraryItem,
+  opts?: { origin?: string | null },
+): string | null {
+  const dest = placeQuery(firstStop)
+  if (!dest) return null
+  const origin = String(opts?.origin || 'Current Location').trim() || 'Current Location'
+  const q = new URLSearchParams({
+    api: '1',
+    origin,
+    destination: dest,
+    travelmode: 'transit',
+  })
+  return `https://www.google.com/maps/dir/?${q.toString()}`
+}
+
+/** `lat,lng` origin for Maps dir (more precise than `Current Location`). */
+export function mapsOriginFromCoords(lat: number, lng: number): string {
+  return `${Number(lat)},${Number(lng)}`
+}
+
+/** Replace / set `origin` on an existing Maps dir URL. */
+export function withMapsDirOrigin(mapsUrl: string, origin: string): string {
+  const next = String(origin || '').trim()
+  if (!next || !mapsUrl) return mapsUrl
+  try {
+    const u = new URL(mapsUrl)
+    u.searchParams.set('origin', next)
+    return u.toString()
+  } catch {
+    return mapsUrl
+  }
+}
+
+/** Walking multi-stop dir (first → last + waypoints). Caps at MAPS_DIR_MAX_STOPS. */
+export function buildWalkingStopsUrl(items: ItineraryItem[]): string | null {
+  const stops = sortStepsForMaps(items)
+    .filter(isMapsStop)
+    .map(placeQuery)
+    .filter((q): q is string => !!q)
+  if (!stops.length) return null
+  if (stops.length === 1) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stops[0])}`
+  }
+  const capped = stops.slice(0, MAPS_DIR_MAX_STOPS)
+  const origin = capped[0]
+  const destination = capped[capped.length - 1]
+  const waypoints = capped.slice(1, -1)
+  const q = new URLSearchParams({
+    api: '1',
+    origin,
+    destination,
+    travelmode: 'walking',
+  })
+  if (waypoints.length) q.set('waypoints', waypoints.join('|'))
+  return `https://www.google.com/maps/dir/?${q.toString()}`
+}
+
+function chunkWalkItems(items: ItineraryItem[]): ItineraryItem[][] {
+  const sorted = sortStepsForMaps(items).filter(isMapsStop)
+  if (!sorted.length) return []
+  if (sorted.length <= MAPS_DIR_MAX_STOPS) return [sorted]
+
+  const byMoment = new Map<string, ItineraryItem[]>()
+  for (const it of sorted) {
+    const key = String(it.moment || 'daytime')
+    if (!byMoment.has(key)) byMoment.set(key, [])
+    byMoment.get(key)!.push(it)
+  }
+  const momentKeys = ['morning', 'afternoon', 'evening', 'daytime'].filter((k) =>
+    byMoment.has(k),
+  )
+  const fromMoments = momentKeys.map((k) => byMoment.get(k)!)
+  if (
+    fromMoments.length > 1 &&
+    fromMoments.every((g) => g.length <= MAPS_DIR_MAX_STOPS)
+  ) {
+    return fromMoments
+  }
+
+  const chunks: ItineraryItem[][] = []
+  for (let i = 0; i < sorted.length; i += MAPS_DIR_MAX_STOPS) {
+    chunks.push(sorted.slice(i, i + MAPS_DIR_MAX_STOPS))
+  }
+  return chunks
+}
+
+function momentSegmentLabel(items: ItineraryItem[], index: number, total: number): string {
+  if (total === 1) return 'Parcours'
+  const m = String(items[0]?.moment || '')
+  if (m === 'morning') return 'Matin'
+  if (m === 'afternoon') return 'Après-midi'
+  if (m === 'evening') return 'Soir'
+  return `Partie ${index + 1}`
+}
+
+function buildSegmentLegs(
+  dayOffset: number,
+  segIndex: number,
+  walkItems: ItineraryItem[],
+): LaunchPopLeg[] {
+  const first = walkItems[0]
+  const last = walkItems[walkItems.length - 1]
+  const firstTitle = first ? stopTitle(first) : 'Stop'
+  const lastTitle = last ? stopTitle(last) : firstTitle
+  const preview = walkItems.map(stopTitle).join(' → ')
+  const walkMins = sumDurationMinutes(walkItems)
+  const transitUrl = first ? buildTransitToStopUrl(first) : null
+  const walkUrl = buildWalkingStopsUrl(walkItems)
+  const legs: LaunchPopLeg[] = []
+  if (transitUrl && first) {
+    legs.push({
+      id: `d${dayOffset}-s${segIndex}-transit`,
+      kind: 'transit',
+      title: 'Rejoindre le 1er stop',
+      subtitle: `Toi → ${firstTitle}`,
+      preview: `Toi → ${firstTitle}`,
+      mapsUrl: transitUrl,
+      durationLabel: null,
+      ctaLabel: 'Y aller',
+    })
+  }
+  if (walkUrl) {
+    legs.push({
+      id: `d${dayOffset}-s${segIndex}-walk`,
+      kind: 'walk',
+      title: 'Les stops à pied',
+      subtitle:
+        walkItems.length > 1
+          ? `${firstTitle} → ${lastTitle}`
+          : firstTitle,
+      preview,
+      mapsUrl: walkUrl,
+      durationLabel: formatMinutesLabel(walkMins),
+      ctaLabel: 'Lancer',
+    })
+  }
+  return legs
+}
+
+/**
+ * Plan « Lancer le Pop » : jours → segments walk ; chaque segment = transit + marche.
+ */
+export function buildLaunchPopPlan(
+  items: ItineraryItem[],
+  opts?: { todayDayOffset?: number | null },
+): LaunchPopPlan {
+  const daysRaw = groupItemsByDay(items)
+  const days: LaunchPopDay[] = []
+  let needsSheet = daysRaw.length > 1
+
+  for (const day of daysRaw) {
+    const mapStops = sortStepsForMaps(day.items).filter(isMapsStop)
+    const chunks = chunkWalkItems(day.items)
+    if (chunks.length > 1) needsSheet = true
+    if (mapStops.length > MAPS_DIR_MAX_STOPS) needsSheet = true
+
+    const segments: LaunchPopSegment[] = chunks.map((chunk, i) => ({
+      id: `d${day.dayOffset}-seg${i}`,
+      label: momentSegmentLabel(chunk, i, chunks.length),
+      stopCount: chunk.length,
+      legs: buildSegmentLegs(day.dayOffset, i, chunk),
+    }))
+
+    days.push({
+      dayOffset: day.dayOffset,
+      label: day.label,
+      stopCount: mapStops.length,
+      durationMinutes: sumDurationMinutes(mapStops),
+      previewTitles: mapStops.slice(0, 4).map(stopTitle),
+      segments,
+      isToday:
+        opts?.todayDayOffset != null &&
+        opts.todayDayOffset === day.dayOffset,
+    })
+  }
+
+  // Always prefer sheet UI (2-leg UX); needsSheet flags multi-day / split.
+  if (days.length === 0) needsSheet = false
+  else needsSheet = true
+
+  return { days, needsSheet }
 }
 
 export function groupItemsByDay(items: ItineraryItem[]): {
