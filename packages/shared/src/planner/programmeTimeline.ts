@@ -289,22 +289,29 @@ export function buildProgrammeTimeline(input: {
           ? 'address'
           : 'activity'
     const meta = raw.meta && typeof raw.meta === 'object' ? raw.meta : null
-    const productCode =
+    const productCodeRaw =
       (meta?.viator_product_code && String(meta.viator_product_code)) ||
       (meta?.product_code && String(meta.product_code)) ||
       null
-    let mapsUrl =
-      (meta?.maps_url && String(meta.maps_url)) || null
-    if (
-      !mapsUrl &&
-      meta?.lat != null &&
-      meta?.lng != null &&
-      Number.isFinite(Number(meta.lat)) &&
-      Number.isFinite(Number(meta.lng))
-    ) {
-      mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-        `${meta.lat},${meta.lng}`,
-      )}`
+    const productCode =
+      productCodeRaw && !String(productCodeRaw).startsWith('skip-')
+        ? String(productCodeRaw)
+        : null
+    // Viator catalogue → book on Viator only (no Maps itinerary link).
+    let mapsUrl: string | null = null
+    if (!productCode) {
+      mapsUrl = (meta?.maps_url && String(meta.maps_url)) || null
+      if (
+        !mapsUrl &&
+        meta?.lat != null &&
+        meta?.lng != null &&
+        Number.isFinite(Number(meta.lat)) &&
+        Number.isFinite(Number(meta.lng))
+      ) {
+        mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+          `${meta.lat},${meta.lng}`,
+        )}`
+      }
     }
     const titleFromMeta =
       meta?.title != null ? String(meta.title) : null

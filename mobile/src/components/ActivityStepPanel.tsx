@@ -609,9 +609,10 @@ export function ActivityStepPanel(props: {
                 if (last?.id) await patch(last.id, { status: 'skipped' })
               } else {
                 for (const it of items) {
-                  if (it.status !== 'skipped') {
-                    await patch(it.id, { status: 'skipped' })
-                  }
+                  if (it.status === 'skipped') continue
+                  // Pas d’activité = stops Pop only — leave catalogue Viator alone.
+                  if (tripItemHasViatorCatalog(it.meta)) continue
+                  await patch(it.id, { status: 'skipped' })
                 }
               }
               track('skip')
@@ -688,6 +689,7 @@ export function ActivityStepPanel(props: {
       const unskipLocalPopItems = async () => {
         const skipped = items.filter((it) => {
           if (it.status !== 'skipped') return false
+          if (tripItemHasViatorCatalog(it.meta)) return false
           const m = (it.meta || {}) as Record<string, unknown>
           return Boolean(
             String(
@@ -699,14 +701,7 @@ export function ActivityStepPanel(props: {
           )
         })
         for (const it of skipped) {
-          const m = (it.meta || {}) as Record<string, unknown>
-          const code = String(
-            m.product_code || m.viator_product_code || '',
-          ).trim()
-          const hasViator = Boolean(code) && !code.startsWith('skip-')
-          await patch(it.id, {
-            status: hasViator ? 'idea' : 'validated',
-          })
+          await patch(it.id, { status: 'validated' })
         }
         return skipped.length
       }

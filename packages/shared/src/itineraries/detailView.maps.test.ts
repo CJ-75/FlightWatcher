@@ -47,6 +47,21 @@ describe('buildItineraryMapsUrl', () => {
     expect(url).toBe('https://maps.app.goo.gl/abc')
   })
 
+  it('excludes Viator catalogue steps from Maps links', () => {
+    const url = buildItineraryMapsUrl([
+      step({
+        kind: 'activity',
+        title: 'Cruise',
+        viator_product_code: 'VIATOR123',
+        meta: { lat: 48.85, lng: 2.29, maps_url: 'https://maps.app.goo.gl/x' },
+      }),
+      step({ title: 'Louvre', position: 1, meta: { lat: 48.86, lng: 2.33 } }),
+    ])
+    expect(url).toContain('google.com/maps')
+    expect(url).not.toContain('48.85')
+    expect(url).toContain('48.86')
+  })
+
   it('composes multi-stop dir when >1 free steps with titles', () => {
     const url = buildItineraryMapsUrl([
       step({ title: 'Tour Eiffel', position: 0 }),

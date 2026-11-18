@@ -7,9 +7,9 @@ export const ACTIVITY_BOOKED_PROMPT_FR = (title: string) =>
 
 export const ACTIVITY_SKIP_LABEL_FR = 'Pas d’activité'
 export const ACTIVITY_SKIP_CONFIRM_FR =
-  'Ça retire toutes les activités du programme (et de Lancer ce Pop). Continuer ?'
+  'Les étapes du Pop seront retirées du programme. Continuer ?'
 export const ACTIVITY_SKIP_HINT_FR =
-  'Retire les activités du programme — tu pourras les remettre ici avec Remettre le Pop.'
+  'Retire les étapes du Pop du programme. Elles pourront être remises ensuite.'
 export const ACTIVITY_RESTORE_POP_FR = 'Remettre le Pop'
 export const ACTIVITY_RESTORE_EMPTY_FR =
   'Les activités du Pop ont été retirées. Remets-les dans ce séjour.'

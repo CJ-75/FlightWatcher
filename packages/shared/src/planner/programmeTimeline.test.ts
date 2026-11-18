@@ -74,6 +74,47 @@ describe('buildProgrammeTimeline', () => {
     expect(daytime?.items.some((i) => i.title === 'Musée')).toBe(true)
   })
 
+  it('does not attach Maps url to Viator catalogue activities', () => {
+    const t = buildProgrammeTimeline({
+      outDate: '2026-11-14',
+      retDate: '2026-11-16',
+      hasFlight: true,
+      items: [
+        {
+          id: 'v1',
+          item_type: 'activity',
+          title: 'Seine cruise',
+          day_offset: 0,
+          moment: 'afternoon',
+          meta: {
+            product_code: 'VIATOR123',
+            maps_url: 'https://maps.app.goo.gl/should-ignore',
+            lat: 48.85,
+            lng: 2.29,
+          },
+        },
+        {
+          id: 'p1',
+          item_type: 'activity',
+          title: 'Place stop',
+          day_offset: 0,
+          moment: 'morning',
+          meta: { lat: 48.86, lng: 2.33 },
+        },
+      ],
+    })
+    const day0 = t.days.find((d) => d.dayOffset === 0)
+    const viator = day0?.slots
+      .flatMap((s) => s.items)
+      .find((i) => i.title === 'Seine cruise')
+    const place = day0?.slots
+      .flatMap((s) => s.items)
+      .find((i) => i.title === 'Place stop')
+    expect(viator?.productCode).toBe('VIATOR123')
+    expect(viator?.mapsUrl).toBeNull()
+    expect(place?.mapsUrl).toContain('google.com/maps')
+  })
+
   it('overnight outbound shows arrival on next day', () => {
     const t = buildProgrammeTimeline({
       outDate: '2026-11-14',

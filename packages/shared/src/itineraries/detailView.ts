@@ -122,9 +122,21 @@ function placeQuery(item: ItineraryItem): string | null {
   return name ? String(name) : null
 }
 
+/** Catalogue Viator → pas de stop Maps (lien booking uniquement). */
+function isViatorCatalogStep(item: ItineraryItem): boolean {
+  const code = String(
+    item.viator_product_code ||
+      item.meta?.viator_product_code ||
+      item.meta?.product_code ||
+      '',
+  ).trim()
+  return Boolean(code) && !code.startsWith('skip-')
+}
+
 function isMapsStop(item: ItineraryItem): boolean {
   const kind = item.kind || 'free'
   if (kind !== 'place' && kind !== 'activity' && kind !== 'free') return false
+  if (isViatorCatalogStep(item)) return false
   return !!(
     placeCoords(item) ||
     item.places?.name ||
@@ -152,6 +164,7 @@ function sortStepsForMaps(items: ItineraryItem[]): ItineraryItem[] {
 
 /** Google Maps search for a single place/activity step (or pasted maps_url). */
 export function buildItineraryStepMapsUrl(item: ItineraryItem): string | null {
+  if (isViatorCatalogStep(item)) return null
   const pasted = String(item.meta?.maps_url || '').trim()
   if (pasted) return pasted
   if (item.kind !== 'place' && item.kind !== 'activity' && item.kind !== 'free') {

@@ -83,6 +83,11 @@ def _item_sort_key(it: Dict[str, Any]):
     )
 
 
+def _is_viator_code(code: Any) -> bool:
+    raw = str(code or "").strip()
+    return bool(raw) and not raw.startswith("skip-")
+
+
 def apply_itinerary_to_trip(
     supabase,
     itinerary_id: str,
@@ -90,10 +95,12 @@ def apply_itinerary_to_trip(
     planned_trip_id: Optional[str] = None,
     draft_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    skip_viator: bool = False,
 ) -> Dict[str, Any]:
     """
     Materialize itinerary_items onto a trip.
     Supports place / activity / free (Lot 5). Free steps → trip_items notes.
+    skip_viator=True (Remettre le Pop): leave catalogue Viator rows untouched.
     """
     if not supabase or not itinerary_id:
         return {"ok": False, "error": "missing"}
@@ -181,15 +188,31 @@ def apply_itinerary_to_trip(
         notes_parts = [p for p in (title, note) if p]
         notes = " — ".join(notes_parts) if notes_parts else None
         viator_code = str(
-            meta.get("product_code") or meta.get("viator_product_code") or ""
+            meta.get("product_code")
+            or meta.get("viator_product_code")
+            or it.get("viator_product_code")
+            or ""
         ).strip()
-        has_viator = bool(viator_code) and not viator_code.startswith("skip-")
+        has_viator = _is_viator_code(viator_code)
+        # Viator stays bookable via product link — no Maps stop.
+        if has_viator:
+            meta.pop("maps_url", None)
+        if skip_viator and has_viator:
+            skipped += 1
+            continue
         # Hors catalogue Viator → validée d’office (stops Pop place/free).
         item_status = "idea" if has_viator else "validated"
 
         src_id = str(it.get("id") or "").strip()
         if src_id and src_id in existing_by_src:
             ex = existing_by_src[src_id]
+            ex_m = ex.get("meta") if isinstance(ex.get("meta"), dict) else {}
+            if skip_viator and _is_viator_code(
+                ex_m.get("product_code") or ex_m.get("viator_product_code")
+            ):
+                # Remettre le Pop: never change an existing Viator trip_item.
+                skipped += 1
+                continue
             if str(ex.get("status") or "") == "skipped":
                 try:
                     supabase.table("trip_items").update(
@@ -390,7 +413,7 @@ def resolve_source_itinerary_id_for_trip(
 
 
 def unskip_pop_items_on_trip(supabase, planned_trip_id: str) -> Dict[str, Any]:
-    """Re-activate skipped trip_items that still point at a Pop source item."""
+    """Re-activate skipped Pop place/free items (never Viator catalogue)."""
     tid = str(planned_trip_id or "").strip()
     if not tid or not supabase:
         return {"ok": False, "error": "missing_trip", "restored": 0}
@@ -419,14 +442,13 @@ def unskip_pop_items_on_trip(supabase, planned_trip_id: str) -> Dict[str, Any]:
         )
         if not has_src:
             continue
-        viator_code = str(
-            m.get("product_code") or m.get("viator_product_code") or ""
-        ).strip()
-        has_viator = bool(viator_code) and not viator_code.startswith("skip-")
-        item_status = "idea" if has_viator else "validated"
+        if _is_viator_code(
+            m.get("product_code") or m.get("viator_product_code")
+        ):
+            continue
         try:
             supabase.table("trip_items").update(
-                {"status": item_status, "updated_at": _now_iso()}
+                {"status": "validated", "updated_at": _now_iso()}
             ).eq("id", row["id"]).execute()
             restored += 1
         except Exception as e:
@@ -483,6 +505,7 @@ def restore_pop_on_trip(supabase, planned_trip_id: str) -> Dict[str, Any]:
             itinerary_id=itin_id,
             planned_trip_id=tid,
             draft_id=None,
+            skip_viator=True,
         )
         if applied.get("ok"):
             return {

@@ -97,9 +97,9 @@ function ItemRow({
       {item.notes ? (
         <p className="mt-1.5 text-xs leading-relaxed text-[#6B5C50]">{item.notes}</p>
       ) : null}
-      {item.mapsUrl || item.productCode ? (
+      {(!item.productCode && item.mapsUrl) || item.productCode ? (
         <div className="mt-2.5 flex flex-wrap gap-2">
-          {item.mapsUrl ? (
+          {!item.productCode && item.mapsUrl ? (
             <button
               type="button"
               onClick={(e) => {
