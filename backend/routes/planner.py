@@ -4014,7 +4014,7 @@ async def skip_hotel(trip_id: str, request: Request):
         .select("*")
         .eq("trip_id", trip_id)
         .eq("status", "accepted")
-        .order("updated_at", desc=True)
+        .order("created_at", desc=True)
         .limit(1)
         .execute()
     )
