@@ -411,6 +411,23 @@ async def admin_planners_list(
     return planners_mod.list_planners(page=page, page_size=page_size, status=status)
 
 
+@router.get("/planners/ops")
+@require_admin
+async def admin_planners_ops(
+    request: Request,
+    sample: int = Query(80, ge=20, le=100),
+):
+    """KPIs Pop→séjour + file problèmes (échantillon récent, 3–4 req)."""
+    return planners_mod.planners_ops(sample=sample)
+
+
+@router.get("/planners/{trip_id}")
+@require_admin
+async def admin_planner_detail(trip_id: str, request: Request):
+    """Fiche séjour ops — 4 requêtes max."""
+    return planners_mod.get_planner(trip_id)
+
+
 @router.get("/sejours/inventory")
 @require_admin
 async def admin_sejours_inventory(request: Request):

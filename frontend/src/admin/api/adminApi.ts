@@ -207,6 +207,10 @@ export const adminApi = {
         flight: 'none' | 'selected' | 'booked'
         hotel: 'none' | 'selected' | 'booked'
         activities: number
+        from_pop?: boolean
+        want_flight?: boolean | null
+        want_hotel?: boolean | null
+        issues?: string[]
         updated_at?: string | null
         created_at?: string | null
       }>
@@ -221,6 +225,70 @@ export const adminApi = {
         status: opts.status,
       },
     }),
+
+  plannersOps: (sample = 80) =>
+    adminFetch<{
+      ok: boolean
+      error?: string
+      sample?: number
+      kpis: {
+        trips_sample: number
+        from_pop: number
+        want_flight: number
+        want_hotel: number
+        hotel_booked: number
+        issues: number
+      }
+      issues: Array<{
+        id: string
+        name?: string
+        user: string
+        status: string
+        destination: string
+        from_pop?: boolean
+        issues: string[]
+        issue_labels: string[]
+        updated_at?: string | null
+      }>
+      issue_labels?: Record<string, string>
+    }>('/api/admin/planners/ops', { query: { sample } }),
+
+  plannerDetail: (tripId: string) =>
+    adminFetch<{
+      ok: boolean
+      error?: string
+      trip?: {
+        id: string
+        name?: string
+        user: string
+        user_id?: string | null
+        status: string
+        destination: string
+        departure_airport?: string | null
+        out_date?: string | null
+        ret_date?: string | null
+        passengers?: number | null
+        from_pop?: boolean
+        want_flight?: boolean | null
+        want_hotel?: boolean | null
+        source_itinerary_id?: string | null
+        flight: 'none' | 'selected' | 'booked'
+        hotel: 'none' | 'selected' | 'booked'
+        hotel_external?: boolean
+        flight_external?: boolean
+        draft_token?: string | null
+        activities: {
+          total: number
+          active: number
+          skipped: number
+          viator: number
+          pop: number
+        }
+        issues: string[]
+        issue_labels: string[]
+        updated_at?: string | null
+      }
+    }>(`/api/admin/planners/${encodeURIComponent(tripId)}`),
 
   productFunnel: (days = 14) =>
     adminFetch('/api/admin/product-funnel', { query: { days } }),
