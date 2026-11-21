@@ -96,7 +96,7 @@ import {
   PLANNER_SHARE_TITLE_FR,
   HOTEL_CTA_FR,
   hubMatchesPhase,
-  sortWorkspacesByDeparture,
+  sortHubWorkspaces,
   buildTripDetailView,
   computeTripPartyPrice,
   displayLegFlightNumber,
@@ -531,8 +531,9 @@ function TripsGallery({
 
   const filtered = useMemo(
     () =>
-      sortWorkspacesByDeparture(
+      sortHubWorkspaces(
         workspaces.filter((w) => hubMatches(w, filter)),
+        filter,
       ),
     [workspaces, filter],
   )

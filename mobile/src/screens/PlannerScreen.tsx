@@ -43,7 +43,7 @@ import {
   PLANNER_HUB_KICKER_FR,
   PLANNER_HUB_SUBTITLE_FR,
   PLANNER_HUB_TITLE_FR,
-  sortWorkspacesByDeparture,
+  sortHubWorkspaces,
   PLANNER_NEW_STAY_FR,
   type DatePresetId,
   type FlexibleDates,
@@ -301,7 +301,7 @@ export function PlannerScreen() {
   )
   const filteredWorkspaces = useMemo(
     () =>
-      sortWorkspacesByDeparture(
+      sortHubWorkspaces(
         workspaces.filter((workspace) =>
           filter === 'organize'
             ? workspace.phase === 'planning'
@@ -309,6 +309,7 @@ export function PlannerScreen() {
               ? workspace.phase !== 'planning' && workspace.phase !== 'past'
               : workspace.phase === 'past',
         ),
+        filter,
       ),
     [filter, workspaces],
   )

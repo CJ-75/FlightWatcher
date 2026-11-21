@@ -121,6 +121,39 @@ export function sortWorkspacesByDeparture<
   })
 }
 
+/**
+ * Passés (dont Pop) — plus récemment passé en premier (retour ↓, sinon départ ↓).
+ */
+export function sortWorkspacesByPast<
+  T extends {
+    ret_date?: string | null
+    out_date?: string | null
+    updated_at?: string | null
+  },
+>(list: T[]): T[] {
+  return [...list].sort((a, b) => {
+    const ra = String(a.ret_date || a.out_date || '').slice(0, 10)
+    const rb = String(b.ret_date || b.out_date || '').slice(0, 10)
+    if (ra && rb && ra !== rb) return rb.localeCompare(ra)
+    if (ra && !rb) return -1
+    if (!ra && rb) return 1
+    return String(b.updated_at || '').localeCompare(String(a.updated_at || ''))
+  })
+}
+
+/** Hub list sort — Passés by return date desc, else by departure asc. */
+export function sortHubWorkspaces<
+  T extends {
+    out_date?: string | null
+    ret_date?: string | null
+    updated_at?: string | null
+  },
+>(list: T[], filter: PlannerHubFilter): T[] {
+  return filter === 'past'
+    ? sortWorkspacesByPast(list)
+    : sortWorkspacesByDeparture(list)
+}
+
 export function hubMatchesPhase(
   phase: TravelWorkspacePhase,
   filter: PlannerHubFilter,
