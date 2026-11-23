@@ -133,7 +133,19 @@ async def _lifespan(app: FastAPI):
         pass
 
 
-app = FastAPI(title="Ryanair Flight Scanner API", lifespan=_lifespan)
+_docs_on = (os.getenv("ENABLE_API_DOCS") or "").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+app = FastAPI(
+    title="WayPop",
+    lifespan=_lifespan,
+    docs_url="/docs" if _docs_on else None,
+    redoc_url="/redoc" if _docs_on else None,
+    openapi_url="/openapi.json" if _docs_on else None,
+)
 
 # CORS — ALLOWED_ORIGINS (comma-separated), defaults include Vite + Expo web
 _default_origins = "http://localhost:5173,http://localhost:3000,http://localhost:8081,http://127.0.0.1:5173"

@@ -150,28 +150,29 @@ _HASH_FALLBACK_HTML = """<!DOCTYPE html>
 
 @router.get("/")
 def read_root():
-    return {"message": "Ryanair Flight Scanner API", "status": "ok"}
+    """Public root — no product / stack details."""
+    return {"status": "ok"}
 
 
 @router.get("/api/health")
 def health_check():
     """Liveness — no external deps (Render health check / CDN)."""
-    return {"status": "ok", "service": "waypop-api"}
+    return {"status": "ok"}
 
 
 @router.get("/api/health/db")
 def health_db():
-    """Readiness — one cheap Supabase round-trip."""
+    """Readiness — one cheap Supabase round-trip. No error details publicly."""
     try:
         from supabase_client import get_supabase
 
         sb = get_supabase()
         if not sb:
-            return {"status": "degraded", "db": False, "error": "no_client"}
+            return {"status": "degraded", "db": False}
         sb.table("itineraries").select("id").limit(1).execute()
         return {"status": "ok", "db": True}
-    except Exception as e:
-        return {"status": "degraded", "db": False, "error": str(e)[:200]}
+    except Exception:
+        return {"status": "degraded", "db": False}
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
