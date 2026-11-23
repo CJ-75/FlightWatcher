@@ -1,0 +1,2 @@
+# Render (racine) → délègue au backend
+-r backend/requirements.txt
