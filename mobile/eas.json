@@ -1,0 +1,43 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_ALLOW_CLEARTEXT": "1"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://waypop.co",
+        "EXPO_PUBLIC_WEB_ORIGIN": "https://waypop.co"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://waypop.co",
+        "EXPO_PUBLIC_WEB_ORIGIN": "https://waypop.co"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

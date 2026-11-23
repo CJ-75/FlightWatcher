@@ -370,8 +370,30 @@ export function createApiClient(options: ApiClientOptions = {}) {
       platform?: string
       locale?: string
       origin_iata?: string
+      notif_group?: boolean
+      notif_pops?: boolean
     }) =>
       request<{ ok: boolean }>('/api/deals/push-tokens', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+
+    getPushPrefs: () =>
+      request<{ ok: boolean; notif_group: boolean; notif_pops: boolean }>(
+        '/api/push/prefs',
+      ),
+
+    patchPushPrefs: (body: { notif_group?: boolean; notif_pops?: boolean }) =>
+      request<{ ok: boolean }>('/api/push/prefs', {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+
+    recordPushPresence: (body: {
+      entity_type: 'trip' | 'pop'
+      entity_id: string
+    }) =>
+      request<{ ok: boolean }>('/api/push/presence', {
         method: 'POST',
         body: JSON.stringify(body),
       }),

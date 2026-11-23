@@ -67,7 +67,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!mounted) return
       setSession(s)
       setUser(s?.user ?? null)
-      if (s?.user) setIsGuest(false)
+      if (s?.user) {
+        setIsGuest(false)
+        void import('../lib/pushRegistration')
+          .then((m) => m.refreshPushTokenIfGranted())
+          .catch(() => {})
+      }
 
       // After first boot, never re-enter splash delay
       if (!bootPending && !fromBoot) return

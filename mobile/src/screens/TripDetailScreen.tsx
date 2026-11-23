@@ -613,6 +613,13 @@ export function TripDetailScreen() {
     setActivityItems([])
   }, [tripId])
 
+  useEffect(() => {
+    if (!tripId || useGuestPreview) return
+    void import('../lib/pushRegistration')
+      .then((m) => m.recordPushPresence('trip', String(tripId)))
+      .catch(() => {})
+  }, [tripId, useGuestPreview])
+
   // Keep cache warm after scan / accept / rename (instant re-open).
   useEffect(() => {
     if (useGuestPreview || !trip?.id || !trip.invite_token) return

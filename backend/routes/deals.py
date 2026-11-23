@@ -512,6 +512,8 @@ class PushTokenRegisterRequest(BaseModel):
     platform: Optional[str] = None
     locale: Optional[str] = "fr"
     origin_iata: Optional[str] = None
+    notif_group: Optional[bool] = None
+    notif_pops: Optional[bool] = None
 
 
 @router.post("/api/deals/push-tokens")
@@ -519,7 +521,7 @@ async def register_push_token(
     request: Request,
     body: PushTokenRegisterRequest,
 ):
-    """Register Expo push token for seasonal occasion digests (auth optional)."""
+    """Register Expo push token (V1 group + pops). Auth optional but preferred."""
     tok = (body.token or "").strip()
     if len(tok) < 8:
         raise HTTPException(status_code=400, detail="invalid_token")
@@ -541,6 +543,10 @@ async def register_push_token(
         "active": True,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+    if body.notif_group is not None:
+        row["notif_group"] = bool(body.notif_group)
+    if body.notif_pops is not None:
+        row["notif_pops"] = bool(body.notif_pops)
     if user_id:
         row["user_id"] = user_id
     try:

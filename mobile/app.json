@@ -4,20 +4,30 @@
     "slug": "waypop",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "scheme": ["waypop", "flightwatcher"],
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1F33"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.waypop.app",
+      "buildNumber": "1",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "WayPop utilise tes photos pour illustrer les étapes de parcours."
+        "NSPhotoLibraryUsageDescription": "WayPop utilise tes photos pour illustrer les étapes de parcours.",
+        "NSUserNotificationsUsageDescription": "WayPop t’informe quand un pote est partant, quand les dates sont calées, ou la veille de ton Pop."
       }
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0B1F33"
       },
       "package": "com.waypop.app",
+      "versionCode": 1,
       "intentFilters": [
         {
           "action": "VIEW",
@@ -65,10 +75,18 @@
       "expo-status-bar",
       "expo-web-browser",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#FF6B35",
+          "defaultChannel": "default"
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {
-            "usesCleartextTraffic": true
+            "usesCleartextTraffic": false
           }
         }
       ]

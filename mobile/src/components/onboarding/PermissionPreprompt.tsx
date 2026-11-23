@@ -62,11 +62,11 @@ export function PermissionPreprompt({ kind, open, onClose, onAccept }: Props) {
 
   const title =
     kind === 'push'
-      ? 'Reste au courant des bons prix'
+      ? 'Le groupe et tes Pops'
       : 'Des idées près de chez toi'
   const body =
     kind === 'push'
-      ? 'Active les notifs pour savoir quand un week-end baisse. Tu peux tout couper à tout moment.'
+      ? 'Reçois une notif quand un pote est partant, quand les dates sont calées, ou la veille de ton Pop. Tu règles Groupe / Pops dans le profil.'
       : 'On affine les départs sans te tracker en continu — juste pour mieux te proposer.'
 
   const defer = async () => {

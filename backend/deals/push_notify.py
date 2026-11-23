@@ -19,21 +19,34 @@ def push_enabled() -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def legacy_push_blocked() -> bool:
+    """V1 catalogue only — block occasion / J-7 / relaunch Expo pushes."""
+    raw = (os.getenv("PUSH_V1_ONLY") or "1").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
 def send_expo_push(
     tokens: List[str],
     *,
     title: str,
     body: str,
     data: Optional[Dict[str, Any]] = None,
+    allow_legacy: bool = False,
 ) -> Dict[str, Any]:
     """
     Send Expo push messages. Returns {ok, sent, skipped, errors}.
     Invalid / empty tokens are skipped; missing network → errors counted.
+    Legacy callers (occasions, J-7, relaunch) pass allow_legacy=False (default)
+    and are no-ops when PUSH_V1_ONLY=1. V1 module passes allow_legacy=True.
     """
     summary = {"ok": True, "sent": 0, "skipped": 0, "errors": 0}
     if not push_enabled():
         summary["ok"] = False
         summary["error"] = "push_disabled"
+        return summary
+    if legacy_push_blocked() and not allow_legacy:
+        summary["skipped"] = len(tokens or [])
+        summary["error"] = "push_v1_only"
         return summary
     clean = []
     seen = set()

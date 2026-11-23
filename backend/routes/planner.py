@@ -455,6 +455,47 @@ def _collect_trip_notify_emails(supabase, trip: dict) -> List[str]:
     return emails
 
 
+def _profile_display_name(supabase, user_id: Optional[str]) -> str:
+    if not user_id:
+        return ""
+    try:
+        prof = (
+            supabase.table("user_profiles")
+            .select("first_name,display_name,email")
+            .eq("id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if prof.data:
+            row = prof.data[0]
+            return (
+                (row.get("first_name") or "").strip()
+                or (row.get("display_name") or "").strip()
+                or (row.get("email") or "").split("@")[0]
+            )
+    except Exception:
+        pass
+    return ""
+
+
+def _notify_organizer_member_joined(supabase, trip: dict, joiner_user_id: str) -> None:
+    """Push V1 #1 — batch within 1h to organizer."""
+    org = trip.get("organizer_id")
+    if not org or str(org) == str(joiner_user_id):
+        return
+    try:
+        from push.v1_send import enqueue_member_joined
+
+        enqueue_member_joined(
+            supabase,
+            trip=trip,
+            organizer_id=str(org),
+            joiner_name=_profile_display_name(supabase, joiner_user_id) or "Quelqu'un",
+        )
+    except Exception as e:
+        print(f"⚠️ join push: {e}")
+
+
 def _maybe_notify_under_budget(
     supabase, trip: dict, proposals: List[dict]
 ) -> Tuple[bool, Optional[float]]:
@@ -3220,6 +3261,10 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
                 ),
             )
 
+    dates_changed = (
+        body.dates_depart is not None or body.dates_retour is not None
+    )
+
     try:
         result = (
             supabase.table("planned_trips").update(patch).eq("id", trip_id).execute()
@@ -3239,6 +3284,20 @@ async def update_trip(trip_id: str, body: UpdatePlannedTripRequest, request: Req
             raise
     if not result.data:
         raise HTTPException(status_code=500, detail="Mise à jour échouée")
+
+    if dates_changed:
+        try:
+            from push.v1_send import notify_dates_set
+
+            merged = {**current, **(result.data[0] or {})}
+            notify_dates_set(
+                supabase,
+                trip=merged,
+                organizer_id=str(user_id),
+                organizer_name=_profile_display_name(supabase, user_id) or "L'organisateur",
+            )
+        except Exception as e:
+            print(f"⚠️ dates push: {e}")
 
     # Pop opt-ins: clear skip marks / seed draft so client can open compose or scan.
     try:
@@ -3562,6 +3621,7 @@ async def add_trip_member(trip_id: str, body: AddTripMemberRequest, request: Req
     if count >= 6:
         raise HTTPException(status_code=400, detail="Maximum 6 personnes")
 
+    now_iso = datetime.utcnow().isoformat()
     result = (
         supabase.table("trip_members")
         .insert(
@@ -3573,6 +3633,7 @@ async def add_trip_member(trip_id: str, body: AddTripMemberRequest, request: Req
                 "role": "traveler",
                 "status": "guest",
                 "joined_via": "manual",
+                "invited_at": now_iso,
             }
         )
         .execute()
@@ -3587,11 +3648,24 @@ async def add_trip_member(trip_id: str, body: AddTripMemberRequest, request: Req
         supabase.table("planned_trips").update(
             {
                 "passengers": min(6, new_count),
-                "updated_at": datetime.utcnow().isoformat(),
+                "updated_at": now_iso,
             }
         ).eq("id", trip_id).execute()
 
-    # TODO: send invite email via Resend (name + email + invite_token)
+    # Push V1 #2 (app) or email fallback
+    try:
+        from push.v1_send import notify_invite
+
+        notify_invite(
+            supabase,
+            trip=trip,
+            organizer_name=_profile_display_name(supabase, user_id) or "Chris",
+            invitee_email=email,
+            invite_token=str(trip.get("invite_token") or ""),
+            member_id=str(result.data[0].get("id") or ""),
+        )
+    except Exception as e:
+        print(f"⚠️ invite notify: {e}")
     return result.data[0]
 
 
@@ -4784,6 +4858,7 @@ async def join_invite(token: str, request: Request):
                 ),
             }
         ).eq("id", guest["id"]).execute()
+        _notify_organizer_member_joined(supabase, row, user_id)
         return {"ok": True, "trip_id": trip_id, "claimed_guest": True}
 
     members = (
@@ -4818,4 +4893,5 @@ async def join_invite(token: str, request: Request):
             }
         ).eq("id", trip_id).execute()
 
+    _notify_organizer_member_joined(supabase, row, user_id)
     return {"ok": True, "trip_id": trip_id}

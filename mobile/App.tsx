@@ -25,6 +25,11 @@ import {
   shouldPromptFirstName,
 } from './src/components/onboarding/FirstNameSheet'
 import {
+  PermissionPreprompt,
+  shouldShowPermissionPreprompt,
+} from './src/components/onboarding/PermissionPreprompt'
+import { registerPushToken } from './src/lib/pushRegistration'
+import {
   OnboardingGateProvider,
   useOnboardingGate,
 } from './src/context/OnboardingGateContext'
@@ -302,6 +307,7 @@ function RootNavigator() {
     null,
   )
   const [showFirstName, setShowFirstName] = React.useState(false)
+  const [showPushPreprompt, setShowPushPreprompt] = React.useState(false)
 
   // Après Google OAuth : reprendre le lien d’invite → join auto.
   useEffect(() => {
@@ -378,6 +384,9 @@ function RootNavigator() {
           onDone={() => {
             clearForceOnboarding()
             setNeedsOnboarding(false)
+            void shouldShowPermissionPreprompt('push').then((ok) => {
+              if (ok) setShowPushPreprompt(true)
+            })
           }}
         />
         <FirstNameSheet
@@ -521,6 +530,14 @@ function RootNavigator() {
     <FirstNameSheet
       open={showFirstName}
       onDone={() => setShowFirstName(false)}
+    />
+    <PermissionPreprompt
+      kind="push"
+      open={showPushPreprompt}
+      onClose={() => setShowPushPreprompt(false)}
+      onAccept={async () => {
+        await registerPushToken({ notif_group: true, notif_pops: true })
+      }}
     />
     </>
   )

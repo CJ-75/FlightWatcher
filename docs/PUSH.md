@@ -1,76 +1,51 @@
-# Stratégie Push — WayPop
+# Push V1 — WayPop (6 notifications)
 
-Objectif : rappeler les bons moments sans spam. Priorité aux **actions utiles** (relancer un séjour, prix trouvé, J-7 activités).
+**Aucune push prix** : vol sous budget + baisse de prix → **email Resend seulement**.
 
-## Canaux
+## Catalogue
 
-| Canal | Quand | Infra |
-|-------|--------|--------|
-| **In-app CTA** | Immédiat, user-initiated | Planner hub / détail |
-| **Email** | Confirmation + nudge | Resend (`email_notify.py`) |
-| **Push Expo** | Nudge + événements chauds | `deals/push_notify.py` + table `push_tokens` |
+### Groupe (`notif_group`)
 
-Mobile : enregistrement token via `POST /api/deals/push-tokens` (à brancher `expo-notifications` — voir PARITY).
+| # | Titre · texte | Destinataire | Déclencheur | Deep link |
+|---|---------------|--------------|-------------|-----------|
+| 1 | **{Prénom} est partant** · « {ville}, {out} → {ret} : vous êtes {n}. » | Organisateur | Join / accept invite. Batch 1 h : « Léa et Tom sont partants » | Planner trip |
+| 2 | **{Orga} t'invite à {ville}** · « Le programme est prêt, il manque ta réponse. » | Invité **avec** app (token) ; sinon **email** | Invitation envoyée | Invite + CTA partant |
+| 3 | **Le groupe attend ta réponse** · « {ville} : {noms} sont partants. » | Invité sans réponse | **48 h** après invite, **1×** | Invite |
+| 4 | **Dates fixées : {out} → {ret}** · « {Orga} a calé le week-end à {ville}. » | Tout le groupe | Orga fixe / change dates | Planner trip |
 
-## Cas : séjour terminé **sans réservation**
+### Pops (`notif_pops`)
 
-Un `planned_trips.status = completed` (hub **Passés**) **sans** vol/hôtel réservé = intention non convertie.
+| # | Titre · texte | Destinataire | Déclencheur | Deep link |
+|---|---------------|--------------|-------------|-----------|
+| 5 | **On le planifie {samedi\|dimanche} ?** · « Tu as gardé {titre}. » | Qui a **gardé** (liked) le Pop | **3 j** après keep, pas encore au Planner ; **1× / Pop** ; envoi **mercredi ou jeudi** ; jour proposé = prochain samedi (ou dimanche si Pop « weekend-dimanche ») | Sheet Ajouter au Planner (jour prérempli) |
+| 6 | **Ton Pop commence demain** · « Premier stop à {heure} : {lieu}. » | Membres voyage daté | **Veille** ~**19 h** Europe/Paris | Programme J1 + CTA Lancer |
 
-### Produit
+## Règles d’envoi
 
-1. **CTA in-app** « Relancer avec de nouvelles dates » (organisateur seulement)
-2. Choix de dates **futures** (presets week-end / custom)
-3. API `POST /api/planner/trips/{id}/relaunch` → dates + `planning` + **scan complet**
-4. Email + push de **confirmation** au relance (orga + membres avec email)
+1. **Max 1 push / jour / user** hors groupe (#5 et #6). Si conflit même jour → **#6 gagne**, #5 reporté.
+2. **Push groupe (#1–4) toujours** (sauf opt-out `notif_group`), avec **batch** (#1).
+3. **Pas de push** si l’user a ouvert l’app pour **ce trip / ce Pop** dans l’**heure** (`POST /api/push/presence`).
+4. **Quiet hours 21 h–9 h** Europe/Paris : différer au matin. **Exception** : #6 vers **19 h**.
+5. Deux réglages user : **Groupe** · **Pops et jour J** (défaut : on si token enregistré).
 
-### Nudge automatisé (phase 2)
-
-Cron quotidien (ex. 10h Europe/Paris) :
-
-- Cible : `completed`, pas de réservation active, last nudge > 14j, dates séjour passées ≥ 3j
-- Push : « Tu veux repartir ? Mets à jour les dates de {trip} »
-- Email : même message + deep link `/planner?trip={id}&relaunch=1`
-- Cap : **1 nudge / séjour / 14 jours**, max **2** au total, opt-out = désinscription email / token push `active=false`
-
-Feature flags (proposés) :
+## Types payload (`data.type`)
 
 ```
-PLANNER_RELAUNCH_PUSH_ENABLED=1
-PLANNER_RELAUNCH_NUDGE_ENABLED=0   # activer après tokens mobile
+group_member_joined | group_invite | group_invite_nudge
+group_dates_set | pop_plan_nudge | pop_starts_tomorrow
 ```
 
-### Payload push (convention)
+## Hors V1 push (garder email / désactiver push)
 
-```json
-{
-  "type": "planner_relaunch",
-  "trip_id": "uuid",
-  "screen": "TripDetail"
-}
-```
+- Digests occasions Expo
+- Activités J-7 Expo
+- Relaunch planner Expo  
 
-Deep link app : `flightwatcher://planner/trip/{id}` (puis `waypop://` quand allowlist Supabase à jour).
+→ `PUSH_V1_ONLY=1` (défaut) coupe ces envois push legacy.
 
-## Autres types déjà / bientôt
+## Infra
 
-| `type` | Trigger |
-|--------|---------|
-| `deal_price_drop` | Like deal + baisse |
-| `occasion_alert` | Occasions Lot F |
-| `activity_j7` | Rappels activités J-7 |
-| `planner_under_budget` | Surveillance prix (email aujourd’hui) |
-| `planner_relaunch` | Relance dates (ce doc) |
-
-## Principes UX
-
-- Un seul job par notif : **ouvrir le bon écran**
-- Jamais de push marketing générique
-- Quiet hours 21h–9h Europe/Paris
-- Toujours un chemin in-app équivalent (pas de dépendance exclusive au push)
-
-## Rollout
-
-1. ✅ CTA + API relaunch + email confirmation
-2. Brancher `expo-notifications` + enregistrement token au login
-3. Activer nudge cron (`PLANNER_RELAUNCH_NUDGE_ENABLED`)
-4. Mesurer : ouverture push → sheet dates → scan réussi
+- Tokens : `push_tokens` + prefs `notif_group` / `notif_pops`
+- Log / cooldown / batch : `push_send_log`
+- Présence : `push_presence`
+- Jobs cron Bearer `CRON_SECRET` : invite-nudge 48h, pop-plan (mer/jeu), pop-eve (19h)
