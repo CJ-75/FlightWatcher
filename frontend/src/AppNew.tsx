@@ -142,6 +142,8 @@ function App() {
           path="/parcours/:itineraryId"
           element={<ParcoursPublicPage />}
         />
+        {/* Fallback tant que apps/web-public n’est pas déployé / rewrite Vercel */}
+        <Route path="/pop/:city/:slug" element={<ParcoursPublicPage />} />
         <Route path="/pay/hotel" element={<HotelPay />} />
         
         {/* Routes admin */}

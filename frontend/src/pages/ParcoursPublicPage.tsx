@@ -45,7 +45,13 @@ function popVPreviewForcedToSpa(): boolean {
 }
 
 export default function ParcoursPublicPage() {
-  const { itineraryId } = useParams<{ itineraryId: string }>()
+  // /parcours/:itineraryId  ou fallback SPA /pop/:city/:slug (Next web-public pas encore sur Vercel)
+  const { itineraryId: itinParam, slug: slugParam } = useParams<{
+    itineraryId?: string
+    slug?: string
+    city?: string
+  }>()
+  const itineraryId = itinParam || slugParam
   const navigate = useNavigate()
   const { openAuthSheet } = useAuthSheet()
   const [itin, setItin] = useState<Itinerary | null>(null)
