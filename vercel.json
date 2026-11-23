@@ -1,48 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "backend": {
-      "root": "backend",
-      "framework": "fastapi",
-      "entrypoint": "main:app",
-      "functions": {
-        "main.py": {
-          "maxDuration": 300
-        }
-      }
-    },
-    "frontend": {
-      "root": "frontend",
-      "framework": "vite",
-      "installCommand": "cd .. && npm install",
-      "buildCommand": "npm run build -w waypop-frontend",
-      "outputDirectory": "dist",
-      "rewrites": [
-        {
-          "source": "/(.*)",
-          "destination": "/index.html"
-        }
-      ]
-    }
-  },
+  "installCommand": "npm install",
+  "buildCommand": "npm exec -w waypop-frontend -- vite build",
+  "outputDirectory": "frontend/dist",
+  "framework": null,
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": {
-        "service": "backend"
-      }
+      "source": "/api/:path*",
+      "destination": "https://api.waypop.co/api/:path*"
     },
     {
       "source": "/auth/mobile-callback",
-      "destination": {
-        "service": "backend"
-      }
+      "destination": "https://api.waypop.co/auth/mobile-callback"
     },
     {
       "source": "/(.*)",
-      "destination": {
-        "service": "frontend"
-      }
+      "destination": "/index.html"
     }
   ]
 }

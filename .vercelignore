@@ -1,0 +1,15 @@
+backend
+mobile
+apps
+docs
+scripts
+*.md
+.git
+.env
+backend/.env
+**/.env
+**/node_modules
+**/.expo
+**/dist
+**/__pycache__
+apply_*.sql

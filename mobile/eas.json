@@ -20,7 +20,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://waypop.co",
+        "EXPO_PUBLIC_API_URL": "https://api.waypop.co",
         "EXPO_PUBLIC_WEB_ORIGIN": "https://waypop.co"
       }
     },
@@ -32,7 +32,7 @@
         "resourceClass": "m-medium"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://waypop.co",
+        "EXPO_PUBLIC_API_URL": "https://api.waypop.co",
         "EXPO_PUBLIC_WEB_ORIGIN": "https://waypop.co"
       }
     }
