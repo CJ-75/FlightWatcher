@@ -48,7 +48,10 @@ const expo = {
   extra: {
     ...(appJson.expo.extra || {}),
     eas: {
-      projectId: process.env.EAS_PROJECT_ID || undefined,
+      projectId:
+        process.env.EAS_PROJECT_ID ||
+        appJson.expo.extra?.eas?.projectId ||
+        'ae76aa6f-b368-40be-be98-64e7f40580f3',
     },
   },
 }

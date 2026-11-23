@@ -70,6 +70,11 @@
         }
       ]
     },
+    "extra": {
+      "eas": {
+        "projectId": "ae76aa6f-b368-40be-be98-64e7f40580f3"
+      }
+    },
     "plugins": [
       "expo-font",
       "expo-status-bar",

@@ -3,6 +3,9 @@
 Doc de suivi. On avance **step by step**.  
 **Push V1 (6 notifs) + Resend = inclus.**
 
+**Hébergement choisi :** API **Render** (Frankfurt) + front **Vercel** (`waypop.co`).  
+Guide : [RENDER_API.md](RENDER_API.md). Mobile API → `https://api.waypop.co` (pas same-origin Vercel Services).
+
 Légende : ✅ fait · 🟡 en cours / partiel · ⬜ à faire · 🔒 manuel · 🔧 repo
 
 ---
@@ -19,8 +22,8 @@ Régénérer : `python mobile/scripts/gen_store_assets.py`
 | # | Étape | Qui | Statut |
 |---|--------|-----|--------|
 | **1** | Base mobile (`eas.json`, cleartext, versions, assets placeholder) | 🔧 | ✅ |
-| **2** | Comptes + EAS (`eas login`, `build:configure` → projectId) | 🔒 | ⬜ |
-| **3** | API prod HTTPS + env | 🔒 | ⬜ |
+| **2** | Comptes + EAS (`eas login`, `build:configure` → projectId) | 🔒 | ✅ `ae76aa6f-…` |
+| **3** | API **Render** + DNS `api.waypop.co` + front Vercel | 🔒 | ⬜ |
 | **4** | **Resend** domaine + `RESEND_*` + tests | 🔒 | ⬜ |
 | **5** | **Push V1** code + SQL + mobile | 🔧 | 🟡 |
 | **5b** | Appliquer `apply_push_v1_migration.sql` + crons + APNs/FCM | 🔒 | ⬜ |
@@ -53,3 +56,4 @@ Repo déjà : `backend/push/`, routes `/api/push/*`, hooks planner, `expo-notifi
 |------|------|
 | 2026-11-22 | Étape 1 mobile store-ready |
 | 2026-11-23 | Push V1 spec + backend + mobile opt-in ; legacy push gated |
+| 2026-11-23 | Confirmé stack : Render API + Vercel front (pas Vercel Services seul) |

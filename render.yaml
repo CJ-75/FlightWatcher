@@ -1,0 +1,11 @@
+# Blueprint optionnel — ou coller ces commandes dans l’UI Render.
+services:
+  - type: web
+    name: waypop-api
+    runtime: python
+    region: frankfurt
+    plan: starter
+    branch: reprise
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
