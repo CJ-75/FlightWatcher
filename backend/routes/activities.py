@@ -961,17 +961,21 @@ class AdminParcoursPublishNewBody(BaseModel):
 
 @router.post("/api/admin/parcours/parse-maps")
 @require_admin
-async def admin_parse_maps(body: AdminParseMapsBody, request: Request):
-    """Parse Maps URL. light=True (défaut) : pas d'enrich Wikipedia/Geoapify."""
+async def admin_parse_maps(request: Request, body: dict = Body(...)):
+    """Parse Maps URL. light=True (défaut) : pas d'enrich Wikipedia/Geoapify.
+
+    Body validated via model_validate (évite ForwardRef Pydantic 2.5 + Py3.12).
+    """
     from activities.restaurants_service import parse_maps_url
     from activities.maps_enrich import enrich_maps_place
     import asyncio
 
-    url = (body.url or "").strip()
+    parsed_body = AdminParseMapsBody.model_validate(body or {})
+    url = (parsed_body.url or "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="url_required")
     parsed = parse_maps_url(url)
-    if body.light:
+    if parsed_body.light:
         return {"ok": True, "parsed": parsed}
     enriched = await asyncio.to_thread(enrich_maps_place, parsed)
     return {"ok": True, "parsed": enriched}
