@@ -29,11 +29,11 @@ Régénérer : `python mobile/scripts/gen_store_assets.py`
 | **1** | Base mobile (`eas.json`, cleartext, versions, assets placeholder) | 🔧 | ✅ |
 | **2** | Comptes + EAS (`eas login`, `build:configure` → projectId) | 🔒 | ✅ `ae76aa6f-…` |
 | **3** | API **Render** + DNS `api.waypop.co` + front Vercel | 🔒 | ✅ API + `waypop.co` + `WEB_APP_URL` |
-| **4** | **Resend** domaine + `RESEND_*` + tests | 🔒 | 🟡 domaine OK · smoke API `confirmation_sent:false` → vérifier Render `RESEND_*` |
+| **4** | **Resend** domaine + `RESEND_*` + tests | 🔒 | ✅ smoke `confirmation_sent:true` (contact@waypop.co) |
 | **5** | **Push V1** code + SQL + mobile | 🔧 | 🟡 |
-| **5b** | Appliquer `apply_push_v1_migration.sql` + crons + APNs/FCM | 🔒 | ⬜ |
-| **6** | Sécu release | 🔒 | ⬜ |
-| **7** | Supabase Auth redirects + OAuth native | 🔒 | ⬜ |
+| **5b** | Appliquer `apply_push_v1_migration.sql` + crons + APNs/FCM | 🔒 | 🟡 SQL ✅ · crons ✅ · APNs/FCM ⏸️ avec comptes Apple/Play |
+| **6** | Sécu release | 🔒 | ✅ bypass=0 · hash admin · HTTPS · privacy |
+| **7** | Supabase Auth redirects + OAuth native | 🔒 | ✅ web waypop.co · native ⏸️ build preview |
 | **8** | Preview EAS + tests (mail + 6 push) | 🔒 | ⬜ |
 | **9** | Assets finaux + screenshots | 🔒 | ⬜ |
 | **10–12** | Metadata + prod submit + go-live | 🔒 | ⬜ |
@@ -66,3 +66,4 @@ Repo déjà : `backend/push/`, routes `/api/push/*`, hooks planner, `expo-notifi
 | 2026-11-23 | `vercel.json` front-only (API → api.waypop.co) |
 | 2026-11-23 | Vercel Waypop live · DNS `waypop.co` · `WEB_APP_URL` Render |
 | 2026-11-23 | Resend domaine + `RESEND_*` Render |
+| 2026-11-24 | Push SQL + crons Supabase · Auth redirects waypop.co OK |
