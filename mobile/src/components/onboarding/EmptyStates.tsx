@@ -21,10 +21,10 @@ export function VoyagesEmpty({
     <View style={styles.wrap}>
       <Text style={styles.title}>Pas encore de voyage</Text>
       <Text style={styles.lead}>
-        Pars d’un parcours, ou crée le tien — ensuite invite tes amis.
+        Pars d’un Pop, ou crée ton voyage — ensuite invite tes amis.
       </Text>
       <Pressable style={styles.cta} onPress={onExplore}>
-        <Text style={styles.ctaText}>Explorer les parcours</Text>
+        <Text style={styles.ctaText}>Explorer les Pops</Text>
       </Pressable>
       {showInviteTip ? (
         <View style={styles.tip}>
@@ -50,7 +50,7 @@ export function FavorisEmpty({ onExplore }: { onExplore: () => void }) {
     <View style={styles.wrap}>
       <Text style={styles.title}>Rien en favoris</Text>
       <Text style={styles.lead}>
-        Garde un parcours ou un séjour pour le retrouver ici.
+        Garde un Pop ou un séjour pour le retrouver ici.
       </Text>
       <Pressable style={styles.cta} onPress={onExplore}>
         <Text style={styles.ctaText}>Voir des idées</Text>

@@ -19,6 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { StatusBar } from 'expo-status-bar'
 import Svg, { Circle, Path } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { PopIcon } from '../components/icons/PopIcon'
 import {
   TRAVEL_PREFERENCE_CARDS,
   airportSelectionLabel,
@@ -94,23 +95,23 @@ function cityStepHeroUrl(
 
 const PROMISE_FEATURES = [
   {
-    title: 'Depuis chez toi',
-    detail: 'Des week-ends qui collent à ton budget',
+    title: 'Le vrai prix',
+    detail: 'Vol + hôtel depuis chez toi, à jour',
     photo: `https://images.unsplash.com/photo-1603378995290-8d4ce0495ddd?auto=format&fit=crop&w=800&q=90&fm=jpg`,
   },
   {
-    title: 'Des idées toutes prêtes',
-    detail: 'Un parcours à suivre, ou à partager',
+    title: 'Un Pop, et tout est prévu',
+    detail: 'Le programme jour par jour, lieux vérifiés',
     photo: `https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=640&q=80&fm=jpg`,
   },
   {
-    title: 'Avec qui tu veux',
-    detail: 'Solo, duo ou toute la bande',
+    title: 'Tes potes disent oui en un lien',
+    detail: 'Chacun voit qui vient et combien ça coûte',
     photo: `https://images.unsplash.com/photo-1647282518004-f37573ae12d4?auto=format&fit=crop&w=800&q=90&fm=jpg`,
   },
 ] as const
 
-type HowIconId = 'parcours' | 'sejours' | 'activites' | 'planner'
+type HowIconId = 'pops' | 'sejours' | 'activites' | 'planner'
 
 const HOW_IT_WORKS: {
   id: HowIconId
@@ -119,56 +120,34 @@ const HOW_IT_WORKS: {
   photo: string
 }[] = [
   {
-    id: 'parcours',
-    title: 'Parcours',
-    detail: 'Balades et week-ends choisis, étape par étape.',
+    id: 'pops',
+    title: 'Pops',
+    detail: 'Des balades et des week-ends prêts à suivre, lieux vérifiés.',
     photo: `https://images.unsplash.com/photo-1527631746610-bca00a040d60?auto=format&fit=crop&w=640&q=80&fm=jpg`,
   },
   {
     id: 'sejours',
     title: 'Séjours',
-    detail: 'Vol + hôtel au bon prix, prêts à réserver.',
+    detail: 'Vol + hôtel au vrai prix, depuis ta ville.',
     photo: `https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=640&q=80&fm=jpg`,
   },
   {
     id: 'activites',
     title: 'Activités',
-    detail: 'Que faire sur place, dès que ta ville est claire.',
+    detail: 'Visites et billets à réserver sur place.',
     photo: `https://images.unsplash.com/photo-1555881400-74d7acaacd8b?auto=format&fit=crop&w=640&q=80&fm=jpg`,
   },
   {
     id: 'planner',
     title: 'Planner',
-    detail: 'Ton voyage en un lieu — solo ou à plusieurs.',
+    detail: 'Invite tes potes, décidez ensemble, réservez.',
     photo: `https://images.unsplash.com/photo-1488646953014-85cb44e25828?auto=format&fit=crop&w=640&q=80&fm=jpg`,
   },
 ]
 
 function HowIcon({ id, color }: { id: HowIconId; color: string }) {
-  if (id === 'parcours') {
-    return (
-      <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-        <Path
-          d="M4 19c2.5-1 4-3.2 4-6s-1.5-5-4-6"
-          stroke={color}
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
-        <Path
-          d="M20 19c-2.5-1-4-3.2-4-6s1.5-5 4-6"
-          stroke={color}
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
-        <Path
-          d="M8 13h8"
-          stroke={color}
-          strokeWidth={1.8}
-          strokeLinecap="round"
-        />
-        <Circle cx="12" cy="13" r="2.2" stroke={color} strokeWidth={1.8} />
-      </Svg>
-    )
+  if (id === 'pops') {
+    return <PopIcon size={20} color={color} />
   }
   if (id === 'sejours') {
     return (
@@ -468,15 +447,15 @@ export function OnboardingFlowScreen({ onDone }: Props) {
                     style={styles.heroGrad}
                   >
                     <View style={styles.heroBadge}>
-                      <Text style={styles.heroBadgeText}>Week-ends</Text>
+                      <Text style={styles.heroBadgeText}>Explorer</Text>
                     </View>
-                    <Text style={styles.heroEyebrow}>FLIGHTWATCHER</Text>
+                    <Text style={styles.heroEyebrow}>WAYPOP</Text>
                     <Text style={styles.heroTitle}>
-                      Pars mieux,{'\n'}sans y passer des heures.
+                      Ce week-end,{'\n'}tu es ailleurs.
                     </Text>
                     <Text style={styles.heroLead}>
-                      Des idées depuis chez toi, au bon prix — prêtes à
-                      partager.
+                      Des week-ends au vrai prix depuis ta ville, déjà
+                      organisés. Tu n’as plus qu’à dire oui.
                     </Text>
                   </LinearGradient>
                 </ImageBackground>
@@ -522,10 +501,9 @@ export function OnboardingFlowScreen({ onDone }: Props) {
           <>
             <View style={styles.stepBody}>
               <View style={styles.howHeader}>
-                <Text style={styles.howEyebrow}>MODE D’EMPLOI</Text>
                 <Text style={styles.howTitle}>Comment ça marche</Text>
                 <Text style={styles.howLead}>
-                  Quatre outils, un même but : partir sans te perdre.
+                  De l’idée à la réservation, au même endroit.
                 </Text>
               </View>
 
@@ -545,7 +523,7 @@ export function OnboardingFlowScreen({ onDone }: Props) {
                         <Text style={styles.howCardIndex}>0{i + 1}</Text>
                       </View>
                       <Text style={styles.howCardTitle}>{f.title}</Text>
-                      <Text style={styles.howCardDetail} numberOfLines={2}>
+                      <Text style={styles.howCardDetail} numberOfLines={3}>
                         {f.detail}
                       </Text>
                     </View>
