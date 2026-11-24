@@ -72,6 +72,7 @@ export type RootStackParamList = {
     fromParcours?: boolean
   }
   Security: undefined
+  Notifications: undefined
   Bookings: undefined
   HotelCompose: {
     draftToken: string

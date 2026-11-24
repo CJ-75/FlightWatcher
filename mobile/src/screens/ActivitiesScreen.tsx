@@ -56,7 +56,7 @@ import {
   canonicalViatorProductUrl,
   cityDisplayNameFr,
   cityImageUrl,
-  filterActivitySwitcherWorkspaces,
+  pickActivitySwitcherWorkspace,
   isActivityTripDatesActive,
   phaseFromPlannedTripStatus,
   parseAirportCodes,
@@ -725,10 +725,10 @@ export function ActivitiesScreen() {
           peekTravelWorkspacesCache() ||
           (Array.isArray(diskWs) ? diskWs : null) ||
           []
-        const earlyTop = filterActivitySwitcherWorkspaces([
+        const earlyTop = pickActivitySwitcherWorkspace([
           ...earlyRemote,
           ...local,
-        ])[0]
+        ])
         if (earlyTop) {
           const earlyHero = activeTripFromWorkspace(earlyTop)
           if (earlyHero.slug) lockCity(earlyHero.slug)
@@ -764,12 +764,11 @@ export function ActivitiesScreen() {
         remote = await loadRemote()
         if (cancelled) return
 
-        const candidates = filterActivitySwitcherWorkspaces([
+        const top = pickActivitySwitcherWorkspace([
           ...remote,
           ...earlyRemote,
           ...local,
         ])
-        const top = candidates[0]
         if (top) {
           let hero = activeTripFromWorkspace(top)
           if (hero.slug) lockCity(hero.slug)

@@ -43,7 +43,7 @@ import {
   activityDestinationLabelFr,
   activityMatchesCategories,
   activityMatchesSearchQuery,
-  filterActivitySwitcherWorkspaces,
+  pickActivitySwitcherWorkspace,
   hasTripItemOwner,
   isActivityTripDatesActive,
   parseAirportCodes,
@@ -694,7 +694,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
             /* keep cache */
           }
           if (cancelled) return
-          const top = filterActivitySwitcherWorkspaces(remote)[0]
+          const top = pickActivitySwitcherWorkspace(remote)
           if (top) {
             const arrival = parseAirportCodes(top.dest_iata)[0] || ''
             const cityLabel =

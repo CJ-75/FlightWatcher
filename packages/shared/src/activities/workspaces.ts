@@ -7,9 +7,17 @@
  * 2. reserved (booked) first
  * 3. last opened (updated_at DESC)
  * 4. soonest out_date
+ *
+ * Auto-select (hero): same rules, but only among Planner hub « À venir »
+ * (phase ≠ planning / past) — never default to « En cours ».
  */
 import { isActivityTripDatesActive } from './step'
 import type { TravelWorkspace, TravelWorkspacePhase } from '../types'
+
+/** Same as Planner hub filter « À venir » (not En cours / past). */
+function isHubUpcomingPhase(phase: TravelWorkspacePhase): boolean {
+  return phase !== 'planning' && phase !== 'past'
+}
 
 /** Map planned_trips.status → hub phase (legacy list fallbacks). */
 export function phaseFromPlannedTripStatus(
@@ -181,6 +189,8 @@ export function compareActivitySwitcherWorkspaces(
 /**
  * Slim list for ActivityPlannerPicker + Activités hero.
  * No past / expired; booked first, then last opened, then next out_date.
+ * Includes hub « En cours » (planning) for manual switch — auto-pick uses
+ * {@link pickActivitySwitcherWorkspace} (À venir only).
  */
 export function filterActivitySwitcherWorkspaces(
   rows: TravelWorkspace[],
@@ -219,4 +229,16 @@ export function filterActivitySwitcherWorkspaces(
   })
 
   return eligible.sort(compareActivitySwitcherWorkspaces)
+}
+
+/**
+ * Default séjour for Activités hero: same ranking as the switcher,
+ * restricted to Planner hub « À venir » (never « En cours » / planning).
+ */
+export function pickActivitySwitcherWorkspace(
+  rows: TravelWorkspace[],
+  now = new Date(),
+): TravelWorkspace | null {
+  const ranked = filterActivitySwitcherWorkspaces(rows, now)
+  return ranked.find((w) => isHubUpcomingPhase(w.phase)) ?? null
 }

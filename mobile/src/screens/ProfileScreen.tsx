@@ -7,7 +7,6 @@ import {
   Pressable,
   Image,
   Linking,
-  Switch,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import {
@@ -21,7 +20,7 @@ import { useAuth } from '../context/AuthContext'
 import { useOnboardingGate } from '../context/OnboardingGateContext'
 import { DEV_INVITE_TOKEN } from '../dev/guestPreview'
 import { apiBase, getApi, getWebOrigin } from '../lib/client'
-import { registerPushToken } from '../lib/pushRegistration'
+import { loadPushPrefs } from '../lib/pushPrefsCache'
 import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
@@ -85,45 +84,11 @@ export function ProfileScreen() {
   const [loginLoading, setLoginLoading] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
   const [avatarFailed, setAvatarFailed] = useState(false)
-  const [notifGroup, setNotifGroup] = useState(true)
-  const [notifPops, setNotifPops] = useState(true)
-  const [notifBusy, setNotifBusy] = useState(false)
 
   useEffect(() => {
     if (!viewUser || isGuest) return
-    void getApi()
-      .getPushPrefs()
-      .then((r) => {
-        setNotifGroup(r.notif_group !== false)
-        setNotifPops(r.notif_pops !== false)
-      })
-      .catch(() => {})
+    void loadPushPrefs(() => getApi().getPushPrefs()).catch(() => {})
   }, [viewUser, isGuest])
-
-  const toggleNotif = async (
-    key: 'notif_group' | 'notif_pops',
-    value: boolean,
-  ) => {
-    if (notifBusy) return
-    setNotifBusy(true)
-    if (key === 'notif_group') setNotifGroup(value)
-    else setNotifPops(value)
-    try {
-      const reg = await registerPushToken({
-        notif_group: key === 'notif_group' ? value : notifGroup,
-        notif_pops: key === 'notif_pops' ? value : notifPops,
-      })
-      if (!reg.ok && reg.reason === 'denied') {
-        await Linking.openSettings()
-      }
-      await getApi().patchPushPrefs({ [key]: value })
-    } catch {
-      if (key === 'notif_group') setNotifGroup(!value)
-      else setNotifPops(!value)
-    } finally {
-      setNotifBusy(false)
-    }
-  }
 
   const onSignOut = async () => {
     if (signingOut) return
@@ -137,6 +102,12 @@ export function ProfileScreen() {
 
   const openSecurity = () => {
     navigation.dispatch(CommonActions.navigate({ name: 'Security' }))
+  }
+
+  const openNotifications = () => {
+    void loadPushPrefs(() => getApi().getPushPrefs()).catch(() => {})
+    const root = navigation.getParent() ?? navigation
+    root.dispatch(CommonActions.navigate({ name: 'Notifications' }))
   }
 
   const openBookings = () => {
@@ -313,43 +284,16 @@ export function ProfileScreen() {
 
         {!isGuest ? (
           <>
-            <Text style={styles.sectionLabel}>Notifications</Text>
-            <View style={[styles.menuGroup, shadow.soft]}>
-              <View style={styles.notifRow}>
-                <View style={styles.menuCopy}>
-                  <Text style={styles.menuTitle}>Groupe</Text>
-                  <Text style={styles.menuSubtitle}>
-                    Partants, invites, dates fixées
-                  </Text>
-                </View>
-                <Switch
-                  value={notifGroup}
-                  onValueChange={(v) => void toggleNotif('notif_group', v)}
-                  disabled={notifBusy}
-                  trackColor={{ false: '#E8E0D8', true: '#FFB899' }}
-                  thumbColor={notifGroup ? colors.primary : '#f4f3f4'}
-                />
-              </View>
-              <View style={styles.menuDivider} />
-              <View style={styles.notifRow}>
-                <View style={styles.menuCopy}>
-                  <Text style={styles.menuTitle}>Pops et jour J</Text>
-                  <Text style={styles.menuSubtitle}>
-                    Garder → Planner, veille de départ
-                  </Text>
-                </View>
-                <Switch
-                  value={notifPops}
-                  onValueChange={(v) => void toggleNotif('notif_pops', v)}
-                  disabled={notifBusy}
-                  trackColor={{ false: '#E8E0D8', true: '#FFB899' }}
-                  thumbColor={notifPops ? colors.primary : '#f4f3f4'}
-                />
-              </View>
-            </View>
-
             <Text style={styles.sectionLabel}>Compte</Text>
             <View style={[styles.menuGroup, shadow.soft]}>
+              <MenuRow
+                glyph="🔔"
+                tone="warm"
+                title="Notifications"
+                subtitle="Groupe et Pops"
+                onPress={openNotifications}
+              />
+              <View style={styles.menuDivider} />
               <MenuRow
                 glyph="🔒"
                 tone="warm"
@@ -587,13 +531,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-  },
-  notifRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,

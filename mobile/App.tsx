@@ -51,6 +51,7 @@ import { ActivitiesScreen } from './src/screens/ActivitiesScreen'
 import { PlannerScreen } from './src/screens/PlannerScreen'
 import { FavoritesScreen } from './src/screens/FavoritesScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
+import { NotificationsScreen } from './src/screens/NotificationsScreen'
 import { colors, fonts } from './src/theme'
 import { FloatingTabBar, FLOATING_TAB_HEIGHT, FLOATING_TAB_MARGIN } from './src/components/FloatingTabBar'
 import { stackHeaderOptions } from './src/navigation/stackHeader'
@@ -429,6 +430,11 @@ function RootNavigator() {
             name="Security"
             component={SecurityScreen}
             options={stackHeaderOptions('Sécurité')}
+          />
+          <Stack.Screen
+            name="Notifications"
+            component={NotificationsScreen}
+            options={stackHeaderOptions('Notifications')}
           />
           <Stack.Screen
             name="Bookings"

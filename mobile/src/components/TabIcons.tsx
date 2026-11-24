@@ -1,8 +1,8 @@
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
+import Svg, { Circle, Path } from 'react-native-svg'
 import { colors } from '../theme'
 import { HeartIcon } from './HeartIcon'
-import { PopIcon } from './icons/PopIcon'
 
 type IconProps = {
   size?: number
@@ -42,9 +42,35 @@ export function SearchTabIcon({ size = 22, color = colors.faint }: IconProps) {
   )
 }
 
-/** Explorer / Pops — éclat (PopIcon). */
+/** Explorer — boussole losange (double anneau). */
 export function DealsTabIcon({ size = 22, color = colors.faint }: IconProps) {
-  return <PopIcon size={size} color={color} />
+  const stroke = Math.max(1.6, size * 0.09)
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle
+          cx="12"
+          cy="12"
+          r="9"
+          stroke={color}
+          strokeWidth={stroke}
+        />
+        <Circle
+          cx="12"
+          cy="12"
+          r="6.2"
+          stroke={color}
+          strokeWidth={stroke * 0.75}
+        />
+        <Path
+          d="M15.6 8.4 13.7 13.7 8.4 15.6 10.3 10.3Z"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinejoin="round"
+        />
+      </Svg>
+    </View>
+  )
 }
 
 /** Ticket / billet — Activités (distinct du calendrier Planner). */
