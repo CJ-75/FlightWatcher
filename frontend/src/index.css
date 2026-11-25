@@ -217,7 +217,7 @@
    */
   .app-tabbar {
     @apply grid items-stretch gap-1 p-1.5 rounded-[26px]
-      bg-white/95 border border-line shadow-lift backdrop-blur-md;
+      bg-white border border-line shadow-lift;
     grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
   }
 
@@ -306,17 +306,15 @@
       bottom: 0;
       z-index: 40;
       padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
-      background: linear-gradient(
-        180deg,
-        transparent 0%,
-        rgba(255, 249, 245, 0.9) 45%
-      );
+      /* Opaque — ne laisse plus voir le SiteFooter / contenu derrière */
+      background: #fff9f5;
       pointer-events: none;
     }
 
     .app-tabnav .app-tabbar {
       pointer-events: auto;
       max-width: none;
+      background: #ffffff;
       box-shadow: 0 12px 32px rgba(26, 18, 14, 0.12);
     }
 

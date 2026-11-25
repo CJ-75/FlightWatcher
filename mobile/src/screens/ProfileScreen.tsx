@@ -119,6 +119,11 @@ export function ProfileScreen() {
     navigation.navigate('Favorites' as never)
   }
 
+  const openSavedSearches = () => {
+    const root = navigation.getParent() ?? navigation
+    root.dispatch(CommonActions.navigate({ name: 'SavedSearches' }))
+  }
+
   const openInviteOnboardingPreview = () => {
     // Ouverture manuelle uniquement — pas de pending invite au boot.
     const root = navigation.getParent() ?? navigation
@@ -271,6 +276,14 @@ export function ProfileScreen() {
             title="Favoris"
             subtitle="Séjours, vols et activités likés"
             onPress={openFavorites}
+          />
+          <View style={styles.menuDivider} />
+          <MenuRow
+            glyph="⌕"
+            tone="warm"
+            title="Recherches sauvegardées"
+            subtitle="Relancer une recherche de vols"
+            onPress={openSavedSearches}
           />
           <View style={styles.menuDivider} />
           <MenuRow

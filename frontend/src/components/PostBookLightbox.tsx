@@ -58,13 +58,11 @@ export function PostBookLightbox({
               id="post-book-title"
               className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight"
             >
-              {automaticConfirmation
-                ? 'Suivi de réservation activé'
-                : t('upsell.flightBooked', { city })}
+              {t('upsell.flightBooked', { city })}
             </h2>
             <p className="text-sm text-muted leading-relaxed">
               {automaticConfirmation
-                ? `Travelpayouts confirmera automatiquement le paiement pour ${city}.`
+                ? `Travelpayouts peut confirmer le paiement pour ${city}. ${t('upsell.lightboxHint')}`
                 : t('upsell.lightboxHint')}
             </p>
           </div>
@@ -75,11 +73,7 @@ export function PostBookLightbox({
             onClick={onOpenTrip}
             className="w-full app-btn-primary min-h-[48px] sm:min-h-[52px] text-sm sm:text-base rounded-2xl disabled:opacity-60"
           >
-            {busy
-              ? '…'
-              : automaticConfirmation
-                ? t('deals.cta.continuePlanner')
-                : t('upsell.yesHotel')}
+            {busy ? '…' : t('upsell.yesHotel')}
           </button>
           <button
             type="button"
@@ -87,7 +81,7 @@ export function PostBookLightbox({
             onClick={onClose}
             className="w-full text-center text-sm font-semibold text-ink-soft hover:text-ink min-h-[40px]"
           >
-            {automaticConfirmation ? 'Fermer' : t('upsell.notYet')}
+            {t('upsell.notYet')}
           </button>
         </div>
       </motion.div>

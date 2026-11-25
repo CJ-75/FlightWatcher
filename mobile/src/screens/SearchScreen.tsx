@@ -121,25 +121,52 @@ export function SearchScreen() {
       setPassengers(Math.min(6, p.adults))
       consumed = true
     }
-    const out = p.outbound?.slice(0, 10)
-    const ret = p.inbound?.slice(0, 10)
-    if (out && ret && ret > out) {
+    if (p.budget && p.budget > 0) {
+      setBudget(Math.round(p.budget))
+      consumed = true
+    }
+    const fullDepart = Array.isArray(p.datesDepart) ? p.datesDepart : null
+    const fullRetour = Array.isArray(p.datesRetour) ? p.datesRetour : null
+    if (fullDepart?.length && fullRetour?.length) {
       setPreset('flexible')
       setFlexibleDates({
-        dates_depart: [{ date: out, heure_min: '06:00', heure_max: '23:59' }],
-        dates_retour: [{ date: ret, heure_min: '06:00', heure_max: '23:59' }],
+        dates_depart: fullDepart.map((d) => ({
+          date: String(d.date).slice(0, 10),
+          heure_min: d.heure_min || '06:00',
+          heure_max: d.heure_max || '23:59',
+        })),
+        dates_retour: fullRetour.map((d) => ({
+          date: String(d.date).slice(0, 10),
+          heure_min: d.heure_min || '06:00',
+          heure_max: d.heure_max || '23:59',
+        })),
       })
       if (p.autoSearch) autoSearchPendingRef.current = true
       consumed = true
+    } else {
+      const out = p.outbound?.slice(0, 10)
+      const ret = p.inbound?.slice(0, 10)
+      if (out && ret && ret > out) {
+        setPreset('flexible')
+        setFlexibleDates({
+          dates_depart: [{ date: out, heure_min: '06:00', heure_max: '23:59' }],
+          dates_retour: [{ date: ret, heure_min: '06:00', heure_max: '23:59' }],
+        })
+        if (p.autoSearch) autoSearchPendingRef.current = true
+        consumed = true
+      }
     }
     if (consumed) {
       ;(navigation as { setParams: (p: MainTabParamList['Search']) => void }).setParams({
         origin: undefined,
         adults: undefined,
+        budget: undefined,
         destination: undefined,
         city: undefined,
         outbound: undefined,
         inbound: undefined,
+        datesDepart: undefined,
+        datesRetour: undefined,
         autoSearch: undefined,
       })
     }

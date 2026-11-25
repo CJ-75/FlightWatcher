@@ -21,10 +21,13 @@ export type MainTabParamList = {
     | {
         origin?: string
         adults?: number
+        budget?: number
         destination?: string
         city?: string
         outbound?: string
         inbound?: string
+        datesDepart?: DateAvecHoraire[]
+        datesRetour?: DateAvecHoraire[]
         autoSearch?: boolean
       }
     | undefined
@@ -73,6 +76,7 @@ export type RootStackParamList = {
   }
   Security: undefined
   Notifications: undefined
+  SavedSearches: undefined
   Bookings: undefined
   HotelCompose: {
     draftToken: string

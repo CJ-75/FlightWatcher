@@ -52,6 +52,7 @@ import { PlannerScreen } from './src/screens/PlannerScreen'
 import { FavoritesScreen } from './src/screens/FavoritesScreen'
 import { ProfileScreen } from './src/screens/ProfileScreen'
 import { NotificationsScreen } from './src/screens/NotificationsScreen'
+import { SavedSearchesScreen } from './src/screens/SavedSearchesScreen'
 import { colors, fonts } from './src/theme'
 import { FloatingTabBar, FLOATING_TAB_HEIGHT, FLOATING_TAB_MARGIN } from './src/components/FloatingTabBar'
 import { stackHeaderOptions } from './src/navigation/stackHeader'
@@ -435,6 +436,11 @@ function RootNavigator() {
             name="Notifications"
             component={NotificationsScreen}
             options={stackHeaderOptions('Notifications')}
+          />
+          <Stack.Screen
+            name="SavedSearches"
+            component={SavedSearchesScreen}
+            options={stackHeaderOptions('Recherches')}
           />
           <Stack.Screen
             name="Bookings"

@@ -7,6 +7,7 @@ export type SearchPrefill = {
   destination?: string
   city?: string
   adults?: number
+  budget?: number
   /** YYYY-MM-DD — aller (single-day shortcut) */
   outbound?: string
   /** YYYY-MM-DD — retour (single-day shortcut) */

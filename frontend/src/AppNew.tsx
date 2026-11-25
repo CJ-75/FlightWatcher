@@ -43,6 +43,7 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Security = lazy(() => import('./pages/Security'))
 const Legal = lazy(() => import('./pages/Legal'))
 const MyBookings = lazy(() => import('./pages/MyBookings'))
+const SavedSearches = lazy(() => import('./pages/SavedSearches'))
 const MyTrip = lazy(() => import('./pages/MyTrip'))
 const HotelPay = lazy(() => import('./pages/HotelPay'))
 const ItinerariesPage = lazy(() => import('./pages/ItinerariesPage'))
@@ -136,6 +137,7 @@ function App() {
         <Route path="/mentions-legales" element={<Legal />} />
         <Route path="/planner/invite/:token" element={<PlannerInvite />} />
         <Route path="/bookings" element={<MyBookings />} />
+        <Route path="/recherches" element={<SavedSearches />} />
         <Route path="/trip/:token" element={<MyTrip />} />
         <Route path="/parcours" element={<ItinerariesPage />} />
         <Route

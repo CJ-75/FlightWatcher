@@ -1219,7 +1219,7 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
           const title = filtered
             ? ACTIVITY_EMPTY_FILTERS_TITLE_FR
             : citySoon
-              ? ACTIVITY_EMPTY_UNKNOWN_CITY_TITLE_FR(cityLabel)
+              ? ACTIVITY_EMPTY_UNKNOWN_CITY_TITLE_FR
               : ACTIVITY_EMPTY_TITLE_FR(cityLabel)
           const body = filtered
             ? ACTIVITY_EMPTY_FILTERS_BODY_FR

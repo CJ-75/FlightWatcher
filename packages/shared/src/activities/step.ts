@@ -82,12 +82,9 @@ export const ACTIVITY_EMPTY_RETRY_FR = 'Réessayer'
 export const ACTIVITY_EMPTY_SEE_SEJOURS_FR = 'Voir les séjours'
 
 /** Ville absente du catalogue Viator — pas une erreur, teaser soft. */
-export const ACTIVITY_EMPTY_UNKNOWN_CITY_TITLE_FR = (city?: string | null) => {
-  const c = String(city || '').trim()
-  return c ? `${c}, bientôt sur Waypop` : 'Bientôt sur Waypop'
-}
+export const ACTIVITY_EMPTY_UNKNOWN_CITY_TITLE_FR = 'Bientôt sur Waypop'
 export const ACTIVITY_EMPTY_UNKNOWN_CITY_BODY_FR =
-  'Pas encore d’activités pour cette destination — on ouvre le catalogue ville par ville. En attendant, explore Paris, Rome ou Barcelone.'
+  'Pas encore d’activités pour cette destination. On ouvre le catalogue ville par ville, reviens un peu plus tard.'
 
 /** Label long (fiche détail) — jamais « Au planner ». */
 export const ACTIVITY_ADD_TO_PLANNER_FR = 'Ajouter'

@@ -35,14 +35,12 @@ import { ScreenBackground } from '../components/ScreenBackground'
 import { colors, fonts, shadow, spacing, type } from '../theme'
 import {
   clearPendingHotelUpsell,
-  createMyTripComposeFromTrip,
   preparePartnerBook,
   readPendingHotelUpsell,
   trackPartnerEvent,
 } from '../lib/partnerBook'
 import { PostBookLightbox } from '../components/PostBookLightbox'
 import { openInAppBrowser } from '../lib/openInApp'
-import { rememberTrip } from '../lib/tripRecovery'
 import { peekInspireLive, subscribeInspireLive } from '../lib/inspireLive'
 import { prepareCreatedPlannerTrip } from '../lib/plannedTripCache'
 import { invalidateTravelWorkspacesCache } from '../lib/workspacesCache'
@@ -253,7 +251,6 @@ export function ResultsScreen({ route, navigation }: Props) {
     const trip = postBookTrip
     if (!trip) return
     const pending = await readPendingHotelUpsell()
-    setHotelUpsellBusy(true)
     trackPartnerEvent({
       trip,
       partner_id: pending?.partnerId || 'unknown',
@@ -262,27 +259,9 @@ export function ResultsScreen({ route, navigation }: Props) {
       action_type: 'hotel_upsell_yes',
       search_event_id: pending?.searchEventId || searchInfo?.searchEventId || null,
     })
-    try {
-      const draft = await createMyTripComposeFromTrip({
-        trip,
-        passengers: pending?.passengers || passengers,
-        markFlightBooked: true,
-      })
-      await rememberTrip({
-        draft_token: draft.draft_token,
-        city: cityDisplayNameFr(
-          trip.destination_code,
-          trip.aller?.destinationFull?.split(',')[0]?.trim(),
-        ),
-      })
-      await clearPendingHotelUpsell()
-      setPostBookTrip(null)
-      navigation.navigate('HotelCompose', { draftToken: draft.draft_token })
-    } catch {
-      Alert.alert('Erreur', 'Impossible de créer le voyage. Réessaie.')
-    } finally {
-      setHotelUpsellBusy(false)
-    }
+    await clearPendingHotelUpsell()
+    setPostBookTrip(null)
+    await handleAddToPlanner(trip)
   }
 
   const handlePostBookDismiss = async () => {
@@ -544,14 +523,16 @@ export function ResultsScreen({ route, navigation }: Props) {
                 >
                   <Text style={styles.actionText}>Sauvegarder</Text>
                 </Pressable>
-                <Pressable
-                  onPress={() => setShowRoulette(true)}
-                  style={[styles.actionBtn, styles.actionPrimary]}
-                >
-                  <Text style={[styles.actionText, styles.actionTextPrimary]}>
-                    Roulette
-                  </Text>
-                </Pressable>
+                {visibleTrips.length > 1 ? (
+                  <Pressable
+                    onPress={() => setShowRoulette(true)}
+                    style={[styles.actionBtn, styles.actionPrimary]}
+                  >
+                    <Text style={[styles.actionText, styles.actionTextPrimary]}>
+                      Roulette
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -623,7 +604,7 @@ export function ResultsScreen({ route, navigation }: Props) {
       />
 
       <RouletteModal
-        visible={showRoulette}
+        visible={showRoulette && visibleTrips.length > 1}
         trips={visibleTrips}
         budget={searchInfo?.budget || 9999}
         onClose={() => setShowRoulette(false)}

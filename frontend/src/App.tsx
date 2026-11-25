@@ -714,6 +714,12 @@ function Dashboard() {
           : null
       if (pax) setSearchPassengers(pax)
 
+      const budget =
+        prefill.budget && prefill.budget > 0
+          ? Math.round(Number(prefill.budget))
+          : null
+      if (budget) setBudgetMax(budget)
+
       const fromArrays =
         Array.isArray(prefill.dates_depart) &&
         Array.isArray(prefill.dates_retour) &&
@@ -751,7 +757,7 @@ function Dashboard() {
             airport: origin || aeroportDepart,
             dates_depart,
             dates_retour,
-            budget: budgetMax,
+            budget: budget || budgetMax,
             passengers: pax || searchPassengers,
             autoSearch: Boolean(prefill.autoSearch && origin),
           })
@@ -1211,8 +1217,16 @@ function Dashboard() {
     return true
   }, [])
 
+  const revealPostBookTrip = useCallback((trip: EnrichedTripResponse, token: string | null) => {
+    setPostBookDraftToken(token)
+    setPostBookTrip(trip)
+    leftForFlightBook.current = false
+    pendingPostBookTrip.current = null
+    pendingPostBookToken.current = null
+  }, [])
+
   const handlePartnerBook = (trip: EnrichedTripResponse) => {
-    // Like mobile Results: open partner first. Draft is for hotel upsell / status only.
+    // Open partner first; ask « réservé ? / créer planner » when the window closes or focus returns.
     const popup = window.open('about:blank', '_blank')
     if (!popup) {
       setToastMessage('Autorise les fenêtres pour ouvrir la réservation')
@@ -1234,7 +1248,7 @@ function Dashboard() {
         language,
         searchEventId: currentSearchEventId,
         targetWindow: popup,
-        awaitingReturnPrompt: !isTravelpayouts,
+        awaitingReturnPrompt: true,
       })
     } catch {
       try {
@@ -1247,15 +1261,31 @@ function Dashboard() {
       return
     }
 
-    // Travelpayouts: lightbox immédiat. Compagnie: au retour d’onglet.
-    if (isTravelpayouts) {
-      setPostBookTrip(trip)
-    } else {
-      pendingPostBookTrip.current = trip
-      pendingPostBookToken.current = null
-      leftForFlightBook.current = true
-      leftForFlightBookAt.current = Date.now()
+    pendingPostBookTrip.current = trip
+    pendingPostBookToken.current = null
+    leftForFlightBook.current = true
+    leftForFlightBookAt.current = Date.now()
+
+    const tryRevealFromPopup = () => {
+      if (!leftForFlightBook.current && !pendingPostBookTrip.current) return
+      const wait = 1200 - (Date.now() - leftForFlightBookAt.current)
+      if (wait > 0) {
+        window.setTimeout(tryRevealFromPopup, wait)
+        return
+      }
+      const pendingTrip = pendingPostBookTrip.current
+      if (pendingTrip) {
+        revealPostBookTrip(pendingTrip, pendingPostBookToken.current)
+        return
+      }
+      revealPostBookFromPending()
     }
+
+    const pollClosed = window.setInterval(() => {
+      if (!popup.closed) return
+      window.clearInterval(pollClosed)
+      tryRevealFromPopup()
+    }, 400)
 
     setHotelUpsellBusy(true)
     void createMyTripComposeFromTrip({
@@ -1270,15 +1300,11 @@ function Dashboard() {
         if (pending) {
           writePendingHotelUpsell({ ...pending, draftToken: draft.draft_token })
         }
-        if (!isTravelpayouts) {
-          pendingPostBookToken.current = draft.draft_token
-          markFlightReturnAsk({
-            draftToken: draft.draft_token,
-            promptOnReturn: true,
-          })
-        } else {
-          clearFlightReturnAsk(draft.draft_token)
-        }
+        pendingPostBookToken.current = draft.draft_token
+        markFlightReturnAsk({
+          draftToken: draft.draft_token,
+          promptOnReturn: true,
+        })
         try {
           await getApiClient().updateMyTripFlightBookingStatus(draft.draft_token, {
             status: isTravelpayouts ? 'pending_partner' : 'redirected',
@@ -1289,7 +1315,7 @@ function Dashboard() {
         }
       })
       .catch(() => {
-        /* Partner already open; hotel upsell can still work without draft token */
+        /* Partner already open; planner prompt still works without draft */
       })
       .finally(() => setHotelUpsellBusy(false))
   }
@@ -1300,13 +1326,9 @@ function Dashboard() {
       if (revealPostBookFromPending()) return
       if (!leftForFlightBook.current) return
       if (Date.now() - leftForFlightBookAt.current < 1200) return
-      leftForFlightBook.current = false
       const trip = pendingPostBookTrip.current
       if (!trip) return
-      setPostBookDraftToken(pendingPostBookToken.current)
-      setPostBookTrip(trip)
-      pendingPostBookTrip.current = null
-      pendingPostBookToken.current = null
+      revealPostBookTrip(trip, pendingPostBookToken.current)
     }
     document.addEventListener('visibilitychange', onReturn)
     window.addEventListener('focus', onReturn)
@@ -1314,7 +1336,7 @@ function Dashboard() {
       document.removeEventListener('visibilitychange', onReturn)
       window.removeEventListener('focus', onReturn)
     }
-  }, [revealPostBookFromPending])
+  }, [revealPostBookFromPending, revealPostBookTrip])
 
   // Remount / refresh: restore PostBook if airline return was pending.
   useEffect(() => {
@@ -1365,7 +1387,7 @@ function Dashboard() {
     const trip = postBookTrip
     if (!trip) return
     const pending = readPendingHotelUpsell()
-    setHotelUpsellBusy(true)
+    const draftToken = postBookDraftToken
     trackPartnerAnalytics({
       trip,
       partner_id: pending?.partnerId || 'unknown',
@@ -1375,39 +1397,22 @@ function Dashboard() {
       countdown_seconds: 0,
       search_event_id: pending?.searchEventId || currentSearchEventId || null,
     })
-    try {
-      const draftToken =
-        postBookDraftToken ||
-        (
-          await createMyTripComposeFromTrip({
-            trip,
-            passengers: pending?.passengers || searchPassengersForBook,
-            language,
-            markFlightBooked: false,
-          })
-        ).draft_token
-      if (pending?.partnerId !== 'aviasales') {
-        await getApiClient().updateMyTripFlightBookingStatus(draftToken, {
+    clearPendingHotelUpsell()
+    clearFlightReturnAsk(draftToken)
+    setPostBookTrip(null)
+    setPostBookDraftToken(null)
+
+    if (draftToken) {
+      void getApiClient()
+        .updateMyTripFlightBookingStatus(draftToken, {
           status: 'user_confirmed',
           provider: pending?.partnerId || 'airline',
         })
-      }
-      clearPendingHotelUpsell()
-      clearFlightReturnAsk(draftToken)
-      setPostBookTrip(null)
-      setPostBookDraftToken(null)
-      // Never auto-promote to Planner after book — only « Ajouter au planner ».
-      const path = `/trip/${draftToken}?compose=1`
-      const opened = window.open(path, '_blank', 'noopener,noreferrer')
-      if (!opened) {
-        navigate(path)
-      }
-    } catch {
-      setToastMessage('Impossible de créer le voyage. Réessaie.')
-      setToastType('error')
-    } finally {
-      setHotelUpsellBusy(false)
+        .catch(() => undefined)
     }
+
+    // « Oui, créer le planner » — même parcours que Ajouter au planner.
+    await handleAddToPlanner(trip)
   }
 
   const handlePostBookDismiss = () => {
@@ -1711,18 +1716,20 @@ function Dashboard() {
                       >
                         {t('results.saveSearch')}
                       </motion.button>
-                      <motion.button
-                        onClick={() => {
-                          const budgetToUse = lastSearchInfo?.budget || budgetMax || 100
-                          setRouletteBudget(budgetToUse)
-                          setShowRoulette(true)
-                        }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="bg-accent-500 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-accent-600 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none active:scale-95"
-                      >
-                        {t('results.roulette')}
-                      </motion.button>
+                      {visibleSimpleResults.length > 1 ? (
+                        <motion.button
+                          onClick={() => {
+                            const budgetToUse = lastSearchInfo?.budget || budgetMax || 100
+                            setRouletteBudget(budgetToUse)
+                            setShowRoulette(true)
+                          }}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="bg-accent-500 text-white rounded-full px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 font-bold hover:bg-accent-600 transition-all min-h-[48px] sm:min-h-[44px] text-sm sm:text-base flex-1 sm:flex-none active:scale-95"
+                        >
+                          {t('results.roulette')}
+                        </motion.button>
+                      ) : null}
                     </div>
                   ) : (
                     <motion.button
@@ -1819,7 +1826,7 @@ function Dashboard() {
       </div>
 
       {/* Roulette Mode Modal */}
-      {showRoulette && (
+      {showRoulette && visibleSimpleResults.length > 1 ? (
         <RouletteMode
           trips={visibleSimpleResults}
           budget={rouletteBudget}
@@ -1835,7 +1842,7 @@ function Dashboard() {
           }}
           checkIsFavorite={checkIsFavorite}
         />
-      )}
+      ) : null}
 
       {postBookTrip ? (
         <PostBookLightbox

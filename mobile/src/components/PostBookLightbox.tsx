@@ -9,7 +9,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { cityDisplayNameFr, type EnrichedTripResponse } from '@waypop/shared'
-import { BedIcon, PlaneIcon } from './UiIcons'
+import { PlaneIcon } from './UiIcons'
 import { colors, fonts, radius, spacing } from '../theme'
 
 type Props = {
@@ -52,15 +52,11 @@ export function PostBookLightbox({
             <PlaneIcon size={16} />
             <Text style={styles.brand}>WayPop</Text>
           </View>
-          <Text style={styles.title}>
-            {automaticConfirmation
-              ? 'Suivi de réservation activé'
-              : `Vol pour ${city} réservé ?`}
-          </Text>
+          <Text style={styles.title}>{`Vol pour ${city} réservé ?`}</Text>
           <Text style={styles.hint}>
             {automaticConfirmation
-              ? `Travelpayouts confirmera automatiquement le paiement pour ${city}.`
-              : 'Super. Trouve maintenant un hôtel pour compléter ton séjour.'}
+              ? `Travelpayouts peut confirmer le paiement pour ${city}. Si oui, crée ton séjour dans le planner pour organiser la suite.`
+              : 'Si oui, crée ton séjour dans le planner pour organiser la suite.'}
           </Text>
 
           <Pressable
@@ -72,8 +68,8 @@ export function PostBookLightbox({
               <ActivityIndicator color={colors.white} />
             ) : (
               <View style={styles.ctaInner}>
-                <BedIcon size={16} color={colors.white} />
-                <Text style={styles.ctaText}>Continuer dans le planner</Text>
+                <PlaneIcon size={16} color={colors.white} />
+                <Text style={styles.ctaText}>Oui, créer le planner</Text>
               </View>
             )}
           </Pressable>
@@ -84,9 +80,7 @@ export function PostBookLightbox({
             onPress={onClose}
             hitSlop={8}
           >
-            <Text style={styles.dismissText}>
-              {automaticConfirmation ? 'Fermer' : 'Pas encore'}
-            </Text>
+            <Text style={styles.dismissText}>Pas encore</Text>
           </Pressable>
         </Pressable>
       </Pressable>
