@@ -22,6 +22,8 @@ import {
   ACTIVITY_EMPTY_KICKER_FR,
   ACTIVITY_EMPTY_SEE_SEJOURS_FR,
   ACTIVITY_EMPTY_TITLE_FR,
+  ACTIVITY_EMPTY_UNKNOWN_CITY_BODY_FR,
+  ACTIVITY_EMPTY_UNKNOWN_CITY_TITLE_FR,
   ACTIVITY_PAGE_KICKER_FR,
   ACTIVITY_PAGE_SUBTITLE_FR,
   ACTIVITY_PAGE_TITLE_FR,
@@ -318,6 +320,8 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
   const shellReady = useShellReady()
   const [loading, setLoading] = useState(() => !peekActivitiesCatalog(citySlug, 2)?.ok)
   const [error, setError] = useState<string | null>(null)
+  /** Ville hors catalogue Viator — teaser, pas une erreur. */
+  const [citySoon, setCitySoon] = useState(false)
   const [items, setItems] = useState<Record<string, unknown>[]>(() => {
     const cached = peekActivitiesCatalog(citySlug, 2)
     return cached?.ok && Array.isArray(cached.items) ? cached.items : []
@@ -432,22 +436,28 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
       }
       setHeader(null)
       setFallbackHint(null)
+      setCitySoon(false)
       try {
         // Fetch public — ne bloque pas sur JWT / Supabase config.
         const res = await fetchActivitiesCatalog(slug, adults)
         if (gen !== loadGen.current) return
         if (!res.ok) {
+          if (res.error === 'unknown_city') {
+            setItems([])
+            setCitySoon(true)
+            setError(null)
+            return
+          }
           const hint =
-            res.error === 'unknown_city'
-              ? 'Ville non reconnue. Essaie Paris, Rome, Barcelone…'
-              : res.error === 'viator_disabled'
+            res.error === 'viator_disabled'
+              ? 'Catalogue activités indisponible'
+              : String(res.error || '').includes('401') ||
+                  String(res.error || '').includes('UNAUTHORIZED')
                 ? 'Catalogue activités indisponible'
-                : String(res.error || '').includes('401') ||
-                    String(res.error || '').includes('UNAUTHORIZED')
-                  ? 'Catalogue activités indisponible'
-                  : res.error || 'Chargement impossible'
+                : res.error || 'Chargement impossible'
           throw new Error(hint)
         }
+        setCitySoon(false)
         setItems(Array.isArray(res.items) ? res.items : [])
         setError(null)
       } catch (e) {
@@ -1203,9 +1213,19 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
         </div>
       ) : !error && !loading ? (
         (() => {
-          const filtered = items.length > 0
+          const filtered = !citySoon && items.length > 0
           const cityLabel = activityDestinationLabelFr(citySlug)
           const imageUrl = cityImageUrl(cityLabel || citySlug || null)
+          const title = filtered
+            ? ACTIVITY_EMPTY_FILTERS_TITLE_FR
+            : citySoon
+              ? ACTIVITY_EMPTY_UNKNOWN_CITY_TITLE_FR(cityLabel)
+              : ACTIVITY_EMPTY_TITLE_FR(cityLabel)
+          const body = filtered
+            ? ACTIVITY_EMPTY_FILTERS_BODY_FR
+            : citySoon
+              ? ACTIVITY_EMPTY_UNKNOWN_CITY_BODY_FR
+              : ACTIVITY_EMPTY_BODY_FR
           return (
             <motion.div
               initial={{ opacity: 0, y: 12 }}
@@ -1227,14 +1247,10 @@ export function ActivitiesTab(props?: { citySlug?: string; active?: boolean }) {
                   {ACTIVITY_EMPTY_KICKER_FR}
                 </p>
                 <h3 className="text-lg sm:text-xl font-extrabold text-white tracking-tight leading-tight">
-                  {filtered
-                    ? ACTIVITY_EMPTY_FILTERS_TITLE_FR
-                    : ACTIVITY_EMPTY_TITLE_FR(cityLabel)}
+                  {title}
                 </h3>
                 <p className="mt-1.5 text-sm text-white/80 leading-snug max-w-md">
-                  {filtered
-                    ? ACTIVITY_EMPTY_FILTERS_BODY_FR
-                    : ACTIVITY_EMPTY_BODY_FR}
+                  {body}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {filtered ? (

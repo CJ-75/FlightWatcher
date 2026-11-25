@@ -258,18 +258,11 @@ export function HoursSheet({
   const togglePreset = (id: string) => {
     if (!day) return
     setCustomOpen(false)
-    setSelectedIds((prev) => {
-      const has = prev.includes(id)
-      let next: string[]
-      if (has) {
-        next = prev.filter((x) => x !== id)
-        if (!next.length) next = [id]
-      } else {
-        next = [...prev, id]
-      }
-      pushCommit(slotsFromPresetIds(day, next))
-      return next
-    })
+    const has = selectedIds.includes(id)
+    let next = has ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]
+    if (!next.length) next = [id]
+    setSelectedIds(next)
+    pushCommit(slotsFromPresetIds(day, next))
   }
 
   const openJournee = () => {

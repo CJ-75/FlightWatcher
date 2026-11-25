@@ -44,6 +44,8 @@ import {
   ACTIVITY_EMPTY_RETRY_FR,
   ACTIVITY_EMPTY_SEE_SEJOURS_FR,
   ACTIVITY_EMPTY_TITLE_FR,
+  ACTIVITY_EMPTY_UNKNOWN_CITY_BODY_FR,
+  ACTIVITY_EMPTY_UNKNOWN_CITY_TITLE_FR,
   ACTIVITY_PAGE_KICKER_FR,
   ACTIVITY_PAGE_SUBTITLE_FR,
   ACTIVITY_PAGE_TITLE_FR,
@@ -369,6 +371,8 @@ export function ActivitiesScreen() {
   }, [loading, refreshing])
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** Ville hors catalogue Viator — empty teaser, pas une erreur. */
+  const [citySoon, setCitySoon] = useState(false)
   const [items, setItems] = useState<Record<string, unknown>[]>(
     () => warmBoot?.items || [],
   )
@@ -982,6 +986,7 @@ export function ActivitiesScreen() {
         setLoading(true)
       }
       setError(null)
+      setCitySoon(false)
       setHeader(null)
       setFallbackHint(null)
       try {
@@ -990,15 +995,20 @@ export function ActivitiesScreen() {
         )
         if (gen !== loadGen.current) return
         if (!res.ok) {
+          if (res.error === 'unknown_city') {
+            setItems([])
+            setCitySoon(true)
+            setError(null)
+            return
+          }
           const msg =
-            res.error === 'unknown_city'
-              ? 'Ville non reconnue'
-              : String(res.error || '').includes('401') ||
-                  String(res.error || '').includes('UNAUTHORIZED')
-                ? 'Catalogue activités indisponible'
-                : res.error || 'Chargement impossible'
+            String(res.error || '').includes('401') ||
+            String(res.error || '').includes('UNAUTHORIZED')
+              ? 'Catalogue activités indisponible'
+              : res.error || 'Chargement impossible'
           throw new Error(msg)
         }
+        setCitySoon(false)
         setItems(Array.isArray(res.items) ? res.items : [])
       } catch (e) {
         if (gen !== loadGen.current) return
@@ -1514,8 +1524,18 @@ export function ActivitiesScreen() {
             </View>
           ) : (
             (() => {
-              const filtered = items.length > 0
+              const filtered = !citySoon && items.length > 0
               const cityLabel = activityDestinationLabelFr(citySlug)
+              const title = filtered
+                ? ACTIVITY_EMPTY_FILTERS_TITLE_FR
+                : citySoon
+                  ? ACTIVITY_EMPTY_UNKNOWN_CITY_TITLE_FR(cityLabel)
+                  : ACTIVITY_EMPTY_TITLE_FR(cityLabel)
+              const body = filtered
+                ? ACTIVITY_EMPTY_FILTERS_BODY_FR
+                : citySoon
+                  ? ACTIVITY_EMPTY_UNKNOWN_CITY_BODY_FR
+                  : ACTIVITY_EMPTY_BODY_FR
               return (
                 <ImageBackground
                   source={{
@@ -1536,16 +1556,8 @@ export function ActivitiesScreen() {
                     <Text style={styles.emptyKicker}>
                       {ACTIVITY_EMPTY_KICKER_FR}
                     </Text>
-                    <Text style={styles.emptyHeroTitle}>
-                      {filtered
-                        ? ACTIVITY_EMPTY_FILTERS_TITLE_FR
-                        : ACTIVITY_EMPTY_TITLE_FR(cityLabel)}
-                    </Text>
-                    <Text style={styles.emptyHeroBody}>
-                      {filtered
-                        ? ACTIVITY_EMPTY_FILTERS_BODY_FR
-                        : ACTIVITY_EMPTY_BODY_FR}
-                    </Text>
+                    <Text style={styles.emptyHeroTitle}>{title}</Text>
+                    <Text style={styles.emptyHeroBody}>{body}</Text>
                     <View style={styles.emptyActions}>
                       {filtered ? (
                         <Pressable
