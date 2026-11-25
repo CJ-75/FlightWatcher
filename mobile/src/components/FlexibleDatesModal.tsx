@@ -59,7 +59,7 @@ export function FlexibleDatesModal({ visible, value, onChange, onClose }: Props)
   const insets = useSafeAreaInsets()
   const [tab, setTab] = useState<'depart' | 'retour'>('depart')
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()))
-  const [hoursTarget, setHoursTarget] = useState<DateAvecHoraire | null>(null)
+  const [hoursDay, setHoursDay] = useState<string | null>(null)
   const today = useMemo(() => todayStr(), [])
 
   useEffect(() => {
@@ -104,33 +104,42 @@ export function FlexibleDatesModal({ visible, value, onChange, onClose }: Props)
     else onChange({ ...value, dates_retour: [] })
   }
 
-  const updateHours = (updated: DateAvecHoraire) => {
-    if (tab === 'depart') {
-      onChange({
-        ...value,
-        dates_depart: value.dates_depart.map((d) => (d.date === updated.date ? updated : d)),
-      })
-    } else {
-      onChange({
-        ...value,
-        dates_retour: value.dates_retour.map((d) => (d.date === updated.date ? updated : d)),
-      })
-    }
+  const commitHoursForDay = (day: string, slots: DateAvecHoraire[]) => {
+    const list = tab === 'depart' ? value.dates_depart : value.dates_retour
+    const others = list.filter((d) => d.date !== day)
+    const next = [...others, ...slots].sort((a, b) => {
+      const byDate = a.date.localeCompare(b.date)
+      if (byDate) return byDate
+      return String(a.heure_min || '').localeCompare(String(b.heure_min || ''))
+    })
+    if (tab === 'depart') onChange({ ...value, dates_depart: next })
+    else onChange({ ...value, dates_retour: next })
   }
 
-  const removeDate = (type: 'depart' | 'retour', dateStr: string) => {
-    if (type === 'depart') {
-      onChange({
-        ...value,
-        dates_depart: value.dates_depart.filter((d) => d.date !== dateStr),
-      })
-    } else {
-      onChange({
-        ...value,
-        dates_retour: value.dates_retour.filter((d) => d.date !== dateStr),
-      })
-    }
+  const removeSlot = (
+    type: 'depart' | 'retour',
+    slot: DateAvecHoraire,
+  ) => {
+    const list = type === 'depart' ? value.dates_depart : value.dates_retour
+    const next = list.filter(
+      (d) =>
+        !(
+          d.date === slot.date &&
+          d.heure_min === slot.heure_min &&
+          d.heure_max === slot.heure_max
+        ),
+    )
+    if (type === 'depart') onChange({ ...value, dates_depart: next })
+    else onChange({ ...value, dates_retour: next })
   }
+
+  const hoursSlots = useMemo(
+    () =>
+      hoursDay
+        ? selected.filter((d) => d.date === hoursDay)
+        : [],
+    [hoursDay, selected],
+  )
 
   const canConfirm = value.dates_depart.length > 0 && value.dates_retour.length > 0
   const primaryCta =
@@ -303,16 +312,19 @@ export function FlexibleDatesModal({ visible, value, onChange, onClose }: Props)
               </Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {selected.map((d) => (
-                <View key={d.date} style={styles.selectedChip}>
-                  <Pressable onPress={() => setHoursTarget(d)} style={{ flex: 1 }}>
+              {selected.map((d, i) => (
+                <View
+                  key={`${d.date}-${d.heure_min}-${d.heure_max}-${i}`}
+                  style={styles.selectedChip}
+                >
+                  <Pressable onPress={() => setHoursDay(d.date)} style={{ flex: 1 }}>
                     <Text style={styles.selectedDate}>{formatDateFr(d.date)}</Text>
                     <Text style={styles.selectedHours}>
                       {d.heure_min}–{d.heure_max}
                     </Text>
                   </Pressable>
                   <Pressable
-                    onPress={() => removeDate(tab, d.date)}
+                    onPress={() => removeSlot(tab, d)}
                     hitSlop={8}
                     style={styles.removeBtn}
                   >
@@ -321,7 +333,9 @@ export function FlexibleDatesModal({ visible, value, onChange, onClose }: Props)
                 </View>
               ))}
             </ScrollView>
-            <Text style={styles.hoursHint}>Touche une date pour régler les horaires</Text>
+            <Text style={styles.hoursHint}>
+              Touche une date pour choisir un ou plusieurs créneaux
+            </Text>
           </View>
         ) : (
           <Text style={styles.hint}>
@@ -341,13 +355,13 @@ export function FlexibleDatesModal({ visible, value, onChange, onClose }: Props)
       </View>
 
       <HoursSheet
-        visible={!!hoursTarget}
-        date={hoursTarget}
+        visible={!!hoursDay}
+        day={hoursDay}
+        slots={hoursSlots}
         type={tab}
-        onClose={() => setHoursTarget(null)}
-        onUpdate={(updated) => {
-          updateHours(updated)
-          setHoursTarget(updated)
+        onClose={() => setHoursDay(null)}
+        onCommit={(slots) => {
+          if (hoursDay) commitHoursForDay(hoursDay, slots)
         }}
       />
     </Modal>

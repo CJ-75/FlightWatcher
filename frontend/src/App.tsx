@@ -69,10 +69,12 @@ import {
   clearFlightReturnAsk,
   clearPendingHotelUpsell,
   createMyTripComposeFromTrip,
+  markFlightReturnAsk,
   openPartnerBookSync,
   readPendingHotelUpsell,
   resolveTripPriceSource,
   trackPartnerAnalytics,
+  writePendingHotelUpsell,
 } from './utils/partnerBook'
 import { shouldShowFlightReturnAsk } from '@waypop/shared'
 import {
@@ -1210,6 +1212,7 @@ function Dashboard() {
   }, [])
 
   const handlePartnerBook = (trip: EnrichedTripResponse) => {
+    // Like mobile Results: open partner first. Draft is for hotel upsell / status only.
     const popup = window.open('about:blank', '_blank')
     if (!popup) {
       setToastMessage('Autorise les fenêtres pour ouvrir la réservation')
@@ -1217,6 +1220,43 @@ function Dashboard() {
       return
     }
     popup.opener = null
+    const preview = resolveTripPriceSource(
+      trip,
+      searchPassengersForBook,
+      language,
+    )
+    const isTravelpayouts = preview.partnerId === 'aviasales'
+    let source: ReturnType<typeof openPartnerBookSync>
+    try {
+      source = openPartnerBookSync({
+        trip,
+        passengers: searchPassengersForBook,
+        language,
+        searchEventId: currentSearchEventId,
+        targetWindow: popup,
+        awaitingReturnPrompt: !isTravelpayouts,
+      })
+    } catch {
+      try {
+        popup.close()
+      } catch {
+        /* ignore */
+      }
+      setToastMessage('Impossible d’ouvrir la réservation. Réessaie.')
+      setToastType('error')
+      return
+    }
+
+    // Travelpayouts: lightbox immédiat. Compagnie: au retour d’onglet.
+    if (isTravelpayouts) {
+      setPostBookTrip(trip)
+    } else {
+      pendingPostBookTrip.current = trip
+      pendingPostBookToken.current = null
+      leftForFlightBook.current = true
+      leftForFlightBookAt.current = Date.now()
+    }
+
     setHotelUpsellBusy(true)
     void createMyTripComposeFromTrip({
       trip,
@@ -1225,42 +1265,31 @@ function Dashboard() {
       markFlightBooked: false,
     })
       .then(async (draft) => {
-        const preview = resolveTripPriceSource(
-          trip,
-          searchPassengersForBook,
-          language,
-        )
-        const isTravelpayouts = preview.partnerId === 'aviasales'
-        const source = openPartnerBookSync({
-          trip,
-          passengers: searchPassengersForBook,
-          language,
-          searchEventId: currentSearchEventId,
-          draftId: draft.id,
-          draftToken: draft.draft_token,
-          targetWindow: popup,
-          awaitingReturnPrompt: !isTravelpayouts,
-        })
-        await getApiClient().updateMyTripFlightBookingStatus(draft.draft_token, {
-          status: isTravelpayouts ? 'pending_partner' : 'redirected',
-          provider: source.partnerId,
-        })
         setPostBookDraftToken(draft.draft_token)
-        // Travelpayouts: lightbox immédiat (suivi auto). Compagnie: au retour d’onglet.
-        if (isTravelpayouts) {
-          clearFlightReturnAsk(draft.draft_token)
-          setPostBookTrip(trip)
-        } else {
-          pendingPostBookTrip.current = trip
+        const pending = readPendingHotelUpsell()
+        if (pending) {
+          writePendingHotelUpsell({ ...pending, draftToken: draft.draft_token })
+        }
+        if (!isTravelpayouts) {
           pendingPostBookToken.current = draft.draft_token
-          leftForFlightBook.current = true
-          leftForFlightBookAt.current = Date.now()
+          markFlightReturnAsk({
+            draftToken: draft.draft_token,
+            promptOnReturn: true,
+          })
+        } else {
+          clearFlightReturnAsk(draft.draft_token)
+        }
+        try {
+          await getApiClient().updateMyTripFlightBookingStatus(draft.draft_token, {
+            status: isTravelpayouts ? 'pending_partner' : 'redirected',
+            provider: source.partnerId,
+          })
+        } catch {
+          /* non-blocking — partner tab already open */
         }
       })
       .catch(() => {
-        popup.close()
-        setToastMessage('Impossible d’ouvrir la réservation. Réessaie.')
-        setToastType('error')
+        /* Partner already open; hotel upsell can still work without draft token */
       })
       .finally(() => setHotelUpsellBusy(false))
   }

@@ -18,13 +18,19 @@ import { colors, fonts } from '../theme'
 
 type Props = {
   visible: boolean
-  date: DateAvecHoraire | null
+  /** Calendar day YYYY-MM-DD */
+  day: string | null
   type: 'depart' | 'retour'
+  /** Existing slots for this day (same date, possibly several hour ranges). */
+  slots: DateAvecHoraire[]
   onClose: () => void
-  onUpdate: (date: DateAvecHoraire) => void
+  /** Full replacement of slots for this day. */
+  onCommit: (slots: DateAvecHoraire[]) => void
 }
 
-const FIXED_PRESETS = TIME_PRESETS.filter((p) => p.id !== 'journee')
+type FixedPreset = (typeof TIME_PRESETS)[number] & { id: string }
+
+const FIXED_PRESETS = TIME_PRESETS.filter((p) => p.id !== 'journee') as FixedPreset[]
 const JOURNEE = TIME_PRESETS.find((p) => p.id === 'journee')!
 
 const TIME_OPTIONS = (() => {
@@ -44,8 +50,32 @@ function matchesPreset(min: string, max: string, pMin: string, pMax: string) {
   return min === pMin && max === pMax
 }
 
-function isFixedSlot(min: string, max: string) {
-  return FIXED_PRESETS.some((p) => matchesPreset(min, max, p.min, p.max))
+function presetIdForSlot(slot: DateAvecHoraire): string | null {
+  const min = slot.heure_min || '06:00'
+  const max = slot.heure_max || '12:00'
+  const hit = FIXED_PRESETS.find((p) => matchesPreset(min, max, p.min, p.max))
+  return hit?.id ?? null
+}
+
+function slotsFromPresetIds(day: string, ids: string[]): DateAvecHoraire[] {
+  const order = FIXED_PRESETS.map((p) => p.id)
+  return order
+    .filter((id) => ids.includes(id))
+    .map((id) => {
+      const p = FIXED_PRESETS.find((x) => x.id === id)!
+      return { date: day, heure_min: p.min, heure_max: p.max }
+    })
+}
+
+function summarizeSlots(slots: DateAvecHoraire[]): string {
+  if (!slots.length) return 'Aucun créneau'
+  return slots
+    .map((s) => {
+      const id = presetIdForSlot(s)
+      const p = id ? FIXED_PRESETS.find((x) => x.id === id) : null
+      return p ? p.label : `${s.heure_min}–${s.heure_max}`
+    })
+    .join(' · ')
 }
 
 function TimeColumn({
@@ -128,11 +158,19 @@ function TimeColumn({
   )
 }
 
-export function HoursSheet({ visible, date, type, onClose, onUpdate }: Props) {
+export function HoursSheet({
+  visible,
+  day,
+  type,
+  slots,
+  onClose,
+  onCommit,
+}: Props) {
   const insets = useSafeAreaInsets()
   const [customOpen, setCustomOpen] = useState(false)
   const [draftMin, setDraftMin] = useState('06:00')
   const [draftMax, setDraftMax] = useState('12:00')
+  const [selectedIds, setSelectedIds] = useState<string[]>(['matin'])
   const dragY = useRef(new Animated.Value(0)).current
 
   const dismiss = useCallback(() => {
@@ -174,20 +212,99 @@ export function HoursSheet({ visible, date, type, onClose, onUpdate }: Props) {
   )
 
   useEffect(() => {
-    if (!visible || !date) {
+    if (!visible || !day) {
       setCustomOpen(false)
       dragY.setValue(0)
       return
     }
-    const min = date.heure_min || '06:00'
-    const max = date.heure_max || '12:00'
+    const ids = slots
+      .map(presetIdForSlot)
+      .filter((id): id is string => Boolean(id))
+    const unmatched = slots.filter((s) => !presetIdForSlot(s))
+    if (unmatched.length && !ids.length) {
+      const first = unmatched[0]!
+      setDraftMin(first.heure_min || JOURNEE.min)
+      setDraftMax(first.heure_max || JOURNEE.max)
+      setSelectedIds([])
+      setCustomOpen(true)
+    } else {
+      setSelectedIds(ids.length ? [...new Set(ids)] : ['matin'])
+      setCustomOpen(false)
+      const first = slots[0]
+      setDraftMin(first?.heure_min || '06:00')
+      setDraftMax(first?.heure_max || '12:00')
+    }
+    dragY.setValue(0)
+    // Seed only when the sheet opens for a day — not on every live commit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, day, dragY])
+
+  const liveSlots = useMemo((): DateAvecHoraire[] => {
+    if (!day) return []
+    if (customOpen) {
+      return [{ date: day, heure_min: draftMin, heure_max: draftMax }]
+    }
+    return slotsFromPresetIds(day, selectedIds)
+  }, [customOpen, day, draftMax, draftMin, selectedIds])
+
+  const pushCommit = useCallback(
+    (next: DateAvecHoraire[]) => {
+      if (!next.length) return
+      onCommit(next)
+    },
+    [onCommit],
+  )
+
+  const togglePreset = (id: string) => {
+    if (!day) return
+    setCustomOpen(false)
+    setSelectedIds((prev) => {
+      const has = prev.includes(id)
+      let next: string[]
+      if (has) {
+        next = prev.filter((x) => x !== id)
+        if (!next.length) next = [id]
+      } else {
+        next = [...prev, id]
+      }
+      pushCommit(slotsFromPresetIds(day, next))
+      return next
+    })
+  }
+
+  const openJournee = () => {
+    if (!day) return
+    if (customOpen) {
+      setCustomOpen(false)
+      const nextIds = selectedIds.length ? selectedIds : ['matin']
+      setSelectedIds(nextIds)
+      pushCommit(slotsFromPresetIds(day, nextIds))
+      return
+    }
+    setCustomOpen(true)
+    setSelectedIds([])
+    const min = JOURNEE.min
+    const max = JOURNEE.max
     setDraftMin(min)
     setDraftMax(max)
-    setCustomOpen(!isFixedSlot(min, max))
-    dragY.setValue(0)
-  }, [visible, date?.date, dragY])
+    pushCommit([{ date: day, heure_min: min, heure_max: max }])
+  }
 
-  const journeeActive = customOpen || (date ? !isFixedSlot(draftMin, draftMax) : false)
+  const setMin = (value: string) => {
+    if (!day) return
+    const max = value > draftMax ? value : draftMax
+    setDraftMin(value)
+    setDraftMax(max)
+    pushCommit([{ date: day, heure_min: value, heure_max: max }])
+  }
+
+  const setMax = (value: string) => {
+    if (!day) return
+    const min = value < draftMin ? value : draftMin
+    setDraftMin(min)
+    setDraftMax(value)
+    pushCommit([{ date: day, heure_min: min, heure_max: value }])
+  }
 
   const minOptions = useMemo(
     () => TIME_OPTIONS.filter((t) => t <= draftMax),
@@ -198,47 +315,13 @@ export function HoursSheet({ visible, date, type, onClose, onUpdate }: Props) {
     [draftMin],
   )
 
-  if (!date) return null
-
-  const commit = (min: string, max: string) => {
-    setDraftMin(min)
-    setDraftMax(max)
-    onUpdate({ ...date, heure_min: min, heure_max: max })
-  }
-
-  const applyFixed = (min: string, max: string) => {
-    commit(min, max)
-    setCustomOpen(false)
-    dismiss()
-  }
-
-  const openJournee = () => {
-    if (customOpen) {
-      // Collapse custom pickers
-      setCustomOpen(false)
-      return
-    }
-    if (isFixedSlot(draftMin, draftMax)) {
-      commit(JOURNEE.min, JOURNEE.max)
-    }
-    setCustomOpen(true)
-  }
-
-  const setMin = (value: string) => {
-    const max = value > draftMax ? value : draftMax
-    commit(value, max)
-  }
-
-  const setMax = (value: string) => {
-    const min = value < draftMin ? value : draftMin
-    commit(min, value)
-  }
-
   const backdropOpacity = dragY.interpolate({
     inputRange: [0, 320],
     outputRange: [1, 0.15],
     extrapolate: 'clamp',
   })
+
+  if (!day) return null
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={dismiss}>
@@ -262,29 +345,32 @@ export function HoursSheet({ visible, date, type, onClose, onUpdate }: Props) {
                 <Text style={styles.title}>
                   Horaires · {type === 'depart' ? 'Aller' : 'Retour'}
                 </Text>
-                <Text style={styles.sub}>{formatDateFr(date.date)}</Text>
+                <Text style={styles.sub}>{formatDateFr(day)}</Text>
               </View>
               <Pressable onPress={dismiss} hitSlop={10}>
                 <Text style={styles.close}>Fermer</Text>
               </Pressable>
             </View>
 
-            <Text style={styles.current}>
-              {draftMin} → {draftMax}
+            <Text style={styles.hint}>
+              Touche plusieurs créneaux — un vol cherché par plage.
             </Text>
+            <Text style={styles.current}>{summarizeSlots(liveSlots)}</Text>
           </View>
 
           <View style={styles.grid}>
             {FIXED_PRESETS.map((p) => {
-              const active = matchesPreset(draftMin, draftMax, p.min, p.max)
+              const active = !customOpen && selectedIds.includes(p.id)
               return (
                 <Pressable
                   key={p.id}
-                  onPress={() => applyFixed(p.min, p.max)}
+                  onPress={() => togglePreset(p.id)}
                   style={[styles.chip, active && styles.chipActive]}
                 >
                   <Text style={styles.emoji}>{p.emoji}</Text>
-                  <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{p.label}</Text>
+                  <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
+                    {p.label}
+                  </Text>
                   <Text style={[styles.chipRange, active && styles.chipLabelActive]}>
                     {p.min}–{p.max}
                   </Text>
@@ -294,13 +380,13 @@ export function HoursSheet({ visible, date, type, onClose, onUpdate }: Props) {
 
             <Pressable
               onPress={openJournee}
-              style={[styles.chip, styles.chipWide, journeeActive && styles.chipActive]}
+              style={[styles.chip, styles.chipWide, customOpen && styles.chipActive]}
             >
               <Text style={styles.emoji}>{JOURNEE.emoji}</Text>
-              <Text style={[styles.chipLabel, journeeActive && styles.chipLabelActive]}>
+              <Text style={[styles.chipLabel, customOpen && styles.chipLabelActive]}>
                 {JOURNEE.label}
               </Text>
-              <Text style={[styles.chipRange, journeeActive && styles.chipLabelActive]}>
+              <Text style={[styles.chipRange, customOpen && styles.chipLabelActive]}>
                 {customOpen ? 'Masquer les horaires' : 'Choisir les horaires'}
               </Text>
             </Pressable>
@@ -327,7 +413,15 @@ export function HoursSheet({ visible, date, type, onClose, onUpdate }: Props) {
                 <Text style={styles.doneBtnText}>Valider</Text>
               </TouchableOpacity>
             </View>
-          ) : null}
+          ) : (
+            <TouchableOpacity activeOpacity={0.85} onPress={dismiss} style={styles.doneBtn}>
+              <Text style={styles.doneBtnText}>
+                {liveSlots.length > 1
+                  ? `Valider · ${liveSlots.length} créneaux`
+                  : 'Valider'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </Animated.View>
       </View>
     </Modal>
@@ -389,12 +483,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
     includeFontPadding: false,
   },
+  hint: {
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.muted,
+    marginTop: 8,
+    includeFontPadding: false,
+  },
   current: {
     fontFamily: fonts.semibold,
     fontSize: 15,
     lineHeight: 22,
     color: colors.primary,
-    marginVertical: 12,
+    marginVertical: 10,
     includeFontPadding: false,
   },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },

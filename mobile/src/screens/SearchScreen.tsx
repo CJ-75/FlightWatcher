@@ -92,7 +92,7 @@ export function SearchScreen() {
   const [showHoursList, setShowHoursList] = useState(false)
   const [hoursEdit, setHoursEdit] = useState<{
     type: 'depart' | 'retour'
-    index: number
+    day: string
   } | null>(null)
   const defaultedOriginRef = useRef(false)
   /** Prefill from Affiner — expand to city once catalog is ready. */
@@ -250,24 +250,30 @@ export function SearchScreen() {
     [airports, airport],
   )
 
-  const updatePresetDate = (type: 'depart' | 'retour', index: number, updated: DateAvecHoraire) => {
+  const commitPresetHours = (
+    type: 'depart' | 'retour',
+    day: string,
+    slots: DateAvecHoraire[],
+  ) => {
     setPresetDates((prev) => {
-      const next = { ...prev }
-      if (type === 'depart') {
-        next.dates_depart = prev.dates_depart.map((d, i) => (i === index ? updated : d))
-      } else {
-        next.dates_retour = prev.dates_retour.map((d, i) => (i === index ? updated : d))
-      }
-      return next
+      const key = type === 'depart' ? 'dates_depart' : 'dates_retour'
+      const others = prev[key].filter((d) => d.date !== day)
+      const merged = [...others, ...slots].sort((a, b) => {
+        const byDate = a.date.localeCompare(b.date)
+        if (byDate) return byDate
+        return String(a.heure_min || '').localeCompare(String(b.heure_min || ''))
+      })
+      return { ...prev, [key]: merged }
     })
   }
 
-  const hoursDate =
+  const hoursSlots =
     hoursEdit == null
-      ? null
-      : hoursEdit.type === 'depart'
-        ? presetDates.dates_depart[hoursEdit.index]
-        : presetDates.dates_retour[hoursEdit.index]
+      ? []
+      : (hoursEdit.type === 'depart'
+          ? presetDates.dates_depart
+          : presetDates.dates_retour
+        ).filter((d) => d.date === hoursEdit.day)
 
   const datesSummary = useMemo(() => {
     if (preset === 'flexible') {
@@ -617,10 +623,13 @@ export function SearchScreen() {
           <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
             {presetDates.dates_depart.map((d, i) => (
               <Pressable
-                key={`d-${d.date}`}
+                key={`d-${d.date}-${d.heure_min}-${d.heure_max}-${i}`}
                 onPress={() => {
                   setShowHoursList(false)
-                  setTimeout(() => setHoursEdit({ type: 'depart', index: i }), 250)
+                  setTimeout(
+                    () => setHoursEdit({ type: 'depart', day: d.date }),
+                    250,
+                  )
                 }}
                 style={styles.hoursRow}
               >
@@ -633,10 +642,13 @@ export function SearchScreen() {
             ))}
             {presetDates.dates_retour.map((d, i) => (
               <Pressable
-                key={`r-${d.date}`}
+                key={`r-${d.date}-${d.heure_min}-${d.heure_max}-${i}`}
                 onPress={() => {
                   setShowHoursList(false)
-                  setTimeout(() => setHoursEdit({ type: 'retour', index: i }), 250)
+                  setTimeout(
+                    () => setHoursEdit({ type: 'retour', day: d.date }),
+                    250,
+                  )
                 }}
                 style={styles.hoursRow}
               >
@@ -653,11 +665,12 @@ export function SearchScreen() {
 
       <HoursSheet
         visible={!!hoursEdit}
-        date={hoursDate || null}
+        day={hoursEdit?.day || null}
+        slots={hoursSlots}
         type={hoursEdit?.type || 'depart'}
         onClose={() => setHoursEdit(null)}
-        onUpdate={(updated) => {
-          if (hoursEdit) updatePresetDate(hoursEdit.type, hoursEdit.index, updated)
+        onCommit={(slots) => {
+          if (hoursEdit) commitPresetHours(hoursEdit.type, hoursEdit.day, slots)
         }}
       />
 

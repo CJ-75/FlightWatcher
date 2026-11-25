@@ -207,16 +207,25 @@ export function DateWithTimes({ preset, onDatesChange, formatDateFr }: DateWithT
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preset]);
 
-  const updateDate = (type: 'depart' | 'retour', index: number, updated: DateAvecHoraire) => {
-    const newDates = { ...dates };
-    if (type === 'depart') {
-      newDates.dates_depart[index] = updated;
-    } else {
-      newDates.dates_retour[index] = updated;
-    }
-    setDates(newDates);
-    onDatesChange(newDates);
-  };
+  const commitDaySlots = (
+    type: 'depart' | 'retour',
+    day: string,
+    slots: DateAvecHoraire[],
+  ) => {
+    const key = type === 'depart' ? 'dates_depart' : 'dates_retour'
+    const others = dates[key].filter((d) => d.date !== day)
+    const next = [...others, ...slots].sort((a, b) => {
+      const byDate = a.date.localeCompare(b.date)
+      if (byDate) return byDate
+      return String(a.heure_min || '').localeCompare(String(b.heure_min || ''))
+    })
+    const newDates = { ...dates, [key]: next }
+    setDates(newDates)
+    onDatesChange(newDates)
+  }
+
+  const uniqueDays = (list: DateAvecHoraire[]) =>
+    [...new Set(list.map((d) => d.date))]
 
   return (
     <div className="space-y-4">
@@ -226,9 +235,11 @@ export function DateWithTimes({ preset, onDatesChange, formatDateFr }: DateWithT
           ✈️ Départs
         </label>
         <div className="space-y-3">
-          {dates.dates_depart.map((date, index) => (
+          {uniqueDays(dates.dates_depart).map((day) => {
+            const slots = dates.dates_depart.filter((d) => d.date === day)
+            return (
             <motion.div
-              key={`depart-${date.date}`}
+              key={`depart-${day}`}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={springConfig}
@@ -237,18 +248,23 @@ export function DateWithTimes({ preset, onDatesChange, formatDateFr }: DateWithT
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex-1">
                   <div className="text-base sm:text-lg font-black text-primary-900 mb-1">
-                    📅 {formatDateFr(date.date)}
+                    📅 {formatDateFr(day)}
                   </div>
-                  <div className="text-xs text-primary-600">Horaires de départ</div>
+                  <div className="text-xs text-primary-600">
+                    Horaires de départ
+                    {slots.length > 1 ? ` · ${slots.length} créneaux` : ''}
+                  </div>
                 </div>
               </div>
               <TimeRangeSelector
-                date={date}
-                onUpdate={(updated) => updateDate('depart', index, updated)}
+                day={day}
+                slots={slots}
+                onCommit={(next) => commitDaySlots('depart', day, next)}
                 type="depart"
               />
             </motion.div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
@@ -258,9 +274,11 @@ export function DateWithTimes({ preset, onDatesChange, formatDateFr }: DateWithT
           🔙 Retours
         </label>
         <div className="space-y-3">
-          {dates.dates_retour.map((date, index) => (
+          {uniqueDays(dates.dates_retour).map((day) => {
+            const slots = dates.dates_retour.filter((d) => d.date === day)
+            return (
             <motion.div
-              key={`retour-${date.date}`}
+              key={`retour-${day}`}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={springConfig}
@@ -269,18 +287,23 @@ export function DateWithTimes({ preset, onDatesChange, formatDateFr }: DateWithT
               <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex-1">
                   <div className="text-base sm:text-lg font-black text-emerald-900 mb-1">
-                    📅 {formatDateFr(date.date)}
+                    📅 {formatDateFr(day)}
                   </div>
-                  <div className="text-xs text-emerald-600">Horaires de retour</div>
+                  <div className="text-xs text-emerald-600">
+                    Horaires de retour
+                    {slots.length > 1 ? ` · ${slots.length} créneaux` : ''}
+                  </div>
                 </div>
               </div>
               <TimeRangeSelector
-                date={date}
-                onUpdate={(updated) => updateDate('retour', index, updated)}
+                day={day}
+                slots={slots}
+                onCommit={(next) => commitDaySlots('retour', day, next)}
                 type="retour"
               />
             </motion.div>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>

@@ -67,19 +67,24 @@ export function FlexibleDatesSelector({
     }
   };
 
-  const updateDate = (type: 'depart' | 'retour', updatedDate: DateAvecHoraire) => {
-    if (type === 'depart') {
-      const newDates = flexibleDates.dates_depart.map(d => 
-        d.date === updatedDate.date ? updatedDate : d
-      );
-      onFlexibleDatesChange({ ...flexibleDates, dates_depart: newDates });
-    } else {
-      const newDates = flexibleDates.dates_retour.map(d => 
-        d.date === updatedDate.date ? updatedDate : d
-      );
-      onFlexibleDatesChange({ ...flexibleDates, dates_retour: newDates });
-    }
-  };
+  const commitDaySlots = (
+    type: 'depart' | 'retour',
+    day: string,
+    slots: DateAvecHoraire[],
+  ) => {
+    const key = type === 'depart' ? 'dates_depart' : 'dates_retour'
+    const list = flexibleDates[key]
+    const others = list.filter((d) => d.date !== day)
+    const next = [...others, ...slots].sort((a, b) => {
+      const byDate = a.date.localeCompare(b.date)
+      if (byDate) return byDate
+      return String(a.heure_min || '').localeCompare(String(b.heure_min || ''))
+    })
+    onFlexibleDatesChange({ ...flexibleDates, [key]: next })
+  }
+
+  const uniqueDays = (list: DateAvecHoraire[]) =>
+    [...new Set(list.map((d) => d.date))]
 
   const handleAddDate = () => {
     if (tempDate) {
@@ -229,9 +234,11 @@ export function FlexibleDatesSelector({
             ✈️ Dates de départ
           </label>
           <div className="space-y-3">
-            {flexibleDates.dates_depart.map((date) => (
+            {uniqueDays(flexibleDates.dates_depart).map((day) => {
+              const slots = flexibleDates.dates_depart.filter((d) => d.date === day)
+              return (
               <motion.div
-                key={date.date}
+                key={day}
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="p-3 sm:p-4 bg-gradient-to-br from-primary-50 to-primary-100 rounded-xl border-2 border-primary-200 shadow-sm"
@@ -239,12 +246,15 @@ export function FlexibleDatesSelector({
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex-1">
                     <div className="text-base sm:text-lg font-black text-primary-900 mb-1">
-                      📅 {formatDateFr(date.date)}
+                      📅 {formatDateFr(day)}
                     </div>
-                    <div className="text-xs text-primary-600">Horaires de départ</div>
+                    <div className="text-xs text-primary-600">
+                      Horaires de départ
+                      {slots.length > 1 ? ` · ${slots.length} créneaux` : ''}
+                    </div>
                   </div>
                   <motion.button
-                    onClick={() => removeDate('depart', date.date)}
+                    onClick={() => removeDate('depart', day)}
                     whileHover={{ scale: 1.1, rotate: 90 }}
                     whileTap={{ scale: 0.9 }}
                     className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center bg-red-500 text-white rounded-full text-lg sm:text-xl font-bold hover:bg-red-600 shadow-md active:scale-90 min-w-[44px] min-h-[44px]"
@@ -253,12 +263,14 @@ export function FlexibleDatesSelector({
                   </motion.button>
                 </div>
                 <TimeRangeSelector
-                  date={date}
-                  onUpdate={(updated) => updateDate('depart', updated)}
+                  day={day}
+                  slots={slots}
+                  onCommit={(next) => commitDaySlots('depart', day, next)}
                   type="depart"
                 />
               </motion.div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
@@ -270,9 +282,11 @@ export function FlexibleDatesSelector({
             🔙 Dates de retour
           </label>
           <div className="space-y-3">
-            {flexibleDates.dates_retour.map((date) => (
+            {uniqueDays(flexibleDates.dates_retour).map((day) => {
+              const slots = flexibleDates.dates_retour.filter((d) => d.date === day)
+              return (
               <motion.div
-                key={date.date}
+                key={day}
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl border-2 border-emerald-200 shadow-sm"
@@ -280,12 +294,15 @@ export function FlexibleDatesSelector({
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex-1">
                     <div className="text-base sm:text-lg font-black text-emerald-900 mb-1">
-                      📅 {formatDateFr(date.date)}
+                      📅 {formatDateFr(day)}
                     </div>
-                    <div className="text-xs text-emerald-600">Horaires de retour</div>
+                    <div className="text-xs text-emerald-600">
+                      Horaires de retour
+                      {slots.length > 1 ? ` · ${slots.length} créneaux` : ''}
+                    </div>
                   </div>
                   <motion.button
-                    onClick={() => removeDate('retour', date.date)}
+                    onClick={() => removeDate('retour', day)}
                     whileHover={{ scale: 1.1, rotate: 90 }}
                     whileTap={{ scale: 0.9 }}
                     className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center bg-red-500 text-white rounded-full text-lg sm:text-xl font-bold hover:bg-red-600 shadow-md active:scale-90 min-w-[44px] min-h-[44px]"
@@ -294,12 +311,14 @@ export function FlexibleDatesSelector({
                   </motion.button>
                 </div>
                 <TimeRangeSelector
-                  date={date}
-                  onUpdate={(updated) => updateDate('retour', updated)}
+                  day={day}
+                  slots={slots}
+                  onCommit={(next) => commitDaySlots('retour', day, next)}
                   type="retour"
                 />
               </motion.div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

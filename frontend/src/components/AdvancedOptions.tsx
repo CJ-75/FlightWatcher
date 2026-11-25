@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DateAvecHoraire, Destination } from '../types';
-import { TimeRangeSelector } from './TimeRangeSelector';
 import { FlexibleDatesSelector } from './FlexibleDatesSelector';
 
 interface AdvancedOptionsProps {
