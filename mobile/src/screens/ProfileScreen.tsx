@@ -23,6 +23,7 @@ import { apiBase, getApi, getWebOrigin } from '../lib/client'
 import { loadPushPrefs } from '../lib/pushPrefsCache'
 import { GuestAuthLanding } from '../components/GuestAuthLanding'
 import { ScreenBackground } from '../components/ScreenBackground'
+import { SearchTabIcon } from '../components/TabIcons'
 import { colors, fonts, radius, shadow, spacing, type } from '../theme'
 
 type MenuRowProps = {
@@ -30,10 +31,19 @@ type MenuRowProps = {
   subtitle?: string
   tone?: 'default' | 'warm' | 'rose'
   onPress: () => void
-  glyph: string
+  glyph?: string
+  /** Vector icon (tab-style) — preferred over glyph when set. */
+  icon?: React.ReactNode
 }
 
-function MenuRow({ title, subtitle, tone = 'default', onPress, glyph }: MenuRowProps) {
+function MenuRow({
+  title,
+  subtitle,
+  tone = 'default',
+  onPress,
+  glyph,
+  icon,
+}: MenuRowProps) {
   const iconBg =
     tone === 'warm'
       ? colors.primarySoft
@@ -56,7 +66,9 @@ function MenuRow({ title, subtitle, tone = 'default', onPress, glyph }: MenuRowP
       ]}
     >
       <View style={[styles.menuIcon, { backgroundColor: iconBg }]}>
-        <Text style={[styles.menuGlyph, { color: iconColor }]}>{glyph}</Text>
+        {icon ?? (
+          <Text style={[styles.menuGlyph, { color: iconColor }]}>{glyph}</Text>
+        )}
       </View>
       <View style={styles.menuCopy}>
         <Text style={styles.menuTitle}>{title}</Text>
@@ -279,11 +291,11 @@ export function ProfileScreen() {
           />
           <View style={styles.menuDivider} />
           <MenuRow
-            glyph="⌕"
             tone="warm"
             title="Recherches sauvegardées"
             subtitle="Relancer une recherche de vols"
             onPress={openSavedSearches}
+            icon={<SearchTabIcon size={20} color={colors.primary} />}
           />
           <View style={styles.menuDivider} />
           <MenuRow

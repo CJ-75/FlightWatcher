@@ -23,7 +23,6 @@ import {
   ACTIVITY_RESTORE_EMPTY_FR,
   ACTIVITY_RESTORE_POP_FR,
   ACTIVITY_SKIP_CONFIRM_FR,
-  ACTIVITY_SKIP_HINT_FR,
   ACTIVITY_SKIP_LABEL_FR,
   ACTIVITY_VALIDATE_LABEL_FR,
   resolveSourceItineraryId,
@@ -931,7 +930,6 @@ export function ActivityStepPanel(props: {
               </Pressable>
             ) : null}
           </View>
-          <Text style={styles.skipHint}>{ACTIVITY_SKIP_HINT_FR}</Text>
         </>
       ) : null}
 
@@ -1195,13 +1193,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semibold,
     fontSize: 13,
     color: colors.primaryDeep,
-  },
-  skipHint: {
-    fontFamily: fonts.medium,
-    fontSize: 11,
-    lineHeight: 15,
-    color: colors.muted,
-    marginTop: -4,
   },
   emptyCard: {
     gap: 6,

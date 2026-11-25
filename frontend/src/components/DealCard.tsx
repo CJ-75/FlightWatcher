@@ -14,6 +14,8 @@ interface DealCardProps {
   onClick: () => void
   liked?: boolean
   onToggleLike?: () => void
+  /** Archivés / dates passées — atténue la carte (motion opacity). */
+  faded?: boolean
 }
 
 const springConfig = {
@@ -248,7 +250,7 @@ function HeartSvg({ filled }: { filled: boolean }) {
   )
 }
 
-export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) {
+export function DealCard({ deal, onClick, liked, onToggleLike, faded = false }: DealCardProps) {
   const { t } = useI18n()
   const hotelPhoto = (deal.hotel?.photo || deal.image_url || '').trim()
   if (!hotelPhoto) return null
@@ -319,9 +321,9 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
   return (
     <motion.article
       initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: faded ? 0.55 : 1, y: 0 }}
       transition={springConfig}
-      whileHover={{ y: -4, transition: { duration: 0.18 } }}
+      whileHover={faded ? undefined : { y: -4, transition: { duration: 0.18 } }}
       onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -331,7 +333,11 @@ export function DealCard({ deal, onClick, liked, onToggleLike }: DealCardProps) 
       }}
       role="button"
       tabIndex={0}
-      className="group flex flex-col h-full rounded-3xl overflow-hidden bg-white border border-line shadow-soft hover:shadow-lift hover:border-primary-200 transition-all duration-200 cursor-pointer text-left"
+      className={`group flex flex-col h-full rounded-3xl overflow-hidden bg-white border shadow-soft transition-all duration-200 cursor-pointer text-left ${
+        faded
+          ? 'border-slate-200'
+          : 'border-line hover:shadow-lift hover:border-primary-200'
+      }`}
     >
       <div className="relative">
         <DealCardGallery

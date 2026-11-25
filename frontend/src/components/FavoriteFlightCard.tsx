@@ -104,13 +104,13 @@ export function FavoriteFlightCard({
 
   return (
     <motion.article
-      whileHover={{ y: -6, transition: springConfig }}
+      whileHover={faded ? undefined : { y: -6, transition: springConfig }}
       initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: faded ? 0.55 : 1, y: 0 }}
       transition={springConfig}
       className={`rounded-3xl overflow-hidden bg-white border shadow-soft w-full h-full flex flex-col ${
         faded
-          ? 'border-slate-200 opacity-55'
+          ? 'border-slate-200'
           : 'border-line hover:border-orange-200'
       }`}
     >

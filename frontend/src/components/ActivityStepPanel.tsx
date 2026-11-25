@@ -902,11 +902,6 @@ export function ActivityStepPanel(props: {
         ) : null}
       </div>
       ) : null}
-      {layout !== 'booking_cards' ? (
-        <p className="text-[11px] leading-snug text-slate-500 -mt-1">
-          {ACTIVITY_SKIP_HINT_FR}
-        </p>
-      ) : null}
 
       {loading ? <p className="text-sm text-slate-500">Chargement…</p> : null}
       {error ? (

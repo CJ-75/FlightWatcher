@@ -3874,12 +3874,13 @@ function SavedTab({ variant, loading, onLoadSearch, onCheckFavorite, onReloadSea
                         <p className="text-xs text-slate-500 mb-3 px-1">
                           {t('favorites.archivedHint')}
                         </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6 opacity-50">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
                           {archivedLikedDeals.map((item) => (
                             <DealCard
                               key={item.id}
                               deal={item.deal}
                               liked
+                              faded
                               onToggleLike={() => void unlikeDeal(item.deal_id)}
                               onClick={() => setSelectedLikedDeal(item.deal)}
                             />
